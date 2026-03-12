@@ -14,7 +14,8 @@ export default function LoginPage() {
         setError(null);
         try {
             const response = await fetch(`${API_URL}/api/auth/login`, {
-                credentials: 'include'
+                credentials: 'include',
+                headers: { 'ngrok-skip-browser-warning': 'true' }
             });
             const data = await response.json();
             if (data.success && data.loginUrl) {

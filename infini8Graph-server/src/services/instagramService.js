@@ -29,8 +29,12 @@ class InstagramService {
             });
             return response.data;
         } catch (error) {
-            console.error('Instagram API Error:', error.response?.data || error.message);
-            throw new Error(error.response?.data?.error?.message || 'Instagram API request failed');
+            const errData = error.response?.data?.error;
+            const isPreBusinessError = errData?.error_subcode === 2108006;
+            if (!isPreBusinessError) {
+                console.error('Instagram API Error:', error.response?.data || error.message);
+            }
+            throw new Error(errData?.message || 'Instagram API request failed');
         }
     }
 
@@ -157,7 +161,7 @@ class InstagramService {
                 errorMsg.includes('Unsupported get request');
 
             if (isInsightsError) {
-                console.warn('Recovering from insights error - fetching basic media data only. Error was:', errorMsg);
+                console.log('ℹ️ Some posts lack insights (pre-business account) - using basic media data instead.');
                 // Retry without insights
                 const fallbackParams = {
                     fields: basicFields,

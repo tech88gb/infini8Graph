@@ -19,14 +19,18 @@ export async function verifyWebhook(req, res) {
 }
 
 export async function receiveWebhook(req, res) {
-    // 1. Log immediately
-    console.log('🔗 WEBHOOK TRIGGERED!');
+    const timestamp = new Date().toISOString();
 
-    // 2. Return 200 immediately (Meta requirement)
+    // Return 200 immediately (Meta requirement)
     res.status(200).send('EVENT_RECEIVED');
 
     const body = req.body;
-    console.log('📦 Data Received:', JSON.stringify(body, null, 2));
+
+    console.log('\n' + '═'.repeat(70));
+    console.log(`📨 WEBHOOK EVENT RECEIVED`);
+    console.log(`   Timestamp : ${timestamp}`);
+    console.log(`   Object    : ${body.object}`);
+    console.log('═'.repeat(70));
 
     try {
         if (body.object === 'instagram' || body.object === 'page') {
@@ -35,7 +39,11 @@ export async function receiveWebhook(req, res) {
                 // Handle DMs
                 if (entry.messaging) {
                     for (const msgEvent of entry.messaging) {
-                        console.log(`💬 Processing DM from ${msgEvent.sender?.id}`);
+                        console.log(`\n💬 DIRECT MESSAGE`);
+                        console.log(`   Sender ID    : ${msgEvent.sender?.id}`);
+                        console.log(`   Recipient ID : ${msgEvent.recipient?.id}`);
+                        console.log(`   Message Text : "${msgEvent.message?.text || '(no text)'}"`);
+                        console.log(`   Message ID   : ${msgEvent.message?.mid || 'N/A'}`);
                         await autoReplyService.processMessage(msgEvent);
                     }
                 }
@@ -43,7 +51,11 @@ export async function receiveWebhook(req, res) {
                 if (entry.changes) {
                     for (const change of entry.changes) {
                         if (change.field === 'comments') {
-                            console.log(`📝 Processing Comment from ${change.value?.from?.username}`);
+                            console.log(`\n📝 COMMENT EVENT`);
+                            console.log(`   Comment ID   : ${change.value?.id}`);
+                            console.log(`   From User    : @${change.value?.from?.username} (ID: ${change.value?.from?.id})`);
+                            console.log(`   Comment Text : "${change.value?.text}"`);
+                            console.log(`   Media ID     : ${change.value?.media?.id || 'N/A'}`);
                             await autoReplyService.processComment({ id: entry.id, changes: [change] });
                         }
                     }
@@ -51,8 +63,9 @@ export async function receiveWebhook(req, res) {
             }
         }
     } catch (err) {
-        console.error('❌ Error processing webhook logic:', err.message);
+        console.error('❌ Error processing webhook:', err.message);
     }
+    console.log('─'.repeat(70) + '\n');
 }
 
 export async function getWebhookStatus(req, res) {

@@ -20,9 +20,13 @@ const PORT = process.env.PORT || 3005;
 app.set('trust proxy', 1);
 
 console.log('🚀 SERVER STARTING IN:', process.cwd());
-// Global Request Logger (Super Debug)
+// Global Request Logger - only log non-polling routes to keep terminal clean
 app.use((req, res, next) => {
-    console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
+    // Skip noisy polling endpoints
+    const skipPaths = ['/api/automation/activity', '/api/automation/rules', '/health'];
+    if (!skipPaths.some(p => req.originalUrl.startsWith(p))) {
+        console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
+    }
     next();
 });
 
@@ -38,7 +42,7 @@ const allowedOrigins = [
 app.use(cors({
     origin: allowedOrigins,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token', 'ngrok-skip-browser-warning']
 }));
 
 // Rate limiting (increased for development)

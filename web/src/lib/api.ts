@@ -6,7 +6,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 const api = axios.create({
     baseURL: `${API_URL}/api`,
     withCredentials: true,
-    headers: { 'Content-Type': 'application/json' }
+    headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+    }
 });
 
 // Add auth token to requests

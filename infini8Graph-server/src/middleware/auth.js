@@ -27,13 +27,9 @@ export function authenticate(req, res, next) {
             token = req.query.token;
         }
 
-        // Debug logging
-        if (process.env.NODE_ENV === 'development') {
-            console.log('Auth check:', {
-                hasCookie: !!req.cookies?.auth_token,
-                hasHeader: !!req.headers.authorization,
-                tokenFound: !!token
-            });
+        // Debug logging - only for failed auth attempts
+        if (process.env.NODE_ENV === 'development' && !token) {
+            console.log('Auth: No token found in request');
         }
 
         if (!token) {
