@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+// For local dev, redirect to the actual frontend (localhost:3000), not through ngrok
+const FRONTEND_REDIRECT_URL = process.env.FRONTEND_REDIRECT_URL || 'http://localhost:3000';
 
 /**
  * Initiate OAuth login flow
@@ -38,11 +40,11 @@ export async function callback(req, res) {
 
         if (error) {
             console.error('OAuth error:', error, error_description);
-            return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(error_description || error)}`);
+            return res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=${encodeURIComponent(error_description || error)}`);
         }
 
         if (!code) {
-            return res.redirect(`${FRONTEND_URL}/login?error=No authorization code received`);
+            return res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=No authorization code received`);
         }
 
         // Exchange code for token
@@ -69,12 +71,12 @@ export async function callback(req, res) {
         });
 
         // Redirect to dashboard with token
-        const redirectUrl = `${FRONTEND_URL}/dashboard?token=${userData.jwt}`;
+        const redirectUrl = `${FRONTEND_REDIRECT_URL}/dashboard?token=${userData.jwt}`;
         console.log('✅ Auth successful! Redirecting to:', redirectUrl);
         res.redirect(redirectUrl);
     } catch (error) {
         console.error('OAuth callback error:', error);
-        res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(error.message)}`);
+        res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=${encodeURIComponent(error.message)}`);
     }
 }
 

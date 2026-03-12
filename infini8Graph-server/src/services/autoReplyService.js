@@ -18,11 +18,48 @@ const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1000;
 // In-memory cooldown tracker (for demo - use Redis in production)
 const replyCooldowns = new Map();
 
+// In-memory activity log for API traces (Live Console)
+const recentActivity = [];
+const MAX_ACTIVITY_LOGS = 50;
+
 /**
  * Auto-Reply Service
  * Handles automatic replies to Instagram comments and DMs
  */
 class AutoReplyService {
+    /**
+     * Store an activity log entry for the Live Console
+     */
+    addActivityLog(instagramAccountId, action, detail, extra = {}) {
+        const entry = {
+            id: Math.random().toString(36).substring(2, 11),
+            instagramAccountId,
+            action,
+            detail,
+            timestamp: new Date().toISOString(),
+            ...extra
+        };
+
+        recentActivity.unshift(entry);
+
+        // Keep only the most recent logs
+        if (recentActivity.length > MAX_ACTIVITY_LOGS) {
+            recentActivity.pop();
+        }
+
+        console.log(`[ACTIVITY] ${action}: ${detail}`);
+        return entry;
+    }
+
+    /**
+     * Get recent activity for a specific account
+     */
+    getRecentActivity(instagramAccountId, limit = 10) {
+        return recentActivity
+            .filter(a => a.instagramAccountId === instagramAccountId)
+            .slice(0, limit);
+    }
+
     constructor() {
         // Define auto-reply rules (can be moved to database later)
         this.messageRules = [
@@ -97,7 +134,7 @@ class AutoReplyService {
             // First find the instagram account (include facebook_page_id AND page_access_token for messaging)
             const { data: account, error: accountError } = await supabase
                 .from('instagram_accounts')
-                .select('id, user_id, facebook_page_id, page_access_token')
+                .select('id, user_id, facebook_page_id, page_access_token, username')
                 .eq('instagram_user_id', instagramUserId)
                 .single();
 
@@ -144,7 +181,8 @@ class AutoReplyService {
                 pageToken: decryptedPageToken,   // For DMs/messaging
                 instagramAccountId: account.id,
                 userId: account.user_id,
-                facebookPageId: account.facebook_page_id
+                facebookPageId: account.facebook_page_id,
+                username: account.username
             };
         } catch (error) {
             console.error('❌ Error getting access token:', error);
@@ -297,17 +335,36 @@ class AutoReplyService {
             }
 
             const senderId = sender?.id;
-            const recipientId = recipient?.id; // This is the Instagram business account ID
+            const recipientId = recipient?.id; // Numeric Meta ID
+
+            // Get access token for this Instagram account (resolves numeric ID to internal UUID)
+            const tokenData = await this.getAccessTokenByInstagramId(recipientId);
+
+            // If we found the account, use the internal UUID for all activity logs
+            const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
+
+            // Start an activity trace for this automated flow
+            this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
+                senderId,
+                recipientId,
+                text: message.text
+            });
 
             console.log(`📩 Processing message from ${senderId} to ${recipientId}`);
             console.log(`📝 Message text: "${message.text}"`);
 
-            // Get access token for this Instagram account
-            const tokenData = await this.getAccessTokenByInstagramId(recipientId);
             if (!tokenData) {
                 console.error('❌ Cannot process message - no valid token');
+                this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', {
+                    step: 'AUTHENTICATION'
+                });
                 return;
             }
+
+            this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
+                pageId: tokenData.facebookPageId,
+                username: tokenData.username
+            });
 
             // Ignore our own messages (echo protection)
             if (senderId === recipientId) {
@@ -332,12 +389,17 @@ class AutoReplyService {
             // Find matching rule
             const rule = this.findMatchingRule(message.text, this.messageRules);
             if (!rule) {
-                console.log('📭 No matching rule for message');
+                this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
                 return;
             }
 
+            this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
+                replyText: rule.reply,
+                ruleName: rule.name
+            });
+
             // Send reply using Facebook Page ID for Instagram messaging
-            await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.accessToken);
+            await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.accessToken, null, activeId);
             this.markReplied(senderId, 'message');
 
             // Log the reply
@@ -356,28 +418,43 @@ class AutoReplyService {
     }
 
     /**
-     * Send a DM reply via Facebook Graph API for Instagram
-     * @param {string} facebookPageId - The Facebook Page ID linked to the Instagram account
-     * @param {string} recipientIGSID - The Instagram-scoped User ID of the recipient
-     * @param {string} text - The message text to send
-     * @param {string} accessToken - The Page Access Token
+     * @param {string|null} commentId - Optional comment ID (required for comment-triggered DMs to open messaging window)
+     * @param {string|null} instagramAccountId - The account ID for logging
      */
-    async sendMessageReply(facebookPageId, recipientIGSID, text, accessToken) {
+    async sendMessageReply(facebookPageId, recipientIGSID, text, accessToken, commentId = null, instagramAccountId = null) {
         try {
+            this.addActivityLog(instagramAccountId, 'API REQUEST', `POST /${facebookPageId}/messages`, {
+                endpoint: `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
+                payload: {
+                    recipient: commentId ? { comment_id: commentId } : { id: recipientIGSID },
+                    message: { text }
+                }
+            });
             console.log(`📤 Attempting to send DM to ${recipientIGSID}`);
             console.log(`📄 Using Facebook Page ID: ${facebookPageId}`);
             console.log(`🔑 Using token: ${accessToken?.substring(0, 25)}...`);
+            if (commentId) {
+                console.log(`💬 Comment-triggered DM, using comment_id: ${commentId}`);
+            }
 
             if (!facebookPageId) {
                 throw new Error('Facebook Page ID is required for Instagram messaging. Please re-login to update your account data.');
             }
+
+            // Build recipient field:
+            // - For comment-triggered DMs: use { comment_id } to associate with the comment interaction
+            //   This tells Meta the DM is in response to a comment, which opens the 24-hour messaging window
+            // - For regular DMs (user messaged us first): use { id } with the user's IGSID
+            const recipient = commentId
+                ? { comment_id: commentId }
+                : { id: recipientIGSID };
 
             // Use Facebook Graph API with platform=instagram for Instagram DMs
             // Per Meta docs: POST /{page-id}/messages?platform=instagram
             const response = await axios.post(
                 `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
                 {
-                    recipient: { id: recipientIGSID },
+                    recipient,
                     message: { text }
                 },
                 {
@@ -392,9 +469,29 @@ class AutoReplyService {
             );
 
             console.log(`✅ DM sent successfully:`, response.data);
+
+            // Log successful API response
+            this.addActivityLog(instagramAccountId, 'API RESPONSE', 'DM sent successfully via Instagram API', {
+                recipientIGSID,
+                response: response.data,
+                httpStatus: 200,
+                type: 'dm'
+            });
+
             return response.data;
         } catch (error) {
-            console.error('❌ Error sending DM:', error.response?.data || error.message);
+            const metaError = error.response?.data?.error;
+            console.error('❌ Error sending DM:', metaError || error.message);
+
+            // Log API error
+            this.addActivityLog(instagramAccountId, 'API ERROR', metaError?.message || error.message, {
+                recipientIGSID,
+                httpStatus: error.response?.status,
+                errorType: metaError?.type,
+                errorCode: metaError?.code,
+                type: 'dm'
+            });
+
             throw error;
         }
     }
@@ -413,17 +510,34 @@ class AutoReplyService {
                 // Note: webhook sends 'id' for comment ID, not 'comment_id'
                 const { from, id: commentId, text, media } = value;
 
+                // Resolve account early to get the internal UUID for logging
+                const tokenData = await this.getAccessTokenByInstagramId(instagramAccountId);
+                const activeId = tokenData ? tokenData.instagramAccountId : instagramAccountId;
+
+                // Start an activity trace for this automated flow
+                this.addActivityLog(activeId, 'WEBHOOK RECEIVED', `Received comment from @${from?.username}`, {
+                    commentId,
+                    text,
+                    mediaId: media?.id,
+                    username: from?.username
+                });
+
                 console.log(`📢 Processing comment from ${from?.username} on media ${media?.id}`);
                 console.log(`📝 Comment text: "${text}"`);
 
-                // Get access token for this Instagram account
-                const tokenData = await this.getAccessTokenByInstagramId(instagramAccountId);
                 if (!tokenData) {
-                    console.error('❌ Cannot process comment - no valid token');
+                    this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', {
+                        step: 'AUTHENTICATION'
+                    });
                     continue;
                 }
 
-                // Ignore our own comments
+                this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
+                    pageId: tokenData.facebookPageId,
+                    username: tokenData.username
+                });
+
+                // Ignore our own comments (Meta numeric ID comparison)
                 if (from?.id === instagramAccountId) {
                     console.log('🔄 Ignoring own comment');
                     continue;
@@ -448,9 +562,15 @@ class AutoReplyService {
                 // Find matching rule
                 const rule = this.findMatchingRule(text, rules);
                 if (!rule) {
-                    console.log('📭 No matching rule for comment');
+                    this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${text}"`);
                     continue;
                 }
+
+                this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
+                    commentReply: rule.reply,
+                    dmReply: rule.dmReply,
+                    sendDM: rule.sendDM
+                });
 
                 console.log(`🎯 Matched rule: ${rule.name || 'default'}`);
 
@@ -469,13 +589,17 @@ class AutoReplyService {
                                 tokenData.facebookPageId,
                                 from.id,  // Commenter's IGSID
                                 rule.dmReply,
-                                tokenData.pageToken  // Use Page Token for DMs!
+                                tokenData.pageToken,  // Use Page Token for DMs!
+                                commentId,  // Pass comment ID to associate DM with the comment interaction
+                                activeId
                             );
                             console.log(`✅ DM sent to commenter ${from?.username}`);
                         } else if (!tokenData.pageToken) {
                             console.warn('⚠️ Cannot send DM - Page Token not available. User needs to re-login to store Page Token.');
+                            this.addActivityLog(activeId, 'API ERROR', 'Missing Page Token for DM reply');
                         } else {
                             console.warn('⚠️ Cannot send DM - Facebook Page ID not available. User needs to re-login.');
+                            this.addActivityLog(activeId, 'API ERROR', 'Missing Facebook Page ID for DM reply');
                         }
                     } catch (dmError) {
                         // DM might fail if user hasn't messaged us before (24-hour rule)

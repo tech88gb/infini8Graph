@@ -28,8 +28,15 @@ app.use((req, res, next) => {
 
 // Security middleware
 app.use(helmet());
+
+// Allow both local dev and ngrok origins for CORS
+const allowedOrigins = [
+    'http://localhost:3000',
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token']
 }));

@@ -29,6 +29,14 @@ interface MediaItem {
     caption: string;
 }
 
+interface Conversation {
+    id: string;
+    participants: { id: string; name: string }[];
+    lastMessage?: string;
+    lastMessageFrom?: string;
+    updatedTime?: string;
+}
+
 export default function AutomationPage() {
     const { user } = useAuth();
 
@@ -69,6 +77,10 @@ export default function AutomationPage() {
     const [kwInput, setKwInput] = useState('');
     const [defaultKwInput, setDefaultKwInput] = useState('');
 
+    // Live Activity states (Automated logs)
+    const [activity, setActivity] = useState<any[]>([]);
+    const [loadingActivity, setLoadingActivity] = useState(false);
+
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
@@ -104,7 +116,29 @@ export default function AutomationPage() {
         }
     }, []);
 
+    const fetchActivity = useCallback(async (showLoading = false) => {
+        if (showLoading) setLoadingActivity(true);
+        try {
+            const res = await fetch(`${API_BASE}/api/automation/activity`, { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                setActivity(data.activity || []);
+            }
+        } catch (err) {
+            console.error('Error fetching activity:', err);
+        } finally {
+            if (showLoading) setLoadingActivity(false);
+        }
+    }, []);
+
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    // Initial fetch and poll for activity
+    useEffect(() => {
+        fetchActivity(true);
+        const timer = setInterval(() => fetchActivity(false), 3000); // Poll every 3 seconds
+        return () => clearInterval(timer);
+    }, [fetchActivity]);
 
     const specificRules = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
 
@@ -227,6 +261,147 @@ export default function AutomationPage() {
                         </svg>
                     }
                 />
+
+                {/* Live Automation Console - For Meta App Review (Automated Flow Proof) */}
+                <Card style={{ marginBottom: 'var(--space-6)', border: '1px solid #334155', borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+                    <CardHeader style={{ background: '#1e293b', borderBottom: '1px solid #334155' }}>
+                        <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-3">
+                                <div style={{
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: '50%',
+                                    background: '#22c55e',
+                                    boxShadow: '0 0 10px #22c55e',
+                                    animation: 'pulse 1.5s infinite'
+                                }} />
+                                <div className="flex flex-col">
+                                    <span style={{ color: 'white', fontWeight: 700 }}>Live Automation Console</span>
+                                    <span style={{ color: '#94a3b8', fontSize: 11 }}>Real-time Instagram Messaging API Trace</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span style={{
+                                    fontSize: 10,
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #334155',
+                                    color: '#94a3b8',
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                }}>
+                                    Polling Active
+                                </span>
+                                {loadingActivity && <Spinner size="sm" />}
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardBody style={{ background: '#0f172a', padding: 0 }}>
+                        <div style={{
+                            height: 380,
+                            overflowY: 'auto',
+                            fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", Consolas, monospace',
+                            fontSize: 12,
+                            padding: '16px',
+                            color: '#e2e8f0',
+                            lineHeight: 1.6
+                        }}>
+                            {activity.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-center" style={{ color: '#475569' }}>
+                                    <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-3 opacity-20">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    <p>Awaiting automated activity...</p>
+                                    <p style={{ fontSize: 11, marginTop: 4 }}>
+                                        Comment on a post with your keywords to see the Live API Trace.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-4">
+                                    {activity.map((entry, idx) => {
+                                        const actionColors: Record<string, string> = {
+                                            'WEBHOOK RECEIVED': '#a78bfa',
+                                            'RESOLVE ACCOUNT': '#38bdf8',
+                                            'RULE MATCHED': '#fbbf24',
+                                            'API REQUEST': '#f59e0b',
+                                            'API RESPONSE': '#22c55e',
+                                            'API ERROR': '#ef4444'
+                                        };
+                                        const color = actionColors[entry.action] || '#e2e8f0';
+                                        const time = new Date(entry.timestamp).toLocaleTimeString();
+
+                                        return (
+                                            <div key={entry.id} style={{
+                                                padding: '12px',
+                                                background: '#1e293b',
+                                                borderRadius: '8px',
+                                                borderLeft: `4px solid ${color}`,
+                                                animation: idx === 0 ? 'fadeInRight 0.3s ease-out' : 'none'
+                                            }}>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span style={{ color: '#64748b', fontSize: 10 }}>[{time}]</span>
+                                                        <span style={{ color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{entry.action}</span>
+                                                    </div>
+                                                    {entry.detail && (
+                                                        <span style={{ color: '#94a3b8', fontSize: 11 }}>{entry.detail}</span>
+                                                    )}
+                                                </div>
+
+                                                {/* Details Content */}
+                                                <div className="flex flex-col gap-2" style={{ paddingLeft: '4px' }}>
+                                                    {entry.action === 'API REQUEST' && entry.payload && (
+                                                        <div style={{ background: '#0f172a', padding: '8px', borderRadius: '4px', border: '1px solid #334155' }}>
+                                                            <div style={{ color: '#64748b', fontSize: 9, marginBottom: 4 }}>REQUEST JSON</div>
+                                                            <pre style={{ margin: 0, color: '#fcd34d', whiteSpace: 'pre-wrap', fontSize: 11 }}>
+                                                                {JSON.stringify(entry.payload, null, 2)}
+                                                            </pre>
+                                                        </div>
+                                                    )}
+
+                                                    {entry.action === 'API RESPONSE' && entry.response && (
+                                                        <div style={{ background: '#0f172a', padding: '8px', borderRadius: '4px', border: '1px solid #334155' }}>
+                                                            <div style={{ color: '#64748b', fontSize: 9, marginBottom: 4 }}>META RESPONSE</div>
+                                                            <pre style={{ margin: 0, color: '#4ade80', whiteSpace: 'pre-wrap', fontSize: 11 }}>
+                                                                {JSON.stringify(entry.response, null, 2)}
+                                                            </pre>
+                                                        </div>
+                                                    )}
+
+                                                    {entry.action === 'WEBHOOK RECEIVED' && (
+                                                        <div className="text-sm italic" style={{ color: '#38bdf8' }}>
+                                                            &quot;{entry.text}&quot; <span style={{ color: '#64748b' }}>— from @{entry.username}</span>
+                                                        </div>
+                                                    )}
+
+                                                    {entry.action === 'API ERROR' && (
+                                                        <pre style={{ margin: 0, color: '#fca5a5', background: '#450a0a', padding: '8px', borderRadius: '4px' }}>
+                                                            {JSON.stringify({
+                                                                status: entry.httpStatus,
+                                                                type: entry.errorType,
+                                                                code: entry.errorCode,
+                                                                message: entry.detail
+                                                            }, null, 2)}
+                                                        </pre>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </CardBody>
+                    <div style={{ padding: '8px 16px', background: '#1e293b', borderTop: '1px solid #334155' }}>
+                        <p className="text-xs" style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            The console above captures real-time automated interactions triggered via Webhooks for Meta App Review.
+                        </p>
+                    </div>
+                </Card>
 
                 {/* Two Column Layout */}
                 <div className="layout-split">
