@@ -89,7 +89,9 @@ class InstagramService {
                 breakdown: 'city'
             });
             if (cityRes?.data?.[0]?.total_value?.breakdowns?.[0]?.results) {
-                results.cities = cityRes.data[0].total_value.breakdowns[0].results.slice(0, 10);
+                const sorted = [...cityRes.data[0].total_value.breakdowns[0].results]
+                    .sort((a, b) => (b.value || 0) - (a.value || 0));
+                results.cities = sorted.slice(0, 10);
             }
         } catch (e) { console.warn('City demographics not available'); }
 
@@ -102,7 +104,9 @@ class InstagramService {
                 breakdown: 'country'
             });
             if (countryRes?.data?.[0]?.total_value?.breakdowns?.[0]?.results) {
-                results.countries = countryRes.data[0].total_value.breakdowns[0].results.slice(0, 10);
+                const sorted = [...countryRes.data[0].total_value.breakdowns[0].results]
+                    .sort((a, b) => (b.value || 0) - (a.value || 0));
+                results.countries = sorted.slice(0, 10);
             }
         } catch (e) { console.warn('Country demographics not available'); }
 
@@ -115,7 +119,8 @@ class InstagramService {
                 breakdown: 'age,gender'
             });
             if (genderAgeRes?.data?.[0]?.total_value?.breakdowns?.[0]?.results) {
-                results.genderAge = genderAgeRes.data[0].total_value.breakdowns[0].results;
+                results.genderAge = [...genderAgeRes.data[0].total_value.breakdowns[0].results]
+                    .sort((a, b) => (b.value || 0) - (a.value || 0));
             }
         } catch (e) { console.warn('Gender/age demographics not available'); }
 

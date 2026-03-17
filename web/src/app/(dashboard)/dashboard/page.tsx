@@ -304,27 +304,37 @@ export default function DashboardPage() {
         comments: post.comments
     }));
 
-    // Process demographics for display
-    const countryData = (demographics.countries || []).slice(0, 5).map((c: any) => ({
-        name: getCountryName(c.dimension_values?.[0] || ''),
-        value: c.value || 0
-    }));
+    // Process demographics for display - sort by value to ensure logical accuracy
+    const countryData = [...(demographics.countries || [])]
+        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .slice(0, 5)
+        .map((c: any) => ({
+            name: getCountryName(c.dimension_values?.[0] || ''),
+            value: c.value || 0
+        }));
 
-    const cityData = (demographics.cities || []).slice(0, 5).map((c: any) => ({
-        name: c.dimension_values?.[0] || 'Unknown',
-        value: c.value || 0
-    }));
+    const cityData = [...(demographics.cities || [])]
+        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .slice(0, 5)
+        .map((c: any) => ({
+            name: (c.dimension_values?.[0] || 'Unknown').split(',')[0], // Just city name for cleaner UI
+            fullName: c.dimension_values?.[0] || 'Unknown',
+            value: c.value || 0
+        }));
 
-    // Format gender/age as "M 25-34" or "F 18-24"
-    const genderAgeData = (demographics.genderAge || []).slice(0, 8).map((g: any) => {
-        const gender = g.dimension_values?.[0] === 'M' ? 'Male' : g.dimension_values?.[0] === 'F' ? 'Female' : g.dimension_values?.[0] || '';
-        const age = g.dimension_values?.[1] || '';
-        return {
-            name: `${gender} ${age}`.trim(),
-            shortName: `${g.dimension_values?.[0] || ''} ${age}`.trim(),
-            value: g.value || 0
-        };
-    });
+    // Format gender/age and sort
+    const genderAgeData = [...(demographics.genderAge || [])]
+        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .slice(0, 8)
+        .map((g: any) => {
+            const gender = g.dimension_values?.[0] === 'M' ? 'Male' : g.dimension_values?.[0] === 'F' ? 'Female' : g.dimension_values?.[0] || '';
+            const age = g.dimension_values?.[1] || '';
+            return {
+                name: `${gender} ${age}`.trim(),
+                shortName: `${g.dimension_values?.[0] || ''} ${age}`.trim(),
+                value: g.value || 0
+            };
+        });
 
     // Calculate computed metrics
     const viralScore = metrics.totalSaved && metrics.totalReach
