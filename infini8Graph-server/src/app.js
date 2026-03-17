@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 3005;
 // Trust proxy for ngrok/load balancers
 app.set('trust proxy', 1);
 
-console.log('🚀 SERVER STARTING IN:', process.cwd());
+
 // Global Request Logger - only log non-polling routes to keep terminal clean
 app.use((req, res, next) => {
     // Skip noisy polling endpoints
@@ -87,8 +87,6 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 infini8Graph API running on port ${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
 
 export default app;
