@@ -1,7 +1,12 @@
+'use client';
+
 import Link from 'next/link';
-import { BarChart3, TrendingUp, Shield, ArrowRight, MessageCircle, Activity, Users, Globe2, LayoutDashboard, Settings, Mail, Bell, CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { BarChart3, TrendingUp, Shield, ArrowRight, MessageCircle, Activity, Users, Globe2, LayoutDashboard, Settings, Mail, Bell, CheckCircle2, MapPin, Heart, Plus } from 'lucide-react';
 
 export default function LandingPage() {
+    const [hoveredTab, setHoveredTab] = useState('analytics');
+
     return (
         <div className="min-h-screen bg-[#000212] text-white selection:bg-indigo-500/30 font-sans overflow-x-hidden flex flex-col">
             {/* Minimalist Top Nav */}
@@ -82,7 +87,7 @@ export default function LandingPage() {
                             {/* App Content wrapper */}
                             <div className="flex flex-1 overflow-hidden opacity-90">
                                 {/* Sidebar */}
-                                <div className="w-16 md:w-56 border-r border-white/[0.04] bg-white/[0.01] flex flex-col p-3 shrink-0">
+                                <div className="w-16 md:w-56 border-r border-white/[0.04] bg-white/[0.01] flex flex-col p-3 shrink-0 relative z-20">
                                     <div className="flex items-center gap-3 px-2 py-2 mb-6">
                                         <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
                                             <span className="text-white font-bold text-xs">∞</span>
@@ -90,23 +95,32 @@ export default function LandingPage() {
                                         <span className="font-semibold text-sm text-white hidden md:block">infini8Graph</span>
                                     </div>
                                     
-                                    <div className="space-y-1 flex-1">
-                                        <div className="flex items-center gap-3 px-2 py-2 rounded-md bg-white/[0.05] text-white">
+                                    <div className="space-y-1 flex-1 relative group" onMouseLeave={() => setHoveredTab('analytics')}>
+                                        <div 
+                                            className={`flex items-center gap-3 px-2 py-2 rounded-md transition-all cursor-pointer ${hoveredTab === 'analytics' ? 'bg-white/[0.05] text-white' : 'text-[#ffffffa8] hover:text-white hover:bg-white/[0.02]'}`}
+                                            onMouseEnter={() => setHoveredTab('analytics')}
+                                        >
                                             <LayoutDashboard size={16} />
                                             <span className="text-sm font-medium hidden md:block">Analytics</span>
                                         </div>
-                                        <div className="flex items-center gap-3 px-2 py-2 rounded-md text-[#ffffffa8] hover:bg-white/[0.02]">
+                                        <div 
+                                            className={`flex items-center gap-3 px-2 py-2 rounded-md transition-all cursor-pointer ${hoveredTab === 'audience' ? 'bg-white/[0.05] text-white' : 'text-[#ffffffa8] hover:text-white hover:bg-white/[0.02]'}`}
+                                            onMouseEnter={() => setHoveredTab('audience')}
+                                        >
                                             <Users size={16} />
                                             <span className="text-sm font-medium hidden md:block">Audience</span>
                                         </div>
-                                        <div className="flex items-center gap-3 px-2 py-2 rounded-md text-[#ffffffa8] hover:bg-white/[0.02]">
+                                        <div 
+                                            className={`flex items-center gap-3 px-2 py-2 rounded-md transition-all cursor-pointer ${hoveredTab === 'automations' ? 'bg-white/[0.05] text-white' : 'text-[#ffffffa8] hover:text-white hover:bg-white/[0.02]'}`}
+                                            onMouseEnter={() => setHoveredTab('automations')}
+                                        >
                                             <MessageCircle size={16} />
                                             <span className="text-sm font-medium hidden md:block">Automations</span>
                                         </div>
                                     </div>
                                     
                                     <div className="mt-auto">
-                                        <div className="flex items-center gap-3 px-2 py-2 rounded-md text-[#ffffffa8] hover:bg-white/[0.02]">
+                                        <div className="flex items-center gap-3 px-2 py-2 rounded-md text-[#ffffffa8] hover:bg-white/[0.02] cursor-pointer">
                                             <Settings size={16} />
                                             <span className="text-sm font-medium hidden md:block">Settings</span>
                                         </div>
@@ -114,69 +128,181 @@ export default function LandingPage() {
                                 </div>
 
                                 {/* Main Content Canvas */}
-                                <div className="flex-1 p-6 md:p-8 flex flex-col gap-6 overflow-hidden">
-                                    <div className="flex justify-between items-center shrink-0">
-                                        <h2 className="text-xl font-semibold text-white tracking-tight">Overview</h2>
+                                <div className="flex-1 p-6 md:p-8 flex flex-col gap-6 overflow-hidden relative">
+                                    <div className="flex justify-between items-center shrink-0 relative z-10">
+                                        <h2 className="text-xl font-semibold text-white tracking-tight">
+                                            {hoveredTab === 'analytics' && 'Overview'}
+                                            {hoveredTab === 'audience' && 'Audience Intelligence'}
+                                            {hoveredTab === 'automations' && 'Active Triggers'}
+                                        </h2>
                                         <div className="px-3 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.05] text-xs text-gray-400 font-medium">Last 30 Days</div>
                                     </div>
 
-                                    {/* Data Grid */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-                                        {/* Main Chart Area */}
-                                        <div className="lg:col-span-2 rounded-xl border border-white/[0.05] bg-[#000212]/50 p-6 relative overflow-hidden flex flex-col min-h-[240px]">
-                                            <div className="flex justify-between items-start mb-6">
-                                                <div>
-                                                    <h3 className="text-[#ffffffa8] text-sm font-medium flex items-center gap-2"><Activity size={14} className="text-indigo-400" /> Total Reach</h3>
-                                                    <div className="text-4xl font-bold text-white mt-1 tracking-tight">2.4M</div>
-                                                    <div className="text-green-400 text-xs mt-2 font-medium bg-green-400/10 inline-block px-2 py-0.5 rounded pl-1"><span className="text-green-400 mr-1">↑</span>18.2% vs previous</div>
+                                    {/* Data Grid Wrapper (with absolute positioning for crossfade) */}
+                                    <div className="relative flex-1 min-h-0 w-full">
+                                        
+                                        {/* State 1: Analytics (Default) */}
+                                        <div className={`absolute inset-0 grid grid-cols-1 lg:grid-cols-3 gap-6 transition-all duration-500 ease-out ${hoveredTab === 'analytics' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                                            {/* Main Chart Area */}
+                                            <div className="lg:col-span-2 rounded-xl border border-white/[0.05] bg-[#000212]/50 p-6 relative overflow-hidden flex flex-col">
+                                                <div className="flex justify-between items-start mb-6">
+                                                    <div>
+                                                        <h3 className="text-[#ffffffa8] text-sm font-medium flex items-center gap-2"><Activity size={14} className="text-indigo-400" /> Total Reach</h3>
+                                                        <div className="text-4xl font-bold text-white mt-1 tracking-tight">2.4M</div>
+                                                        <div className="text-green-400 text-xs mt-2 font-medium bg-green-400/10 inline-block px-2 py-0.5 rounded pl-1"><span className="text-green-400 mr-1">↑</span>18.2% vs previous</div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Beautiful SVG Line Chart Mock */}
+                                                <div className="flex-1 relative mt-4 w-full h-[180px]">
+                                                    <svg viewBox="0 0 400 100" className="w-full h-full preserve-3d" preserveAspectRatio="none">
+                                                        <defs>
+                                                            <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.4" />
+                                                                <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
+                                                            </linearGradient>
+                                                        </defs>
+                                                        <path d="M0,80 C40,70 80,90 120,50 C160,10 200,60 240,40 C280,20 320,50 360,20 L400,30 L400,100 L0,100 Z" fill="url(#glow)" />
+                                                        <path d="M0,80 C40,70 80,90 120,50 C160,10 200,60 240,40 C280,20 320,50 360,20 L400,30" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                        {/* Data point dot */}
+                                                        <circle cx="360" cy="20" r="4" fill="#000212" stroke="#6366f1" strokeWidth="2" />
+                                                    </svg>
                                                 </div>
                                             </div>
-                                            
-                                            {/* Beautiful SVG Line Chart Mock */}
-                                            <div className="flex-1 relative mt-4 w-full">
-                                                <svg viewBox="0 0 400 100" className="w-full h-full preserve-3d" preserveAspectRatio="none">
-                                                    <defs>
-                                                        <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
-                                                            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.4" />
-                                                            <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
-                                                        </linearGradient>
-                                                    </defs>
-                                                    <path d="M0,80 C40,70 80,90 120,50 C160,10 200,60 240,40 C280,20 320,50 360,20 L400,30 L400,100 L0,100 Z" fill="url(#glow)" />
-                                                    <path d="M0,80 C40,70 80,90 120,50 C160,10 200,60 240,40 C280,20 320,50 360,20 L400,30" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                    {/* Data point dot */}
-                                                    <circle cx="360" cy="20" r="4" fill="#000212" stroke="#6366f1" strokeWidth="2" />
-                                                </svg>
+
+                                            {/* Right Column Smaller Widgets */}
+                                            <div className="lg:col-span-1 flex flex-col gap-6 h-full">
+                                                {/* Automation Activity */}
+                                                <div className="flex-1 rounded-xl border border-white/[0.05] bg-[#000212]/50 p-5 flex flex-col h-full overflow-hidden">
+                                                    <h3 className="text-[#ffffffa8] text-sm font-medium flex items-center gap-2 mb-4"><Bell size={14} className="text-pink-400" /> Recent Activity</h3>
+                                                    
+                                                    <div className="flex flex-col gap-4">
+                                                        <div className="flex gap-3 text-sm">
+                                                            <div className="mt-0.5"><CheckCircle2 size={14} className="text-green-400" /></div>
+                                                            <div>
+                                                                <p className="text-white text-xs">Replied to "price?"</p>
+                                                                <p className="text-[#ffffffa8] text-[10px] mt-0.5">2 mins ago on Reel #891</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-3 text-sm">
+                                                            <div className="mt-0.5"><CheckCircle2 size={14} className="text-green-400" /></div>
+                                                            <div>
+                                                                <p className="text-white text-xs">Sent DM to @creator23</p>
+                                                                <p className="text-[#ffffffa8] text-[10px] mt-0.5">15 mins ago</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-3 text-sm opacity-50">
+                                                            <div className="mt-0.5"><CheckCircle2 size={14} className="text-gray-500" /></div>
+                                                            <div>
+                                                                <p className="text-white text-xs">Replied to "link please"</p>
+                                                                <p className="text-[#ffffffa8] text-[10px] mt-0.5">1 hour ago on Post</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        {/* Right Column Smaller Widgets */}
-                                        <div className="lg:col-span-1 flex flex-col gap-6">
-                                            {/* Automation Activity */}
-                                            <div className="flex-1 rounded-xl border border-white/[0.05] bg-[#000212]/50 p-5 flex flex-col min-h-0">
-                                                <h3 className="text-[#ffffffa8] text-sm font-medium flex items-center gap-2 mb-4"><Bell size={14} className="text-pink-400" /> Recent Automation</h3>
-                                                
-                                                <div className="flex flex-col gap-4 overflow-hidden">
-                                                    <div className="flex gap-3 text-sm">
-                                                        <div className="mt-0.5"><CheckCircle2 size={14} className="text-green-400" /></div>
-                                                        <div>
-                                                            <p className="text-white text-xs">Replied to "price?"</p>
-                                                            <p className="text-[#ffffffa8] text-[10px] mt-0.5">2 mins ago on Reel #891</p>
+                                        {/* State 2: Audience (Hovered) */}
+                                        <div className={`absolute inset-0 grid grid-cols-1 lg:grid-cols-2 gap-6 transition-all duration-500 ease-out ${hoveredTab === 'audience' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                                             {/* Map/Location Mock */}
+                                             <div className="rounded-xl border border-white/[0.05] bg-[#000212]/50 p-6 flex flex-col justify-between">
+                                                <h3 className="text-[#ffffffa8] text-sm font-medium flex items-center gap-2 mb-6"><MapPin size={14} className="text-pink-400" /> Top Geography</h3>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between text-xs mb-1"><span className="text-white">New York, US</span><span className="text-gray-400">18.4%</span></div>
+                                                        <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden"><div className="w-[18.4%] h-full bg-pink-500 rounded-full"></div></div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs mb-1"><span className="text-white">London, UK</span><span className="text-gray-400">12.2%</span></div>
+                                                        <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden"><div className="w-[12.2%] h-full bg-purple-500 rounded-full"></div></div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs mb-1"><span className="text-white">Los Angeles, US</span><span className="text-gray-400">9.8%</span></div>
+                                                        <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden"><div className="w-[9.8%] h-full bg-indigo-500 rounded-full"></div></div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs mb-1"><span className="text-white">Toronto, CA</span><span className="text-gray-400">7.1%</span></div>
+                                                        <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden"><div className="w-[7.1%] h-full bg-blue-500 rounded-full"></div></div>
+                                                    </div>
+                                                </div>
+                                             </div>
+                                             
+                                             {/* Demo breakdown mock */}
+                                             <div className="rounded-xl border border-white/[0.05] bg-[#000212]/50 p-6 flex flex-col justify-between">
+                                                <h3 className="text-[#ffffffa8] text-sm font-medium flex items-center gap-2"><Users size={14} className="text-blue-400" /> Age & Gender</h3>
+                                                <div className="flex items-center justify-center flex-1 my-4">
+                                                    <div className="relative w-32 h-32">
+                                                        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                                                            {/* Background ring */}
+                                                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="15" />
+                                                            {/* Data arcs (simulated via stroke-dasharray) */}
+                                                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#3b82f6" strokeWidth="15" strokeDasharray="160 251.2" strokeDashoffset="0" />
+                                                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#8b5cf6" strokeWidth="15" strokeDasharray="70 251.2" strokeDashoffset="-160" />
+                                                        </svg>
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                            <span className="text-xl font-bold text-white">25-34</span>
+                                                            <span className="text-[10px] text-gray-500">Primary</span>
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-3 text-sm">
-                                                        <div className="mt-0.5"><CheckCircle2 size={14} className="text-green-400" /></div>
-                                                        <div>
-                                                            <p className="text-white text-xs">Sent DM to @creator23</p>
-                                                            <p className="text-[#ffffffa8] text-[10px] mt-0.5">15 mins ago (Triggered via story)</p>
-                                                        </div>
+                                                </div>
+                                                <div className="flex justify-center gap-4 text-xs">
+                                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-gray-400">Men (64%)</span></div>
+                                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-500"></div><span className="text-gray-400">Women (36%)</span></div>
+                                                </div>
+                                             </div>
+                                        </div>
+
+                                        {/* State 3: Automations (Hovered) */}
+                                        <div className={`absolute inset-0 flex flex-col gap-3 transition-all duration-500 ease-out ${hoveredTab === 'automations' ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <div className="flex space-x-2">
+                                                    <div className="px-3 py-1 bg-white/[0.05] rounded text-xs font-medium text-white border border-white/[0.05]">Active (3)</div>
+                                                    <div className="px-3 py-1 rounded text-xs font-medium text-gray-500 hover:text-gray-300 cursor-pointer">Drafts (1)</div>
+                                                </div>
+                                                <div className="px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded text-xs flex items-center gap-1 border border-indigo-500/30 cursor-pointer"><Plus size={12}/> New Trigger</div>
+                                            </div>
+                                            
+                                            {/* Automation Rules rows */}
+                                            <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-white/[0.03] to-transparent border border-white/[0.05]">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center"><MessageCircle size={14} className="text-blue-400"/></div>
+                                                    <div>
+                                                        <div className="text-sm font-medium text-white flex items-center gap-2">"Link in bio" rule <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span></div>
+                                                        <div className="text-xs text-gray-500">If user comments "link", reply and send DM.</div>
                                                     </div>
-                                                    <div className="flex gap-3 text-sm opacity-50">
-                                                        <div className="mt-0.5"><CheckCircle2 size={14} className="text-gray-500" /></div>
-                                                        <div>
-                                                            <p className="text-white text-xs">Replied to "link please"</p>
-                                                            <p className="text-[#ffffffa8] text-[10px] mt-0.5">1 hour ago on Post</p>
-                                                        </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm font-bold text-white">1,402</div>
+                                                    <div className="text-[10px] text-gray-500">Fired this week</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-white/[0.03] to-transparent border border-white/[0.05]">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center"><Heart size={14} className="text-pink-400"/></div>
+                                                    <div>
+                                                        <div className="text-sm font-medium text-white flex items-center gap-2">Story Mentions <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span></div>
+                                                        <div className="text-xs text-gray-500">If user tags in story, send thank you DM.</div>
                                                     </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm font-bold text-white">845</div>
+                                                    <div className="text-[10px] text-gray-500">Fired this week</div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-white/[0.03] to-transparent border border-white/[0.05]">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center"><MessageCircle size={14} className="text-purple-400"/></div>
+                                                    <div>
+                                                        <div className="text-sm font-medium text-white flex items-center gap-2">Pricing Inquiry <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span></div>
+                                                        <div className="text-xs text-gray-500">If user comments "price", reply with info.</div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm font-bold text-white">321</div>
+                                                    <div className="text-[10px] text-gray-500">Fired this week</div>
                                                 </div>
                                             </div>
                                         </div>
