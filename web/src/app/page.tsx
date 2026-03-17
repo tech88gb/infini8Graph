@@ -1,26 +1,26 @@
 import Link from 'next/link';
-import { BarChart3, TrendingUp, Shield, ArrowRight, MessageCircle } from 'lucide-react';
+import { BarChart3, TrendingUp, Shield, ArrowRight, MessageCircle, Activity, Users, Globe2 } from 'lucide-react';
 
 export default function LandingPage() {
     return (
         <div className="min-h-screen bg-[#000212] text-white selection:bg-indigo-500/30 font-sans overflow-x-hidden">
             {/* Minimalist Top Nav */}
             <header className="fixed top-0 left-0 right-0 z-50 bg-[#000212]/80 backdrop-blur-xl border-b border-white/[0.04]">
-                <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+                <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.15)]">
                             <span className="text-black font-bold text-lg">∞</span>
                         </div>
-                        <span className="text-lg font-semibold tracking-tight text-white hidden sm:block">infini8Graph</span>
+                        <span className="text-xl font-semibold tracking-tight text-white hidden sm:block">infini8Graph</span>
                     </div>
                     
-                    <div className="flex items-center gap-6 text-sm font-medium text-gray-400">
+                    <div className="flex items-center gap-8 text-[15px] font-medium text-gray-400">
                         <a href="#features" className="hover:text-white transition-colors duration-200 hidden md:block">Features</a>
                         <Link href="/privacy" className="hover:text-white transition-colors duration-200 hidden md:block">Privacy</Link>
                         <Link href="/terms" className="hover:text-white transition-colors duration-200 hidden md:block">Terms</Link>
-                        <div className="hidden md:block w-px h-4 bg-white/10 m-2"></div>
+                        <div className="hidden md:block w-px h-5 bg-white/10 m-1"></div>
                         <Link href="/login" className="hover:text-white transition-colors duration-200">Log in</Link>
-                        <Link href="/login" className="px-4 py-2 rounded-full bg-white text-black font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
+                        <Link href="/login" className="px-5 py-2.5 rounded-full bg-white text-black font-semibold hover:bg-gray-200 transition-colors flex items-center gap-2">
                             Get Started
                         </Link>
                     </div>
@@ -52,7 +52,7 @@ export default function LandingPage() {
                         </p>
 
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full px-4">
-                            <Link href="/login" className="w-full sm:w-auto px-6 py-3 rounded-full bg-white text-black font-medium text-base hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-white/10">
+                            <Link href="/login" className="w-full sm:w-auto px-6 py-3 rounded-full bg-white text-black font-medium text-base hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
                                 Connect Instagram <ArrowRight size={18} />
                             </Link>
                         </div>
@@ -62,25 +62,69 @@ export default function LandingPage() {
                     <div className="relative w-full max-w-5xl mt-24">
                         <div className="absolute inset-0 bg-gradient-to-t from-[#000212] via-transparent to-transparent z-20 h-full"></div>
                         <div className="relative rounded-2xl border border-white/[0.08] bg-[#0A0A0C] shadow-2xl p-2 mx-auto overflow-hidden">
-                            <div className="absolute top-0 left-0 right-0 h-10 border-b border-white/[0.04] bg-white/[0.01] flex items-center px-4 gap-2">
-                                <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
-                                <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
-                                <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
+                            <div className="absolute top-0 left-0 right-0 h-10 border-b border-white/[0.04] bg-white/[0.02] flex items-center px-4 justify-between">
+                                <div className="flex gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
+                                    <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
+                                    <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
+                                </div>
+                                <div className="text-[10px] text-gray-500 font-medium tracking-widest uppercase">infini8Graph Dashboard</div>
                             </div>
                             
-                            <div className="mt-10 p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-6 opacity-60">
-                                <div className="col-span-1 md:col-span-2 h-40 md:h-64 rounded-xl border border-white/[0.05] bg-white/[0.01] p-6 relative overflow-hidden flex flex-col justify-between">
-                                     <div className="h-4 w-24 bg-white/10 rounded"></div>
-                                     <div className="h-20 w-full bg-gradient-to-r from-indigo-500/20 to-purple-500/0 rounded-lg"></div>
-                                </div>
-                                <div className="col-span-1 space-y-6">
-                                    <div className="h-28 rounded-xl border border-white/[0.05] bg-white/[0.01] p-6 flex flex-col justify-center">
-                                        <div className="h-3 w-16 bg-white/10 rounded mb-4"></div>
-                                        <div className="h-6 w-24 bg-white/20 rounded"></div>
+                            <div className="mt-10 p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 opacity-90">
+                                {/* Main Analytics Chart Area */}
+                                <div className="col-span-1 md:col-span-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-6 relative overflow-hidden flex flex-col justify-between h-[280px]">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div>
+                                            <h3 className="text-gray-400 text-sm font-medium flex items-center gap-2"><Activity size={14} className="text-indigo-400" /> Account Reach</h3>
+                                            <div className="text-3xl font-bold text-white mt-1">1,248,392</div>
+                                            <div className="text-green-400 text-xs mt-1 font-medium">+14.2% vs last week</div>
+                                        </div>
+                                        <div className="px-3 py-1 rounded bg-white/[0.03] border border-white/[0.05] text-xs text-gray-400">Last 7 Days</div>
                                     </div>
-                                    <div className="h-28 rounded-xl border border-white/[0.05] bg-white/[0.01] p-6 flex flex-col justify-center">
-                                         <div className="h-3 w-16 bg-white/10 rounded mb-4"></div>
-                                        <div className="h-6 w-24 bg-white/20 rounded"></div>
+                                    
+                                    {/* Mock Bar Chart */}
+                                    <div className="flex items-end justify-between gap-2 h-32 mt-4">
+                                        {[40, 65, 45, 80, 55, 90, 75].map((height, i) => (
+                                            <div key={i} className="w-full relative group" style={{ height: '100%' }}>
+                                                <div 
+                                                    className="absolute bottom-0 w-full rounded-t-sm bg-indigo-500/20 group-hover:bg-indigo-500/40 transition-colors" 
+                                                    style={{ height: `${height}%` }}
+                                                >
+                                                    <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-400 rounded-t-sm opacity-50"></div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Sidebar Stats */}
+                                <div className="col-span-1 flex flex-col gap-4 md:gap-6">
+                                    {/* Audience Demo */}
+                                    <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-6 h-[130px] flex flex-col justify-center">
+                                        <h3 className="text-gray-400 text-sm font-medium flex items-center gap-2 mb-3"><Users size={14} className="text-purple-400" /> Top Audience</h3>
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <div className="text-2xl font-bold text-white">25-34</div>
+                                                <div className="text-xs text-gray-500 mt-1">Men (62%)</div>
+                                            </div>
+                                            <div className="w-12 h-12 rounded-full border-[4px] border-white/[0.04] border-t-purple-500 flex items-center justify-center -rotate-45"></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Top Location */}
+                                    <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-6 h-[130px] flex flex-col justify-center">
+                                        <h3 className="text-gray-400 text-sm font-medium flex items-center gap-2 mb-3"><Globe2 size={14} className="text-pink-400" /> Top Location</h3>
+                                        <div>
+                                            <div className="text-xl font-bold text-white tracking-tight">New York</div>
+                                            <div className="flex items-center justify-between mt-2">
+                                                <div className="text-xs text-gray-500">United States</div>
+                                                <div className="text-xs font-medium text-white">18.4%</div>
+                                            </div>
+                                            <div className="w-full h-1.5 bg-white/[0.05] rounded-full mt-2 overflow-hidden">
+                                                <div className="w-[18.4%] h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -141,44 +185,44 @@ export default function LandingPage() {
             </main>
 
             {/* Footer */}
-            <footer className="pt-16 pb-8 px-6 border-t border-white/[0.04] bg-[#000212]">
-                <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 md:gap-4 mb-16 text-sm">
+            <footer className="pt-20 pb-12 px-6 border-t border-white/[0.04] bg-[#000212]">
+                <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12 md:gap-8 mb-20 text-[15px]">
                     {/* Brand col */}
                     <div className="col-span-1 sm:col-span-2">
-                        <div className="flex items-center gap-2 mb-4">
-                            <div className="w-6 h-6 rounded bg-white flex items-center justify-center">
-                                <span className="text-black font-bold text-xs">∞</span>
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+                                <span className="text-black font-bold text-lg">∞</span>
                             </div>
-                            <span className="font-semibold text-white tracking-tight">infini8Graph</span>
+                            <span className="font-semibold text-white tracking-tight text-xl">infini8Graph</span>
                         </div>
-                        <p className="text-gray-500 max-w-xs leading-relaxed">
-                            The definitive platform for Instagram growth, analytics, and community automation.
+                        <p className="text-gray-400 max-w-sm leading-relaxed">
+                            The definitive platform for Instagram growth, analytics, and community automation. Built for creators who mean business.
                         </p>
                     </div>
 
                     {/* Resources */}
                     <div>
-                        <h4 className="text-white font-medium mb-4">Product</h4>
-                        <ul className="space-y-3">
-                            <li><a href="#features" className="text-gray-500 hover:text-white transition-colors">Features</a></li>
-                            <li><Link href="/login" className="text-gray-500 hover:text-white transition-colors">Log In</Link></li>
+                        <h4 className="text-white font-semibold mb-6">Product</h4>
+                        <ul className="space-y-4">
+                            <li><a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a></li>
+                            <li><Link href="/login" className="text-gray-400 hover:text-white transition-colors">Log In</Link></li>
                         </ul>
                     </div>
                     
                     {/* Legal */}
                     <div>
-                        <h4 className="text-white font-medium mb-4">Legal</h4>
-                        <ul className="space-y-3">
-                            <li><Link href="/privacy" className="text-gray-500 hover:text-white transition-colors">Privacy Policy</Link></li>
-                            <li><Link href="/terms" className="text-gray-500 hover:text-white transition-colors">Terms of Service</Link></li>
-                            <li><a href="mailto:britojaison123@gmail.com" className="text-gray-500 hover:text-white transition-colors">Contact Support</a></li>
+                        <h4 className="text-white font-semibold mb-6">Legal</h4>
+                        <ul className="space-y-4">
+                            <li><Link href="/privacy" className="text-gray-400 hover:text-white transition-colors">Privacy Policy</Link></li>
+                            <li><Link href="/terms" className="text-gray-400 hover:text-white transition-colors">Terms of Service</Link></li>
+                            <li><a href="mailto:britojaison123@gmail.com" className="text-gray-400 hover:text-white transition-colors">Contact Support</a></li>
                         </ul>
                     </div>
                 </div>
 
-                <div className="max-w-6xl mx-auto border-t border-white/[0.04] pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
+                <div className="max-w-6xl mx-auto border-t border-white/[0.04] pt-8 flex flex-col md:flex-row justify-between items-center gap-6 text-sm text-gray-500">
                     <p>&copy; {new Date().getFullYear()} infini8Graph. All rights reserved.</p>
-                    <p className="flex items-center gap-1.5 justify-center"><Shield size={12} className="text-gray-500"/> Not affiliated with Meta Platforms, Inc.</p>
+                    <p className="flex items-center gap-2 justify-center"><Shield size={14} className="text-gray-500"/> Not affiliated with Meta Platforms, Inc.</p>
                 </div>
             </footer>
         </div>
