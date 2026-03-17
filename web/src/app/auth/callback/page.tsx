@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Cookies from 'js-cookie';
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [status, setStatus] = useState('Processing login...');
@@ -35,7 +35,6 @@ export default function AuthCallbackPage() {
             // Backup: Save to localStorage as well
             localStorage.setItem('auth_token', token);
 
-            // ... inside useEffect, remove the router.push and setStatus to:
             setStatus('Login successful! Token received.');
 
             // Verify immediate save
@@ -50,7 +49,7 @@ export default function AuthCallbackPage() {
             console.warn('No token found in URL params');
             setStatus('No token received');
         }
-    }, [searchParams]);
+    }, [searchParams, router]);
 
     const handleContinue = () => {
         router.push('/dashboard');
@@ -82,3 +81,19 @@ export default function AuthCallbackPage() {
         </div>
     );
 }
+
+export default function AuthCallbackPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="spinner mb-4"></div>
+                    <p>Processing Authentication...</p>
+                </div>
+            </div>
+        }>
+            <AuthCallbackContent />
+        </Suspense>
+    );
+}
+
