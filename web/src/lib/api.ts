@@ -35,7 +35,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        console.error('API Error:', error.response?.status, error.message);
+        // Don't log 401s on auth/me — expected when not logged in
+        const is401OnMe = error.response?.status === 401 && error.config?.url?.includes('/auth/me');
+        if (!is401OnMe) {
+            console.error('API Error:', error.response?.status, error.message);
+        }
         return Promise.reject(error);
     }
 );
