@@ -50,8 +50,15 @@ export default function AutomationPage() {
     });
     const [kwInput, setKwInput] = useState('');
     const [defaultKwInput, setDefaultKwInput] = useState('');
-    const [activity, setActivity] = useState<any[]>([]);
-    const [loadingActivity, setLoadingActivity] = useState(false);
+    const [stats, setStats] = useState<any>({
+        totalRepliesSent: 0,
+        messagingReplies: 0,
+        commentReplies: 0,
+        errors: 0,
+        activeRules: 0,
+        recentEvents: 0
+    });
+    const [loadingStats, setLoadingStats] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -74,20 +81,27 @@ export default function AutomationPage() {
         } catch (err) { console.error(err); } finally { setLoading(false); }
     }, []);
 
-    const fetchActivity = useCallback(async (showLoading = false) => {
-        if (showLoading) setLoadingActivity(true);
+    const fetchStats = useCallback(async (showLoading = false) => {
+        if (showLoading) setLoadingStats(true);
         try {
-            const res = await fetch(`${API_BASE}/api/automation/activity`, { credentials: 'include' });
-            if (res.ok) { const data = await res.json(); setActivity(data.activity || []); }
-        } catch { } finally { if (showLoading) setLoadingActivity(false); }
+            const res = await fetch(`${API_BASE}/api/automation/stats`, { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data.stats);
+            }
+        } catch (err) {
+            console.error('Error fetching stats:', err);
+        } finally {
+            if (showLoading) setLoadingStats(false);
+        }
     }, []);
 
     useEffect(() => { fetchData(); }, [fetchData]);
     useEffect(() => {
-        fetchActivity(true);
-        const timer = setInterval(() => fetchActivity(false), 3000);
+        fetchStats(true);
+        const timer = setInterval(() => fetchStats(false), 5000);
         return () => clearInterval(timer);
-    }, [fetchActivity]);
+    }, [fetchStats]);
 
     const specificRules = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
     const notify = (type: 'success' | 'error', message: string) => { setToast({ type, message }); setTimeout(() => setToast(null), 3000); };
@@ -135,26 +149,12 @@ export default function AutomationPage() {
 
     if (loading) return <LoadingPage text="Loading automation..." />;
 
-    // Console helpers
-    const actionColors: Record<string, string> = {
-        'WEBHOOK RECEIVED': '#a78bfa', 'RESOLVE ACCOUNT': '#38bdf8', 'RULE MATCHED': '#fbbf24',
-        'NO MATCH': '#64748b', 'API REQUEST': '#f59e0b', 'API RESPONSE': '#22c55e', 'API ERROR': '#ef4444'
-    };
-    const actionIcons: Record<string, string> = {
-        'WEBHOOK RECEIVED': '📨', 'RESOLVE ACCOUNT': '🔑', 'RULE MATCHED': '🎯',
-        'NO MATCH': '📭', 'API REQUEST': '📤', 'API RESPONSE': '✅', 'API ERROR': '❌'
-    };
-    const statsData = [
-        { label: 'Events', value: activity.length, color: '#a78bfa', icon: '⚡' },
-        { label: 'Comments', value: activity.filter((a: any) => a.action === 'WEBHOOK RECEIVED' && a.commentId).length, color: '#38bdf8', icon: '💬' },
-        { label: 'DMs Sent', value: activity.filter((a: any) => a.action === 'API RESPONSE' && a.type === 'dm').length, color: '#22c55e', icon: '📩' },
-        {
-            label: 'Success Rate',
-            value: activity.filter((a: any) => a.action === 'API REQUEST').length > 0
-                ? Math.round((activity.filter((a: any) => a.action === 'API RESPONSE').length / activity.filter((a: any) => a.action === 'API REQUEST').length) * 100) + '%'
-                : '—',
-            color: '#fbbf24', icon: '✅'
-        }
+    const statsRow = [
+        { label: 'Total Replies', value: stats.totalRepliesSent, color: 'var(--primary)', icon: '⚡' },
+        { label: 'Comments', value: stats.commentReplies, color: '#38bdf8', icon: '💬' },
+        { label: 'DMs Sent', value: stats.messagingReplies, color: '#22c55e', icon: '📩' },
+        { label: 'Active Rules', value: stats.activeRules, color: '#fbbf24', icon: '🎯' },
+        { label: 'Errors', value: stats.errors, color: '#ef4444', icon: '⚠️' }
     ];
 
     return (
@@ -167,177 +167,39 @@ export default function AutomationPage() {
                     icon={<svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
                 />
 
-                {/* ── Live Automation Console ── */}
-                <Card style={{ marginBottom: 'var(--space-6)', border: '1px solid #334155', borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
-
-                    {/* Header */}
-                    <CardHeader style={{ background: '#1e293b', borderBottom: '1px solid #334155', padding: '12px 16px' }}>
-                        <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-3">
-                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e', animation: 'pulse 1.5s infinite' }} />
-                                <div className="flex flex-col">
-                                    <span style={{ color: 'white', fontWeight: 700 }}>Live Automation Console</span>
-                                    <span style={{ color: '#94a3b8', fontSize: 11 }}>Real-time Instagram Messaging API Trace</span>
+                {/* ── Automation Stats Bar ── */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: 'var(--space-4)',
+                    marginBottom: 'var(--space-8)'
+                }}>
+                    {statsRow.map((stat, i) => (
+                        <Card key={i} style={{ border: 'none', background: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                            <CardBody style={{ padding: 'var(--space-5)' }}>
+                                <div className="flex items-center justify-between">
+                                    <div style={{
+                                        width: 40, height: 40, borderRadius: '12px',
+                                        background: `${stat.color}15`, color: stat.color,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 20
+                                    }}>
+                                        {stat.icon}
+                                    </div>
+                                    <div style={{ color: 'var(--success)', fontSize: 10, fontWeight: 700, background: 'var(--success-light)', padding: '2px 6px', borderRadius: 4, visibility: i === 0 ? 'visible' : 'hidden' }}>
+                                        LIVE
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {activity.length > 0 && (
-                                    <button onClick={() => setActivity([])} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: '1px solid #475569', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontWeight: 600 }}>
-                                        Clear
-                                    </button>
-                                )}
-                                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, border: '1px solid #334155', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                    Polling Active
-                                </span>
-                                {loadingActivity && <Spinner size="sm" />}
-                            </div>
-                        </div>
-                    </CardHeader>
-
-                    {/* Stats Bar */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', background: '#1e293b', borderBottom: '1px solid #334155' }}>
-                        {statsData.map((stat, i) => (
-                            <div key={i} style={{ padding: '10px 16px', borderRight: i < 3 ? '1px solid #334155' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontSize: 16 }}>{stat.icon}</span>
-                                <div>
-                                    <div style={{ color: stat.color, fontSize: 18, fontWeight: 700, lineHeight: 1, fontFamily: 'monospace' }}>{stat.value}</div>
-                                    <div style={{ color: '#64748b', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>{stat.label}</div>
+                                <div style={{ marginTop: 'var(--space-4)' }}>
+                                    <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--color-gray-900)', lineHeight: 1 }}>{stat.value}</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{stat.label}</div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            </CardBody>
+                        </Card>
+                    ))}
+                </div>
 
-                    {/* Endpoint Info Bar */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 16px', background: '#0a0f1a', borderBottom: '1px solid #1e293b', fontSize: 10 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e', flexShrink: 0 }} />
-                        <span style={{ color: '#475569' }}>Endpoint:</span>
-                        <code style={{ color: '#64748b' }}>{API_BASE}/api/webhook</code>
-                        <span style={{ color: '#1e293b' }}>|</span>
-                        <span style={{ color: '#475569' }}>Graph API:</span>
-                        <code style={{ color: '#64748b' }}>v18.0</code>
-                        <span style={{ color: '#1e293b' }}>|</span>
-                        <span style={{ color: '#475569' }}>Platform:</span>
-                        <code style={{ color: '#64748b' }}>instagram</code>
-                    </div>
 
-                    {/* Console Body */}
-                    <CardBody style={{ background: '#0f172a', padding: 0 }}>
-                        <div style={{ height: 480, overflowY: 'auto', fontFamily: '"Fira Code","Cascadia Code","JetBrains Mono",Consolas,monospace', fontSize: 12, padding: 16, color: '#e2e8f0', lineHeight: 1.6 }}>
-                            {activity.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-center" style={{ color: '#475569' }}>
-                                    <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-3 opacity-20">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                    </svg>
-                                    <p>Awaiting automated activity...</p>
-                                    <p style={{ fontSize: 11, marginTop: 4 }}>Comment on a post with your keywords to see the Live API Trace.</p>
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                                    {activity.map((entry: any, idx: number) => {
-                                        const color = actionColors[entry.action] || '#e2e8f0';
-                                        const icon = actionIcons[entry.action] || '•';
-                                        const time = new Date(entry.timestamp).toLocaleTimeString();
-                                        const elapsed = Math.round((Date.now() - new Date(entry.timestamp).getTime()) / 1000);
-                                        const elapsedStr = elapsed < 60 ? `${elapsed}s ago` : elapsed < 3600 ? `${Math.floor(elapsed / 60)}m ago` : `${Math.floor(elapsed / 3600)}h ago`;
-                                        const isFlowStart = entry.action === 'WEBHOOK RECEIVED';
-                                        const nextEntry = activity[idx + 1];
-                                        const isFlowEnd = !nextEntry || nextEntry.action === 'WEBHOOK RECEIVED';
-
-                                        return (
-                                            <div key={entry.id}>
-                                                {isFlowStart && idx > 0 && (
-                                                    <div style={{ margin: '12px 0 8px', borderTop: '1px dashed #1e293b', position: 'relative' }}>
-                                                        <span style={{ position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)', background: '#0f172a', padding: '0 8px', fontSize: 9, color: '#334155', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
-                                                            new event flow
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <div style={{ display: 'flex', gap: 0 }}>
-                                                    {/* Flow connector */}
-                                                    <div style={{ width: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}60`, flexShrink: 0, marginTop: 14 }} />
-                                                        {!isFlowEnd && <div style={{ width: 2, flex: 1, minHeight: 8, background: `linear-gradient(to bottom, ${color}50, ${color}10)` }} />}
-                                                    </div>
-                                                    {/* Entry card */}
-                                                    <div style={{ flex: 1, padding: '8px 10px', marginBottom: 2, background: idx === 0 ? '#1e293b' : 'transparent', borderRadius: 8, animation: idx === 0 ? 'fadeInRight 0.3s ease-out' : 'none' }}>
-                                                        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-                                                            <div className="flex items-center gap-2">
-                                                                <span style={{ fontSize: 12 }}>{icon}</span>
-                                                                <span style={{ color: '#475569', fontSize: 10 }}>[{time}]</span>
-                                                                <span style={{ color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 11 }}>{entry.action}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {entry.detail && <span style={{ color: '#64748b', fontSize: 10, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.detail}</span>}
-                                                                <span style={{ color: '#334155', fontSize: 9, whiteSpace: 'nowrap' }}>{elapsedStr}</span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
-                                                            {/* ID table */}
-                                                            {(entry.commentId || entry.senderId || entry.recipientId || entry.mediaId || entry.recipientIGSID || entry.pageId) && (
-                                                                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1px 12px', fontSize: 10 }}>
-                                                                    {entry.commentId && <><span style={{ color: '#475569' }}>Comment ID</span><span style={{ color: '#94a3b8' }}>{entry.commentId}</span></>}
-                                                                    {entry.senderId && <><span style={{ color: '#475569' }}>Sender ID</span><span style={{ color: '#94a3b8' }}>{entry.senderId}</span></>}
-                                                                    {entry.recipientId && <><span style={{ color: '#475569' }}>Recipient ID</span><span style={{ color: '#94a3b8' }}>{entry.recipientId}</span></>}
-                                                                    {entry.recipientIGSID && <><span style={{ color: '#475569' }}>Recipient IGSID</span><span style={{ color: '#94a3b8' }}>{entry.recipientIGSID}</span></>}
-                                                                    {entry.mediaId && <><span style={{ color: '#475569' }}>Media ID</span><span style={{ color: '#94a3b8' }}>{entry.mediaId}</span></>}
-                                                                    {entry.pageId && <><span style={{ color: '#475569' }}>Page ID</span><span style={{ color: '#94a3b8' }}>{entry.pageId}</span></>}
-                                                                </div>
-                                                            )}
-                                                            {entry.action === 'WEBHOOK RECEIVED' && entry.text && (
-                                                                <div style={{ color: '#38bdf8', fontSize: 11, fontStyle: 'italic' }}>
-                                                                    &quot;{entry.text}&quot; <span style={{ color: '#475569' }}>— from @{entry.username}</span>
-                                                                </div>
-                                                            )}
-                                                            {entry.action === 'RULE MATCHED' && (
-                                                                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1px 12px', fontSize: 10 }}>
-                                                                    {entry.commentReply && <><span style={{ color: '#475569' }}>Comment Reply</span><span style={{ color: '#fbbf24' }}>&quot;{entry.commentReply}&quot;</span></>}
-                                                                    {entry.replyText && <><span style={{ color: '#475569' }}>Reply Text</span><span style={{ color: '#fbbf24' }}>&quot;{entry.replyText}&quot;</span></>}
-                                                                    {entry.dmReply && <><span style={{ color: '#475569' }}>DM Reply</span><span style={{ color: '#c084fc' }}>&quot;{entry.dmReply}&quot;</span></>}
-                                                                    {entry.sendDM !== undefined && <><span style={{ color: '#475569' }}>Send DM</span><span style={{ color: entry.sendDM ? '#4ade80' : '#64748b' }}>{entry.sendDM ? 'Yes' : 'No'}</span></>}
-                                                                </div>
-                                                            )}
-                                                            {entry.action === 'API REQUEST' && entry.payload && (
-                                                                <div style={{ background: '#0a0f1a', padding: 8, borderRadius: 4, border: '1px solid #1e293b' }}>
-                                                                    <div style={{ color: '#334155', fontSize: 9, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Request Payload</div>
-                                                                    <pre style={{ margin: 0, color: '#fcd34d', whiteSpace: 'pre-wrap', fontSize: 10 }}>{JSON.stringify(entry.payload, null, 2)}</pre>
-                                                                </div>
-                                                            )}
-                                                            {entry.action === 'API RESPONSE' && entry.response && (
-                                                                <div style={{ background: '#0a0f1a', padding: 8, borderRadius: 4, border: '1px solid #1e293b' }}>
-                                                                    <div style={{ color: '#334155', fontSize: 9, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Meta API Response</div>
-                                                                    <pre style={{ margin: 0, color: '#4ade80', whiteSpace: 'pre-wrap', fontSize: 10 }}>{JSON.stringify(entry.response, null, 2)}</pre>
-                                                                </div>
-                                                            )}
-                                                            {entry.action === 'API ERROR' && (
-                                                                <pre style={{ margin: 0, color: '#fca5a5', background: '#2d0a0a', padding: 8, borderRadius: 4, fontSize: 10 }}>
-                                                                    {JSON.stringify({ status: entry.httpStatus, type: entry.errorType, code: entry.errorCode, message: entry.detail }, null, 2)}
-                                                                </pre>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </CardBody>
-
-                    {/* Footer */}
-                    <div style={{ padding: '8px 16px', background: '#1e293b', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <p style={{ color: '#475569', fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Real-time automated interactions triggered via Meta Webhooks
-                        </p>
-                        <span style={{ color: '#334155', fontSize: 10 }}>
-                            {activity.length > 0 ? `Last event: ${new Date(activity[0]?.timestamp).toLocaleTimeString()}` : 'No events yet'}
-                        </span>
-                    </div>
-                </Card>
 
                 {/* Two Column Layout */}
                 <div className="layout-split">

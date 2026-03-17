@@ -182,4 +182,21 @@ router.get('/activity', authenticate, async (req, res) => {
     }
 });
 
+/**
+ * Get automation statistics
+ */
+router.get('/stats', authenticate, async (req, res) => {
+    try {
+        const activeAccountId = req.user.instagramAccountId;
+        if (!activeAccountId) {
+            return res.status(400).json({ success: false, error: 'No active account selected' });
+        }
+
+        const stats = await autoReplyService.getStats(activeAccountId);
+        res.json({ success: true, stats });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 export default router;

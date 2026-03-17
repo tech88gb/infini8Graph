@@ -40,6 +40,21 @@ class AutoReplyService {
             ...extra
         };
 
+        // Update stats
+        if (instagramAccountId) {
+            if (!this.stats.has(instagramAccountId)) {
+                this.stats.set(instagramAccountId, { comments: 0, dms: 0, errors: 0 });
+            }
+            const s = this.stats.get(instagramAccountId);
+            if (action === 'WEBHOOK RECEIVED' && (extra.commentId || detail.toLowerCase().includes('comment'))) {
+                s.comments++;
+            } else if (action === 'API RESPONSE' && extra.type === 'dm') {
+                s.dms++;
+            } else if (action === 'API ERROR') {
+                s.errors++;
+            }
+        }
+
         recentActivity.unshift(entry);
 
         // Keep only the most recent logs
@@ -61,6 +76,7 @@ class AutoReplyService {
     }
 
     constructor() {
+        this.stats = new Map(); // Map<instagramAccountId, { comments: 0, dms: 0, errors: 0 }>
         // Define auto-reply rules (can be moved to database later)
         this.messageRules = [
             {
@@ -600,14 +616,37 @@ class AutoReplyService {
      * Get auto-reply statistics
      */
     async getStats(instagramAccountId) {
-        // This would query the database for reply counts
-        // For demo, return mock data
-        return {
+        const defaultStats = {
             totalRepliesSent: 0,
             messagingReplies: 0,
             commentReplies: 0,
+            errors: 0,
             activeRules: this.messageRules.length + this.commentRules.length,
-            lastActivity: null
+            recentEvents: 0
+        };
+
+        if (!instagramAccountId) return defaultStats;
+
+        const s = this.stats.get(instagramAccountId) || { comments: 0, dms: 0, errors: 0 };
+        const recent = recentActivity.filter(a => a.instagramAccountId === instagramAccountId).length;
+
+        // Try to get rules count from DB if possible
+        let rulesCount = defaultStats.activeRules;
+        try {
+            const { count } = await supabase
+                .from('automation_rules')
+                .select('*', { count: 'exact', head: true })
+                .eq('instagram_account_id', instagramAccountId);
+            if (count !== null) rulesCount = count;
+        } catch (e) { /* ignore */ }
+
+        return {
+            totalRepliesSent: s.comments + s.dms,
+            messagingReplies: s.dms,
+            commentReplies: s.comments,
+            errors: s.errors,
+            activeRules: rulesCount,
+            recentEvents: recent
         };
     }
 }

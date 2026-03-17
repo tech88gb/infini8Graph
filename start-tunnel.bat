@@ -1,3 +1,0 @@
-@echo off
-echo Starting Tunnel for port 3001...
-ssh -R 80:localhost:3005 nokey@localhost.run
