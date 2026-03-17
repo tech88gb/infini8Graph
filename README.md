@@ -4,10 +4,10 @@ A production-grade Instagram Analytics Web Platform with a Next.js frontend and 
 
 ---
 
-## Project Structure
+## Project Structurses
 
 ```
-infini8Graph/
+infini8Graphs/
 ├── infini8Graph-server/     # Backend API (Express.js)
 │   ├── src/
 │   │   ├── app.js           # Main server entry
