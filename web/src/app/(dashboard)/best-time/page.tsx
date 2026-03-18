@@ -348,7 +348,7 @@ export default function BestTimePage() {
                         />
                         <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                             labelFormatter={(val) => `${val}:00`}
                         />
                         <Bar
@@ -365,7 +365,7 @@ export default function BestTimePage() {
             <SectionCard title="Engagement by Day of Week" subtitle="Weekly engagement pattern visualization">
                 <ResponsiveContainer width="100%" height={320}>
                     <RadarChart data={dailyAnalysis}>
-                        <PolarGrid stroke="#e5e7eb" />
+                        <PolarGrid stroke="var(--border)" />
                         <PolarAngleAxis dataKey="day" stroke="#9ca3af" fontSize={12} />
                         <Radar
                             name="Engagement"
@@ -374,7 +374,7 @@ export default function BestTimePage() {
                             fill="#6366f1"
                             fillOpacity={0.3}
                         />
-                        <Tooltip contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }} />
+                        <Tooltip contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }} />
                     </RadarChart>
                 </ResponsiveContainer>
             </SectionCard>

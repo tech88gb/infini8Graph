@@ -267,7 +267,7 @@ export default function ReelsPage() {
                         />
                         <Tooltip
                             formatter={(value: any) => [`${value}% viewers`, 'Retention']}
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                         />
                         <Area
                             type="monotone"
@@ -297,7 +297,7 @@ export default function ReelsPage() {
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                         />
                         <Bar dataKey="likes" fill="#ec4899" radius={[4, 4, 0, 0]} name="Likes" />
                         <Bar dataKey="comments" fill="#0ea5e9" radius={[4, 4, 0, 0]} name="Comments" />

@@ -322,7 +322,7 @@ export default function GrowthPage() {
                         />
                         <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                             labelFormatter={(val) => new Date(val).toLocaleDateString()}
                         />
                         <Area
@@ -350,7 +350,7 @@ export default function GrowthPage() {
                         />
                         <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                         />
                         <Line type="monotone" dataKey="likes" stroke="#ec4899" strokeWidth={2} dot={false} name="Likes" />
                         <Line type="monotone" dataKey="comments" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Comments" />
@@ -382,7 +382,7 @@ export default function GrowthPage() {
                             />
                             <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                             <Tooltip
-                                contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                                contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                             />
                             <Bar dataKey="posts" fill="#10b981" radius={[4, 4, 0, 0]} name="Posts" />
                         </BarChart>

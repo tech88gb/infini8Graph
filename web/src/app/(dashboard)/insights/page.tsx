@@ -117,7 +117,7 @@ function ScoreGauge({ score, label, maxScore = 100 }: { score: number; label: st
         <div style={{ textAlign: 'center' }}>
             <div style={{ position: 'relative', width: 120, height: 120, margin: '0 auto' }}>
                 <svg width="120" height="120" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#e5e7eb" strokeWidth="10" />
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--border)" strokeWidth="10" />
                     <circle
                         cx="60" cy="60" r="50"
                         fill="none"
@@ -436,7 +436,7 @@ export default function ContentIntelligencePage() {
                             <XAxis type="number" stroke="#9ca3af" fontSize={11} />
                             <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={11} width={100} />
                             <Tooltip
-                                contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                                contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                                 formatter={(value) => [Number(value || 0).toLocaleString(), 'Avg Engagement']}
                             />
                             <Bar dataKey="engagement" radius={[0, 4, 4, 0]}>
@@ -500,7 +500,7 @@ export default function ContentIntelligencePage() {
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} />
                         <YAxis stroke="#9ca3af" fontSize={11} />
                         <Tooltip
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                             formatter={(value, name) => [
                                 Number(value || 0).toLocaleString(),
                                 name === 'engagement' ? 'Avg Engagement' : 'Posts'

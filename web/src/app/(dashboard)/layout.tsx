@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (loading) {
         return (
-            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #050816 0%, #000212 100%)' }}>
                 <div style={{ textAlign: 'center' }}>
                     <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
                     <p className="text-muted">Loading...</p>

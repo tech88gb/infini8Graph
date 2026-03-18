@@ -29,7 +29,7 @@ function InfoTooltip({ text }: { text: string }) {
                     bottom: '100%',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    background: '#1e293b',
+                    background: 'rgba(11,16,32,0.98)',
                     color: 'white',
                     padding: '8px 12px',
                     borderRadius: 6,
@@ -206,7 +206,7 @@ export default function UnifiedDashboardPage() {
                     onClick={() => refetch()}
                     disabled={isFetching}
                     className="btn btn-secondary"
-                    style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}
+                    style={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}
                 >
                     <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
                     Refresh All
@@ -278,7 +278,7 @@ export default function UnifiedDashboardPage() {
                                 <YAxis stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} width={40} />
                                 <Tooltip
                                     contentStyle={{
-                                        background: 'white',
+                                        background: 'var(--card-raised)',
                                         border: '1px solid var(--border)',
                                         borderRadius: 12,
                                         boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
@@ -346,9 +346,9 @@ export default function UnifiedDashboardPage() {
                                         <div style={{
                                             height: '100%',
                                             width: `${percentage}%`,
-                                            background: i === 0 ? 'var(--primary)' : `var(--color-purple-${500 - (i * 100)})`,
-                                            borderRadius: 4
-                                        }} />
+                                        background: i === 0 ? 'var(--primary)' : 'rgba(129, 140, 248, 0.75)',
+                                        borderRadius: 4
+                                    }} />
                                     </div>
                                     {!isCurrent && (
                                         <div style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, marginTop: 4, textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>

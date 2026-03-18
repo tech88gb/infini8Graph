@@ -245,7 +245,7 @@ export default function HashtagsPage() {
                             tickFormatter={(val) => `#${val}`}
                         />
                         <Tooltip
-                            contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                         />
                         <Bar dataKey="engagement" fill="#6366f1" radius={[0, 4, 4, 0]} name="Avg Engagement" />
                     </BarChart>

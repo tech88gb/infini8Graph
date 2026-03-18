@@ -200,7 +200,7 @@ export default function AutomationPage() {
                     marginBottom: 'var(--space-8)'
                 }}>
                     {statsRow.map((stat, i) => (
-                        <Card key={i} style={{ border: 'none', background: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                        <Card key={i} style={{ border: 'none', background: 'var(--card-raised)', boxShadow: '0 16px 32px rgba(0,0,0,0.18)' }}>
                             <CardBody style={{ padding: 'var(--space-5)' }}>
                                 <div className="flex items-center justify-between">
                                     <div style={{
@@ -216,7 +216,7 @@ export default function AutomationPage() {
                                     </div>
                                 </div>
                                 <div style={{ marginTop: 'var(--space-4)' }}>
-                                    <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--color-gray-900)', lineHeight: 1 }}>{stat.value}</div>
+                                    <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--foreground)', lineHeight: 1 }}>{stat.value}</div>
                                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{stat.label}</div>
                                 </div>
                             </CardBody>
@@ -292,14 +292,14 @@ export default function AutomationPage() {
                                 </Button>
                             </CardHeader>
                             {showCreateOverride && (
-                                <div style={{ padding: 'var(--space-6)', background: 'var(--color-gray-50)', borderBottom: '1px solid var(--border-light)' }}>
+                                    <div style={{ padding: 'var(--space-6)', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-light)' }}>
                                     <div className="mb-5">
                                         <label className="form-label">Rule name</label>
                                         <input type="text" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} placeholder="e.g. Summer Sale Post" className="input" />
                                     </div>
                                     <div className="mb-5">
                                         <label className="form-label">Select posts {(newRule.media_ids?.length || 0) > 0 && <span className="text-primary">({newRule.media_ids?.length} selected)</span>}</label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 'var(--space-2)', maxHeight: 160, overflowY: 'auto', padding: 'var(--space-3)', background: 'white', borderRadius: 'var(--radius-lg)', border: '1.5px solid var(--border)' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 'var(--space-2)', maxHeight: 160, overflowY: 'auto', padding: 'var(--space-3)', background: 'var(--card-raised)', borderRadius: 'var(--radius-lg)', border: '1.5px solid var(--border)' }}>
                                             {media.length === 0 ? <p className="text-muted text-center" style={{ gridColumn: '1/-1', padding: 'var(--space-6)' }}>No posts available</p> : media.map(m => {
                                                 const selected = newRule.media_ids?.includes(m.id);
                                                 return (
@@ -340,7 +340,7 @@ export default function AutomationPage() {
                                                 <svg width="16" height="16" fill="none" stroke="var(--muted)" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                                             </div>
                                             {expanded && (
-                                                <div style={{ padding: 'var(--space-4) var(--space-6)', background: 'var(--color-gray-50)', borderTop: '1px solid var(--border-light)' }}>
+                                                <div style={{ padding: 'var(--space-4) var(--space-6)', background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border-light)' }}>
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }} className="mb-4">
                                                         <div><span className="text-sm text-muted font-semibold" style={{ textTransform: 'uppercase', fontSize: 'var(--text-xs)' }}>Comment Reply</span><p style={{ marginTop: 'var(--space-2)' }}>{rule.comment_reply}</p></div>
                                                         {rule.send_dm && <div><span className="text-sm text-muted font-semibold" style={{ textTransform: 'uppercase', fontSize: 'var(--text-xs)' }}>Private DM</span><p style={{ marginTop: 'var(--space-2)' }}>{rule.dm_reply}</p></div>}
@@ -361,7 +361,7 @@ export default function AutomationPage() {
                     {/* RIGHT COLUMN - Live Preview */}
                     <div className="layout-split-aside">
                         <Card>
-                            <CardHeader style={{ background: 'linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-primary-100) 100%)' }}>
+                            <CardHeader style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(99,102,241,0.04) 100%)' }}>
                                 <div className="flex items-center gap-2">
                                     <svg width="16" height="16" fill="none" stroke="var(--primary)" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                     <CardTitle subtitle="How your auto-reply will appear"><span style={{ color: 'var(--color-primary-700)' }}>Live Preview</span></CardTitle>
@@ -372,8 +372,8 @@ export default function AutomationPage() {
                                     <span style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)', fontWeight: 600 }}>Incoming Comment</span>
                                     <div className="flex items-start gap-3 mt-3">
                                         <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)', flexShrink: 0, background: 'linear-gradient(135deg, #f472b6 0%, #fb923c 100%)' }} />
-                                        <div style={{ flex: 1, padding: 'var(--space-3) var(--space-4)', background: 'var(--color-gray-100)', borderRadius: '16px 16px 16px 4px' }}>
-                                            <p style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-gray-600)' }}>@user_example</p>
+                                        <div style={{ flex: 1, padding: 'var(--space-3) var(--space-4)', background: 'rgba(255,255,255,0.04)', borderRadius: '16px 16px 16px 4px', border: '1px solid var(--border-light)' }}>
+                                            <p style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--muted)' }}>@user_example</p>
                                             <p style={{ marginTop: 'var(--space-1)' }}>
                                                 {defaultRule.keywords.length > 0 ? <>Hey, what&apos;s the <span style={{ background: 'var(--warning-light)', padding: '1px 4px', borderRadius: 4 }}>{defaultRule.keywords[0]}</span>?</> : 'Hey, interested in this!'}
                                             </p>
@@ -389,7 +389,7 @@ export default function AutomationPage() {
                                     <span style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)', fontWeight: 600 }}>Your Reply</span>
                                     <div className="flex items-start gap-3 mt-3">
                                         <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)', flexShrink: 0, background: 'linear-gradient(135deg, var(--primary) 0%, var(--color-primary-600) 100%)' }} />
-                                        <div style={{ flex: 1, padding: 'var(--space-3) var(--space-4)', background: 'var(--color-primary-100)', borderRadius: '16px 16px 16px 4px', border: '1px solid var(--color-primary-200)' }}>
+                                        <div style={{ flex: 1, padding: 'var(--space-3) var(--space-4)', background: 'rgba(99,102,241,0.14)', borderRadius: '16px 16px 16px 4px', border: '1px solid rgba(99,102,241,0.22)' }}>
                                             <p style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)' }}>@your_account</p>
                                             <p style={{ marginTop: 'var(--space-1)' }}>{defaultRule.comment_reply || <span className="text-muted" style={{ fontStyle: 'italic' }}>Enter a reply above...</span>}</p>
                                         </div>
@@ -402,7 +402,7 @@ export default function AutomationPage() {
                                             <span style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)', fontWeight: 600 }}>+ Private DM</span>
                                             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                                         </div>
-                                        <div style={{ padding: 'var(--space-4)', borderRadius: 'var(--radius-lg)', background: 'linear-gradient(135deg, #faf5ff 0%, #fdf4ff 100%)', border: '1px solid var(--color-primary-200)' }}>
+                                        <div style={{ padding: 'var(--space-4)', borderRadius: 'var(--radius-lg)', background: 'linear-gradient(135deg, rgba(139,92,246,0.14) 0%, rgba(99,102,241,0.08) 100%)', border: '1px solid rgba(139,92,246,0.22)' }}>
                                             <div className="flex items-center gap-2 mb-2">
                                                 <svg width="14" height="14" fill="none" stroke="#9333ea" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                                                 <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: '#9333ea' }}>Direct Message</span>
@@ -411,7 +411,7 @@ export default function AutomationPage() {
                                         </div>
                                     </>
                                 )}
-                                <div className="flex items-center gap-2 mt-5" style={{ padding: 'var(--space-3) var(--space-4)', borderRadius: 'var(--radius-md)', background: defaultRule.is_active ? 'var(--success-light)' : 'var(--color-gray-100)' }}>
+                                <div className="flex items-center gap-2 mt-5" style={{ padding: 'var(--space-3) var(--space-4)', borderRadius: 'var(--radius-md)', background: defaultRule.is_active ? 'rgba(16,185,129,0.14)' : 'rgba(255,255,255,0.04)' }}>
                                     <div style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: defaultRule.is_active ? 'var(--success)' : 'var(--muted)', boxShadow: defaultRule.is_active ? '0 0 6px var(--success)' : 'none' }} />
                                     <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: defaultRule.is_active ? 'var(--success-dark)' : 'var(--muted)' }}>
                                         {defaultRule.is_active ? 'Auto-reply is active' : 'Auto-reply is off'}

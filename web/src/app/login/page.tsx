@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Instagram, BarChart3, TrendingUp, Zap } from 'lucide-react';
+import { Instagram, BarChart3, TrendingUp, Zap, ArrowRight, Shield } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
@@ -32,68 +32,73 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex">
+        <div className="min-h-screen flex bg-[#000212] text-white">
             {/* Left Panel - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 50%, #f472b6 100%)'
+            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden border-r border-white/[0.06]" style={{
+                background: 'radial-gradient(circle at top, rgba(79,70,229,0.24), transparent 38%), linear-gradient(180deg, #040616 0%, #000212 100%)'
             }}>
-                <div className="absolute inset-0 bg-black/20"></div>
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]"></div>
                 <div className="relative z-10 flex flex-col justify-center px-16">
                     <div className="flex items-center gap-3 mb-8">
-                        <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                            <span className="text-3xl font-bold text-white">∞</span>
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-gray-100 to-gray-300 flex items-center justify-center shadow-[0_8px_30px_rgba(255,255,255,0.12)]">
+                            <span className="text-3xl font-bold text-black">∞</span>
                         </div>
                         <span className="text-3xl font-bold text-white">infini8Graph</span>
                     </div>
 
                     <h1 className="text-5xl font-bold text-white leading-tight mb-6">
-                        Unlock Your<br />
-                        <span className="text-white/90">Instagram Potential</span>
+                        The intelligence layer<br />
+                        <span className="text-[#b4bcd0]">for serious Instagram growth.</span>
                     </h1>
 
-                    <p className="text-xl text-white/80 mb-12 max-w-md">
-                        Professional analytics to grow your audience, boost engagement, and optimize your content strategy.
+                    <p className="text-xl text-[#b4bcd0] mb-12 max-w-md leading-relaxed">
+                        Professional analytics, audience visibility, and automation workflows designed for creators, agencies, and brand teams.
                     </p>
 
                     <div className="space-y-4">
                         {[
-                            { icon: BarChart3, text: 'Comprehensive engagement metrics' },
-                            { icon: TrendingUp, text: 'Growth trends & predictions' },
-                            { icon: Zap, text: 'Best time to post analysis' },
+                            { icon: BarChart3, text: 'Clear post-level analytics without dashboard clutter' },
+                            { icon: TrendingUp, text: 'Audience and growth signals you can actually act on' },
+                            { icon: Zap, text: 'Automation tools that keep engagement responsive at scale' },
                         ].map((item, i) => (
-                            <div key={i} className="flex items-center gap-4 text-white/90">
-                                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                            <div key={i} className="flex items-center gap-4 text-[#d7dced]">
+                                <div className="w-10 h-10 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
                                     <item.icon size={20} />
                                 </div>
                                 <span className="font-medium">{item.text}</span>
                             </div>
                         ))}
                     </div>
+
+                    <div className="mt-12 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08] text-sm text-[#d7dced] w-fit">
+                        <Shield size={14} className="text-indigo-300" />
+                        Official Instagram Graph API connection
+                    </div>
                 </div>
 
                 {/* Decorative Elements */}
-                <div className="absolute -bottom-20 -right-20 w-96 h-96 rounded-full bg-white/10 blur-3xl"></div>
-                <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full bg-white/10 blur-3xl"></div>
+                <div className="absolute -bottom-20 -right-20 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl"></div>
+                <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full bg-violet-400/10 blur-3xl"></div>
             </div>
 
             {/* Right Panel - Login */}
-            <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: 'var(--background)' }}>
+            <div className="flex-1 flex items-center justify-center px-8 py-12 relative" style={{ background: 'radial-gradient(circle at top, rgba(79,70,229,0.14), transparent 30%), linear-gradient(180deg, #050816 0%, #000212 100%)' }}>
                 <div className="w-full max-w-md">
                     <div className="text-center mb-10">
                         <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-1)' }}>
-                                <span className="text-2xl font-bold text-white">∞</span>
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-b from-gray-100 to-gray-300 shadow-[0_8px_24px_rgba(255,255,255,0.1)]">
+                                <span className="text-2xl font-bold text-black">∞</span>
                             </div>
-                            <span className="text-2xl font-bold gradient-text">infini8Graph</span>
+                            <span className="text-2xl font-bold text-white">infini8Graph</span>
                         </div>
 
-                        <h2 className="text-3xl font-bold mb-3">Welcome Back</h2>
-                        <p className="text-[var(--muted)]">Connect your Instagram Business account to get started</p>
+                        <h2 className="text-3xl font-bold mb-3 text-white">Connect your account</h2>
+                        <p className="text-[#b4bcd0]">Sign in with Instagram to access analytics, audience intelligence, and automation in one workspace.</p>
                     </div>
 
-                    <div className="card">
+                    <div className="card p-8">
                         {error && (
-                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
                                 {error}
                             </div>
                         )}
@@ -102,7 +107,7 @@ export default function LoginPage() {
                             onClick={handleLogin}
                             disabled={isLoggingIn}
                             className="btn w-full py-4 text-lg font-semibold text-white"
-                            style={{ background: 'linear-gradient(135deg, #E1306C 0%, #833AB4 50%, #5851DB 100%)' }}
+                            style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.98) 0%, rgba(139,92,246,0.95) 100%)', boxShadow: '0 16px 40px rgba(99,102,241,0.25)' }}
                         >
                             {isLoggingIn ? (
                                 <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }}></div>
@@ -110,18 +115,19 @@ export default function LoginPage() {
                                 <>
                                     <Instagram size={24} />
                                     Continue with Instagram
+                                    <ArrowRight size={18} />
                                 </>
                             )}
                         </button>
 
-                        <div className="mt-6 p-4 rounded-xl" style={{ background: 'rgba(139, 92, 246, 0.1)' }}>
-                            <p className="text-sm text-center text-[var(--muted)]">
-                                <strong className="text-[var(--foreground)]">Note:</strong> You need an Instagram Business or Creator account connected to a Facebook Page.
+                        <div className="mt-6 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                            <p className="text-sm text-center text-[#b4bcd0]">
+                                <strong className="text-white">Note:</strong> You need an Instagram Business or Creator account connected to a Facebook Page.
                             </p>
                         </div>
                     </div>
 
-                    <p className="mt-8 text-center text-sm text-[var(--muted)]">
+                    <p className="mt-8 text-center text-sm text-[#8f98b3]">
                         By continuing, you agree to our Terms of Service and Privacy Policy
                     </p>
                 </div>

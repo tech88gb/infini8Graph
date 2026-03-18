@@ -52,7 +52,7 @@ function InfoTooltip({ text }: { text: string }) {
                     bottom: '100%',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    background: '#1e293b',
+                    background: 'rgba(11,16,32,0.98)',
                     color: 'white',
                     padding: '8px 12px',
                     borderRadius: 6,
@@ -151,7 +151,7 @@ function PostRow({ post }: { post: any }) {
                         width: 40,
                         height: 40,
                         borderRadius: 6,
-                        background: '#f3f4f6',
+                        background: 'var(--card-hover)',
                         overflow: 'hidden',
                         display: 'flex',
                         alignItems: 'center',
@@ -464,8 +464,8 @@ export default function DashboardPage() {
                             <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={40} />
                             <Tooltip
                                 contentStyle={{
-                                    background: 'white',
-                                    border: '1px solid #e5e7eb',
+                                    background: 'var(--card-raised)',
+                                    border: '1px solid var(--border)',
                                     borderRadius: 6,
                                     fontSize: 13
                                 }}
@@ -485,8 +485,8 @@ export default function DashboardPage() {
                             <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={40} />
                             <Tooltip
                                 contentStyle={{
-                                    background: 'white',
-                                    border: '1px solid #e5e7eb',
+                                    background: 'var(--card-raised)',
+                                    border: '1px solid var(--border)',
                                     borderRadius: 6,
                                     fontSize: 13
                                 }}
@@ -555,7 +555,7 @@ export default function DashboardPage() {
                                                     <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{item.shortName}</span>
                                                     <span style={{ fontSize: 12, fontWeight: 600 }}>{item.value.toLocaleString()}</span>
                                                 </div>
-                                                <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+                                                <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
                                                     <div style={{
                                                         height: '100%',
                                                         width: `${percentage}%`,

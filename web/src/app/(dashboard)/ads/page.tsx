@@ -606,7 +606,7 @@ export default function AdsPage() {
                                     <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
                                     <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                                     <RechartsTooltip
-                                        contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                                        contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                                     />
                                     <Area type="monotone" dataKey="spend" stroke="#10b981" fill="url(#spendGrad)" strokeWidth={2} />
                                 </AreaChart>
@@ -1570,7 +1570,7 @@ export default function AdsPage() {
                                                         <div style={{ width: 100 }}>
                                                             <div style={{
                                                                 height: 6,
-                                                                background: '#e5e7eb',
+                                                                background: 'var(--border)',
                                                                 borderRadius: 3,
                                                                 overflow: 'hidden'
                                                             }}>
