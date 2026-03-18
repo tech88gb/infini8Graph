@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { BarChart3, TrendingUp, Shield, ArrowRight, MessageCircle, Activity, Users, Globe2, LayoutDashboard, Settings, Mail, Bell, CheckCircle2, MapPin, Heart, Plus } from 'lucide-react';
+import { BarChart3, TrendingUp, Shield, ArrowRight, MessageCircle, Activity, Users, LayoutDashboard, Settings, Bell, CheckCircle2, MapPin, Heart, Plus, Sparkles, Briefcase, Building2, LockKeyhole, BadgeCheck, Eye } from 'lucide-react';
 
 export default function LandingPage() {
     const [hoveredTab, setHoveredTab] = useState('analytics');
@@ -59,6 +59,17 @@ export default function LandingPage() {
                         <p className="text-lg md:text-xl text-[#b4bcd0] max-w-2xl font-normal leading-relaxed mb-10">
                             Transform your Instagram presence with precision analytics, demographic insights, and automated community management—built for scale.
                         </p>
+
+                        <div className="flex flex-wrap items-center justify-center gap-3 mb-10 max-w-3xl">
+                            {['Built for creators', 'Made for agencies', 'Ready for brand teams'].map((item) => (
+                                <div
+                                    key={item}
+                                    className="px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08] text-sm text-[#d7dced] backdrop-blur-md"
+                                >
+                                    {item}
+                                </div>
+                            ))}
+                        </div>
 
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full px-4">
                             <Link href="/login" className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-white text-black font-medium text-[15px] hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.15)]">
@@ -329,7 +340,7 @@ export default function LandingPage() {
                                     <BarChart3 className="text-gray-300" size={20} />
                                 </div>
                                 <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Deep Analytics</h3>
-                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Get exact metrics on reach, impressions, and engagement rates for every post and reel without the clutter.</p>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">See reach, impressions, saves, shares, profile visits, and follower growth in one dashboard for every post, reel, and campaign.</p>
                             </div>
 
                             {/* Feature 2 */}
@@ -339,7 +350,7 @@ export default function LandingPage() {
                                     <TrendingUp className="text-gray-300" size={20} />
                                 </div>
                                 <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Audience Intelligence</h3>
-                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Know your followers inside out. Vivid demographic breakdowns by top cities, countries, age, and gender.</p>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Know exactly where your audience lives, which age groups respond best, and how your follower mix shifts over time.</p>
                             </div>
 
                             {/* Feature 3 */}
@@ -349,8 +360,125 @@ export default function LandingPage() {
                                     <MessageCircle className="text-gray-300" size={20} />
                                 </div>
                                 <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Smart Auto-Reply</h3>
-                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Automatically respond to comments and trigger DMs instantly. Keep your community active around the clock.</p>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Automatically reply to common comment triggers, send DMs instantly, and stay responsive without monitoring your inbox all day.</p>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section className="py-32 px-6 border-t border-white/[0.04] bg-[#000212]">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="text-center mb-20 max-w-3xl mx-auto">
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tighter text-white">How it works.</h2>
+                            <p className="text-lg text-[#b4bcd0] font-normal leading-relaxed">A simple flow designed for teams that want better visibility and faster engagement without adding operational overhead.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[
+                                {
+                                    number: '01',
+                                    title: 'Connect account',
+                                    description: 'Link your Instagram Business or creator account through the Instagram Graph API and start syncing performance data securely.',
+                                    icon: Sparkles,
+                                },
+                                {
+                                    number: '02',
+                                    title: 'See performance',
+                                    description: 'Monitor post-level analytics, audience trends, and growth signals in a single workspace built for day-to-day decisions.',
+                                    icon: Eye,
+                                },
+                                {
+                                    number: '03',
+                                    title: 'Automate engagement',
+                                    description: 'Set up reply and DM workflows for recurring interactions so your community gets instant responses at scale.',
+                                    icon: MessageCircle,
+                                },
+                            ].map(({ number, title, description, icon: Icon }) => (
+                                <div key={title} className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.04] relative overflow-hidden">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <div className="w-11 h-11 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
+                                            <Icon className="text-gray-200" size={20} />
+                                        </div>
+                                        <span className="text-xs tracking-[0.24em] text-[#7f89a6]">{number}</span>
+                                    </div>
+                                    <h3 className="text-xl font-semibold mb-3 text-white tracking-tight">{title}</h3>
+                                    <p className="text-[#b4bcd0] leading-relaxed text-[15px]">{description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <section className="py-32 px-6 border-t border-white/[0.04] bg-[#000212]">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="text-center mb-20 max-w-3xl mx-auto">
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tighter text-white">Built for the teams behind growth.</h2>
+                            <p className="text-lg text-[#b4bcd0] font-normal leading-relaxed">Different operators use Instagram differently. The product should make sense for each of them immediately.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {[
+                                {
+                                    title: 'For creators',
+                                    description: 'Track what content actually moves reach, engagement, and follower growth so you can repeat what works.',
+                                    icon: Sparkles,
+                                },
+                                {
+                                    title: 'For agencies',
+                                    description: 'Manage multiple client accounts with clearer reporting, faster audience insight, and reusable engagement workflows.',
+                                    icon: Briefcase,
+                                },
+                                {
+                                    title: 'For brand teams',
+                                    description: 'Give marketers a reliable view of campaign performance, community activity, and audience quality in one place.',
+                                    icon: Building2,
+                                },
+                            ].map(({ title, description, icon: Icon }) => (
+                                <div key={title} className="p-8 rounded-2xl bg-gradient-to-b from-white/[0.03] to-white/[0.01] border border-white/[0.05]">
+                                    <div className="w-11 h-11 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-6">
+                                        <Icon className="text-gray-200" size={20} />
+                                    </div>
+                                    <h3 className="text-xl font-semibold mb-3 text-white tracking-tight">{title}</h3>
+                                    <p className="text-[#b4bcd0] leading-relaxed text-[15px]">{description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <section className="py-32 px-6 border-t border-white/[0.04] bg-[#000212]">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="text-center mb-20 max-w-3xl mx-auto">
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tighter text-white">Trust built into the workflow.</h2>
+                            <p className="text-lg text-[#b4bcd0] font-normal leading-relaxed">If users are connecting an Instagram account, they need to understand the boundaries, permissions, and safeguards up front.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[
+                                {
+                                    title: 'Official API connection',
+                                    description: 'Account access is designed around the Instagram Graph API rather than brittle scraping or unofficial workarounds.',
+                                    icon: BadgeCheck,
+                                },
+                                {
+                                    title: 'Permission-aware access',
+                                    description: 'Only the data and actions required for analytics and automation should be requested, keeping the connection clear and controlled.',
+                                    icon: LockKeyhole,
+                                },
+                                {
+                                    title: 'Visible automation rules',
+                                    description: 'Automation should be explicit: what triggers a reply, what sends a DM, and where teams can review activity at a glance.',
+                                    icon: Shield,
+                                },
+                            ].map(({ title, description, icon: Icon }) => (
+                                <div key={title} className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
+                                    <div className="w-11 h-11 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-6">
+                                        <Icon className="text-gray-200" size={20} />
+                                    </div>
+                                    <h3 className="text-xl font-semibold mb-3 text-white tracking-tight">{title}</h3>
+                                    <p className="text-[#b4bcd0] leading-relaxed text-[15px]">{description}</p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </section>
@@ -360,8 +488,8 @@ export default function LandingPage() {
                      <div className="absolute inset-0 bg-gradient-to-b from-indigo-900/[0.05] to-transparent pointer-events-none"></div>
                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[300px] bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none"></div>
                      <div className="max-w-2xl mx-auto relative z-10">
-                         <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tighter text-white">Ready to scale your impact?</h2>
-                         <p className="text-lg text-[#b4bcd0] mb-10 font-normal leading-relaxed">Join the creators utilizing data-driven insights to dominate their niche today.</p>
+                         <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tighter text-white">Ready for clearer analytics, faster engagement, and smarter growth?</h2>
+                         <p className="text-lg text-[#b4bcd0] mb-10 font-normal leading-relaxed">Connect your Instagram account to turn raw performance data into decisions, automation, and consistent execution.</p>
                          <Link href="/login" className="inline-flex justify-center px-6 py-3.5 rounded-full bg-white text-black font-semibold text-[15px] hover:bg-gray-100 transition-colors items-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.15)]">
                              Get Started Now <ArrowRight size={16} />
                          </Link>
