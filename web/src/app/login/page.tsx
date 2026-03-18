@@ -34,14 +34,14 @@ export default function LoginPage() {
     return (
         <div className="min-h-screen flex bg-[#000212] text-white">
             {/* Left Panel - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden border-r border-white/[0.06]" style={{
-                background: 'radial-gradient(circle at top, rgba(79,70,229,0.24), transparent 38%), linear-gradient(180deg, #040616 0%, #000212 100%)'
+            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden border-r border-white/[0.05]" style={{
+                background: 'radial-gradient(circle at top, rgba(92,92,226,0.18), transparent 34%), linear-gradient(180deg, #0a0b12 0%, #07070b 100%)'
             }}>
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]"></div>
                 <div className="relative z-10 flex flex-col justify-center px-16">
                     <div className="flex items-center gap-3 mb-8">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-gray-100 to-gray-300 flex items-center justify-center shadow-[0_8px_30px_rgba(255,255,255,0.12)]">
-                            <span className="text-3xl font-bold text-black">∞</span>
+                        <div className="w-14 h-14 rounded-2xl bg-[linear-gradient(135deg,#5b5ce2_0%,#7c5cff_100%)] flex items-center justify-center shadow-[0_14px_34px_rgba(96,91,255,0.22)]">
+                            <span className="text-3xl font-bold text-white">∞</span>
                         </div>
                         <span className="text-3xl font-bold text-white">infini8Graph</span>
                     </div>
@@ -62,7 +62,7 @@ export default function LoginPage() {
                             { icon: Zap, text: 'Automation tools that keep engagement responsive at scale' },
                         ].map((item, i) => (
                             <div key={i} className="flex items-center gap-4 text-[#d7dced]">
-                                <div className="w-10 h-10 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
                                     <item.icon size={20} />
                                 </div>
                                 <span className="font-medium">{item.text}</span>
@@ -82,12 +82,12 @@ export default function LoginPage() {
             </div>
 
             {/* Right Panel - Login */}
-            <div className="flex-1 flex items-center justify-center px-8 py-12 relative" style={{ background: 'radial-gradient(circle at top, rgba(79,70,229,0.14), transparent 30%), linear-gradient(180deg, #050816 0%, #000212 100%)' }}>
+            <div className="flex-1 flex items-center justify-center px-8 py-12 relative" style={{ background: 'radial-gradient(circle at top, rgba(92,92,226,0.1), transparent 26%), linear-gradient(180deg, #0a0b12 0%, #07070b 100%)' }}>
                 <div className="w-full max-w-md">
                     <div className="text-center mb-10">
                         <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-b from-gray-100 to-gray-300 shadow-[0_8px_24px_rgba(255,255,255,0.1)]">
-                                <span className="text-2xl font-bold text-black">∞</span>
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[linear-gradient(135deg,#5b5ce2_0%,#7c5cff_100%)] shadow-[0_10px_24px_rgba(96,91,255,0.18)]">
+                                <span className="text-2xl font-bold text-white">∞</span>
                             </div>
                             <span className="text-2xl font-bold text-white">infini8Graph</span>
                         </div>
@@ -96,7 +96,7 @@ export default function LoginPage() {
                         <p className="text-[#b4bcd0]">Sign in with Instagram to access analytics, audience intelligence, and automation in one workspace.</p>
                     </div>
 
-                    <div className="card p-8">
+                    <div className="card p-8 shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
                         {error && (
                             <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
                                 {error}

@@ -52,16 +52,17 @@ function InfoTooltip({ text }: { text: string }) {
                     bottom: '100%',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    background: 'rgba(11,16,32,0.98)',
+                    background: 'rgba(16,17,26,0.98)',
                     color: 'white',
                     padding: '8px 12px',
-                    borderRadius: 6,
+                    borderRadius: 10,
                     fontSize: 12,
                     width: 200,
                     zIndex: 100,
                     marginBottom: 6,
                     lineHeight: 1.5,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    boxShadow: '0 16px 36px rgba(0,0,0,0.32)'
                 }}>
                     {text}
                 </div>
@@ -82,7 +83,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
     tooltip?: string;
 }) {
     return (
-        <div className="metric-card">
+        <div className="metric-card" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div className="metric-icon" style={{ background: `${color}15`, color }}>
                     <Icon size={20} />
@@ -113,7 +114,7 @@ function SectionCard({ title, subtitle, timePeriod, children }: {
     title: string; subtitle?: string; timePeriod?: string; children: React.ReactNode
 }) {
     return (
-        <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
             <div className="card-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600 }}>{title}</h3>

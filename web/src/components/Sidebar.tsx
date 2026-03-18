@@ -114,14 +114,14 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                             width: 32,
                             height: 32,
                             borderRadius: 8,
-                            background: 'linear-gradient(180deg, #f8fafc 0%, #d1d5db 100%)',
+                            background: 'linear-gradient(135deg, #5b5ce2 0%, #7c5cff 100%)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#000212',
+                            color: '#ffffff',
                             fontWeight: 700,
                             fontSize: 16,
-                            boxShadow: '0 10px 24px rgba(255,255,255,0.08)'
+                            boxShadow: '0 10px 24px rgba(96,91,255,0.22)'
                         }}>
                             ∞
                         </div>
@@ -159,10 +159,10 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                 transition: 'background 0.15s ease',
                                 borderRadius: 16,
                                 border: '1px solid rgba(255,255,255,0.06)',
-                                background: 'rgba(255,255,255,0.04)'
+                                background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))'
                             }}
                             onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.07)'}
-                            onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))'}
                         >
                             <div className="account-avatar">
                                 {activeAccount?.profile_picture_url ? (

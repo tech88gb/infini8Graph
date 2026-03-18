@@ -39,13 +39,13 @@
   --color-gray-900: #0f172a;
 
   /* Semantic shortcuts */
-  --background: #000212;
-  --background-alt: #060918;
-  --background-raised: #0b1020;
-  --foreground: #f8fafc;
-  --muted: #b4bcd0;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-light: rgba(255, 255, 255, 0.06);
+  --background: #07070b;
+  --background-alt: #0a0b12;
+  --background-raised: #10111a;
+  --foreground: #f5f7ff;
+  --muted: #98a2b8;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.05);
 
   /* ─────────────────────────────────────────────────────────────────────────── */
   /* Colors - Semantic                                                           */
@@ -69,20 +69,20 @@
   /* ─────────────────────────────────────────────────────────────────────────── */
   /* Colors - Card & Surface                                                     */
   /* ─────────────────────────────────────────────────────────────────────────── */
-  --card: rgba(255, 255, 255, 0.03);
-  --card-hover: rgba(255, 255, 255, 0.05);
-  --card-raised: rgba(13, 18, 34, 0.92);
-  --input-bg: rgba(255, 255, 255, 0.04);
-  --input-bg-focus: rgba(255, 255, 255, 0.06);
+  --card: rgba(255, 255, 255, 0.025);
+  --card-hover: rgba(255, 255, 255, 0.045);
+  --card-raised: rgba(12, 13, 20, 0.94);
+  --input-bg: rgba(255, 255, 255, 0.03);
+  --input-bg-focus: rgba(255, 255, 255, 0.05);
 
   /* ─────────────────────────────────────────────────────────────────────────── */
   /* Sidebar - Dark Theme                                                        */
   /* ─────────────────────────────────────────────────────────────────────────── */
-  --sidebar-bg: rgba(8, 10, 22, 0.94);
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: rgba(10, 11, 17, 0.96);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-text: #f8fafc;
-  --sidebar-muted: #9aa5c0;
-  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-muted: #7f8aa3;
+  --sidebar-hover: rgba(255, 255, 255, 0.035);
   --sidebar-active: var(--primary);
   --sidebar-width: 240px;
   --sidebar-collapsed: 64px;
@@ -94,9 +94,9 @@
   --font-mono: ui-monospace, 'SF Mono', 'Fira Code', monospace;
   --secondary: #38bdf8;
   --accent: #8b5cf6;
-  --gradient-primary: linear-gradient(135deg, rgba(99, 102, 241, 0.95) 0%, rgba(139, 92, 246, 0.95) 100%);
-  --gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
-  --glow-primary: 0 12px 40px rgba(99, 102, 241, 0.2);
+  --gradient-primary: linear-gradient(135deg, #5b5ce2 0%, #6f63ff 55%, #7c5cff 100%);
+  --gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.028) 0%, rgba(255, 255, 255, 0.012) 100%);
+  --glow-primary: 0 10px 32px rgba(96, 91, 255, 0.22);
 
   --text-xs: 0.75rem;
   /* 12px */
@@ -204,8 +204,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-image:
-    radial-gradient(circle at top, rgba(79, 70, 229, 0.16), transparent 32%),
-    linear-gradient(180deg, #030513 0%, #000212 100%);
+    radial-gradient(circle at top, rgba(92, 92, 226, 0.12), transparent 28%),
+    radial-gradient(circle at 20% 80%, rgba(58, 91, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, #09090f 0%, #07070b 100%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -247,6 +248,7 @@ body {
   flex-direction: column;
   z-index: 50;
   transition: width var(--transition-slow), transform var(--transition-slow);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
 }
 
 .sidebar.collapsed {
@@ -259,6 +261,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
 }
 
 .sidebar-nav {
@@ -292,17 +295,20 @@ body {
   text-decoration: none;
   transition: all var(--transition-fast);
   margin-bottom: 2px;
+  border: 1px solid transparent;
 }
 
 .nav-item:hover {
   background: var(--sidebar-hover);
   color: var(--sidebar-text);
+  border-color: rgba(255, 255, 255, 0.04);
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.95) 0%, rgba(129, 140, 248, 0.9) 100%);
+  background: linear-gradient(135deg, rgba(91, 92, 226, 0.92) 0%, rgba(111, 99, 255, 0.88) 100%);
   color: white;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 24px rgba(99, 102, 241, 0.18);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 22px rgba(96, 91, 255, 0.16);
 }
 
 .nav-item.collapsed {
@@ -325,8 +331,8 @@ body {
   padding: var(--space-6);
   transition: margin-left var(--transition-slow);
   background:
-    radial-gradient(circle at top center, rgba(79, 70, 229, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(5, 8, 22, 0.98) 0%, rgba(0, 2, 18, 1) 100%);
+    radial-gradient(circle at top center, rgba(92, 92, 226, 0.11), transparent 24%),
+    linear-gradient(180deg, #0a0b12 0%, #07070b 100%);
 }
 
 .main-content.sidebar-collapsed {
@@ -356,14 +362,14 @@ body {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-2xl);
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(16px);
   transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
 }
 
 .card:hover {
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
-  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .card-header {
@@ -372,6 +378,7 @@ body {
   justify-content: space-between;
   padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0));
 }
 
 .card-title {
@@ -405,7 +412,7 @@ body {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   padding: var(--space-5);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255,255,255,0.025);
 }
 
 .metric-icon {
@@ -416,6 +423,7 @@ body {
   align-items: center;
   justify-content: center;
   margin-bottom: var(--space-3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .metric-value {
@@ -464,7 +472,7 @@ body {
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: var(--shadow-primary-lg);
+  box-shadow: 0 14px 34px rgba(96, 91, 255, 0.26);
 }
 
 .btn-secondary {
@@ -472,6 +480,7 @@ body {
   border: 1.5px solid var(--border);
   color: var(--foreground);
   backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -841,12 +850,21 @@ textarea.input {
   font-weight: var(--font-bold);
   color: var(--foreground);
   margin-bottom: var(--space-1);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .page-subtitle {
   font-size: var(--text-base);
   color: var(--muted);
+}
+
+.chart-container {
+  background: var(--gradient-surface), var(--card-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-2xl);
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.025);
+  backdrop-filter: blur(16px);
 }
 
 .page-icon {
@@ -996,8 +1014,9 @@ textarea.input {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3);
-  background: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
   border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 .account-avatar {
@@ -1007,7 +1026,7 @@ textarea.input {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #ec4899, #f97316);
+  background: linear-gradient(135deg, #5b5ce2, #7c5cff);
   color: white;
   font-weight: var(--font-semibold);
   font-size: var(--text-base);
