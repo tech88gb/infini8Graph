@@ -107,10 +107,29 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             />
 
             {/* Sidebar */}
-            <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${!isCollapsed ? 'open' : ''}`}>
+            <aside 
+                className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${!isCollapsed ? 'open' : ''}`}
+                onClick={isCollapsed ? onToggle : undefined}
+                style={{ cursor: isCollapsed ? 'pointer' : 'default' }}
+            >
                 {/* Header */}
-                <div className="sidebar-header">
-                    <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
+                <div 
+                    className="sidebar-header" 
+                    style={{ 
+                        flexDirection: isCollapsed ? 'column' : 'row',
+                        gap: isCollapsed ? 16 : 0,
+                        justifyContent: isCollapsed ? 'center' : 'space-between',
+                        padding: isCollapsed ? '20px 0' : 'var(--space-4)'
+                    }}
+                >
+                    <Link href="/dashboard" style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 10, 
+                        textDecoration: 'none', 
+                        color: 'inherit',
+                        justifyContent: 'center'
+                    }}>
                         <div style={{
                             width: 32,
                             height: 32,
@@ -132,7 +151,10 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     </Link>
 
                     <button
-                        onClick={onToggle}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle();
+                        }}
                         style={{
                             padding: 6,
                             background: 'transparent',
@@ -140,10 +162,12 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                             color: 'var(--sidebar-muted)',
                             cursor: 'pointer',
                             borderRadius: 4,
-                            display: isCollapsed ? 'none' : 'flex'
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
                         }}
                     >
-                        <ChevronLeft size={18} />
+                        {isCollapsed ? <Menu size={18} /> : <ChevronLeft size={18} />}
                     </button>
                 </div>
 
