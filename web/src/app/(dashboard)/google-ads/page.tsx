@@ -7,11 +7,11 @@ import {
     BarChart2, TrendingUp, TrendingDown, DollarSign, MousePointer, Eye,
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
-    Layers, LogOut, BarChart, Search
+    Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-    BarChart as ReBarChart, Bar, PieChart, Pie, Cell
+    BarChart as ReBarChart, Bar, PieChart, Pie, Cell, CartesianGrid, Legend
 } from 'recharts';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'];
@@ -553,6 +553,359 @@ function CreativesTab() {
     );
 }
 
+// ==================== COMPETITORS TAB ====================
+
+function CompetitorsTab({ preset }: { preset: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['google-auction', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getAuctionInsights(preset);
+            return res.data.data;
+        }
+    });
+
+    if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const competitors = data?.competitors || [];
+
+    if (!competitors.length) {
+        return (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <Users size={40} style={{ color: 'var(--muted)', margin: '0 auto 16px' }} />
+                <p className="text-muted">No auction insight data available for this account.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">Auction Insights (Competitors)</h3>
+                    <span className="badge badge-info">{competitors.length} Competitors Detected</span>
+                </div>
+                <div style={{ height: 300, width: '100%', padding: '0 20px 20px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ReBarChart data={competitors.slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
+                            <XAxis type="number" unit="%" />
+                            <YAxis dataKey="domain" type="category" width={80} style={{ fontSize: 10 }} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="impressionShare" name="Impression Share" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                            <Bar dataKey="overlapRate" name="Overlap Rate" fill="#ec4899" radius={[0, 4, 4, 0]} />
+                        </ReBarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            <div className="card">
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Competitor Domain</th>
+                                <th>Impression Share</th>
+                                <th>Overlap Rate</th>
+                                <th>Outranking Share</th>
+                                <th>Top of Page Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {competitors.map((c: any, i: number) => (
+                                <tr key={i}>
+                                    <td style={{ fontWeight: 600, color: '#6366f1' }}>{c.domain}</td>
+                                    <td>{c.impressionShare}%</td>
+                                    <td>{c.overlapRate}%</td>
+                                    <td>{c.outrankingShare}%</td>
+                                    <td>{c.topOfPageRate}%</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ==================== SEARCH TERMS (WASTED SPEND) ====================
+
+function SearchTermsTab({ preset }: { preset: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['google-search-terms', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getSearchTerms(preset);
+            return res.data.data;
+        }
+    });
+
+    if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const wasted = data?.wastedSpend || [];
+    const allTerms = data?.terms || [];
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Wasted Spend Warning */}
+            {wasted.length > 0 && (
+                <div style={{
+                    padding: 20, borderRadius: 12, background: '#ef444411', border: '1px solid #ef444433',
+                    display: 'flex', gap: 16, alignItems: 'center'
+                }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 12, background: '#ef444422', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <AlertCircle size={24} style={{ color: '#ef4444' }} />
+                    </div>
+                    <div>
+                        <h4 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700 }}>Potential Wasted Spend Detected</h4>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
+                            We found <b>{wasted.length}</b> search terms with high spend but 0 conversions. 
+                            Consider adding these as negative keywords to save budget.
+                        </p>
+                    </div>
+                    <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: '#ef4444' }}>
+                            {fmtINR(wasted.reduce((acc: number, t: any) => acc + t.spend, 0))}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Wasted in {preset}</div>
+                    </div>
+                </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Top Wasted Search Terms</h3>
+                    </div>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Term</th>
+                                <th>Spend</th>
+                                <th>Clicks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {wasted.map((t: any, i: number) => (
+                                <tr key={i}>
+                                    <td style={{ fontSize: 12 }}>{t.term}</td>
+                                    <td style={{ fontWeight: 600, color: '#ef4444' }}>{fmtINR(t.spend)}</td>
+                                    <td>{t.clicks}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Search Term Volume</h3>
+                    </div>
+                    <div style={{ height: 260, width: '100%', padding: '0 20px 20px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={allTerms.slice(0, 15)}>
+                                <Tooltip />
+                                <Area type="monotone" dataKey="spend" stroke="#6366f1" fill="#6366f133" />
+                                <Area type="monotone" dataKey="clicks" stroke="#ec4899" fill="#ec489933" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">All Search Terms</h3>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Search Term</th>
+                                <th>Campaign</th>
+                                <th>Spend</th>
+                                <th>Clicks</th>
+                                <th>Conv.</th>
+                                <th>CTR</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {allTerms.slice(0, 50).map((t: any, i: number) => (
+                                <tr key={i}>
+                                    <td style={{ fontWeight: 500 }}>{t.term}</td>
+                                    <td style={{ fontSize: 11, color: 'var(--muted)' }}>{t.campaign}</td>
+                                    <td style={{ fontWeight: 600 }}>{fmtINR(t.spend)}</td>
+                                    <td>{t.clicks}</td>
+                                    <td>{t.conversions}</td>
+                                    <td>{((t.clicks / t.impressions) * 100).toFixed(2)}%</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ==================== QUALITY SCORE (INTELLIGENCE) ====================
+
+function IntelligenceTab() {
+    const { data: qs, isLoading: qsLoading } = useQuery({
+        queryKey: ['google-qs'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getQualityScore();
+            return res.data.data;
+        }
+    });
+
+    const { data: assetData, isLoading: assetLoading } = useQuery({
+        queryKey: ['google-assets'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getAssets();
+            return res.data.data;
+        }
+    });
+
+    if (qsLoading || assetLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const keywords = qs?.keywords || [];
+    const assets = assetData?.assets || [];
+
+    const lowQs = keywords.filter((k: any) => k.qualityScore < 5);
+    const highImprAssets = assets.filter((a: any) => a.performance === 'BEST' || a.performance === 'GOOD');
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                {/* Quality Score Diagnostics */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Quality Score Diagnostics</h3>
+                        <span className="badge badge-warning">{lowQs.length} items to fix</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {keywords.slice(0, 5).map((k: any, i: number) => (
+                            <div key={i} style={{ padding: 12, borderRadius: 8, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                                    <span style={{ fontWeight: 600, fontSize: 13 }}>{k.keyword}</span>
+                                    <QualityScore score={k.qualityScore} />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                                    {[
+                                        { label: 'Expected CTR', value: k.expectedCtr },
+                                        { label: 'Ad Relevance', value: k.creativeQuality },
+                                        { label: 'LP Experience', value: k.landingPageQuality },
+                                    ].map((p, j) => (
+                                        <div key={j} style={{ textAlign: 'center' }}>
+                                            <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{p.label}</div>
+                                            <span style={{ 
+                                                fontSize: 10, fontWeight: 700,
+                                                color: p.value === 'ABOVE_AVERAGE' ? '#10b981' : p.value === 'AVERAGE' ? '#f59e0b' : '#ef4444'
+                                            }}>
+                                                {p.value.replace('_AVERAGE', '')}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* RSA Asset Performance */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Responsive Ad Assets</h3>
+                        <span className="badge badge-success">{highImprAssets.length} top performers</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {assets.slice(0, 10).map((a: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+                                <div style={{ 
+                                    padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, minWidth: 70, textAlign: 'center',
+                                    background: a.performance === 'BEST' ? '#10b98122' : a.performance === 'GOOD' ? '#0ea5e922' : 'var(--border)',
+                                    color: a.performance === 'BEST' ? '#10b981' : a.performance === 'GOOD' ? '#0ea5e9' : 'var(--muted)'
+                                }}>
+                                    {a.performance}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.text}</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{a.type.replace('RSA_', '')} · {fmt(a.impressions, 0)} impressions</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ==================== GEO / LOCATION TAB ====================
+
+function GeoTab({ preset }: { preset: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['google-geo', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getGeo(preset);
+            return res.data.data;
+        }
+    });
+
+    if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const locations = data?.locations || [];
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">Geographic Performance</h3>
+                </div>
+                <div style={{ height: 350, width: '100%', padding: '0 20px 20px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ReBarChart data={locations.slice(0, 15)} margin={{ top: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                            <XAxis dataKey="campaign" hide />
+                            <YAxis style={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Bar dataKey="spend" name="Spend (₹)" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="conversions" name="Conversions" fill="#10b981" radius={[4, 4, 0, 0]} />
+                        </ReBarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            <div className="card">
+                <table className="table">
+                    <thead>
+                        <tr>
+                            <th>Location/Campaign</th>
+                            <th>Spend</th>
+                            <th>Impressions</th>
+                            <th>Clicks</th>
+                            <th>Conversions</th>
+                            <th>ROAS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {locations.map((loc: any, i: number) => (
+                            <tr key={i}>
+                                <td style={{ fontWeight: 600 }}>{loc.campaign}</td>
+                                <td style={{ fontWeight: 600 }}>{fmtINR(loc.spend)}</td>
+                                <td>{fmt(loc.impressions, 0)}</td>
+                                <td>{fmt(loc.clicks, 0)}</td>
+                                <td style={{ color: '#10b981', fontWeight: 600 }}>{loc.conversions}</td>
+                                <td>{loc.spend > 0 ? (loc.conversions / loc.spend).toFixed(2) : 0}x</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
 // ==================== ALERTS TAB ====================
 
 function AlertsTab() {
@@ -753,6 +1106,10 @@ export default function GoogleAdsPage() {
         { key: 'overview', label: 'Overview', icon: BarChart2 },
         { key: 'campaigns', label: 'Campaigns', icon: Target },
         { key: 'keywords', label: 'Keywords', icon: Search },
+        { key: 'competitors', label: 'Competitors', icon: Users },
+        { key: 'search-terms', label: 'Search Terms', icon: Search },
+        { key: 'intelligence', label: 'Intelligence', icon: Cpu },
+        { key: 'geo', label: 'Location', icon: MapPin },
         { key: 'creatives', label: 'Creatives', icon: Layers },
         { key: 'alerts', label: 'Alerts', icon: AlertTriangle, badge: urgentCount },
     ];
@@ -773,7 +1130,7 @@ export default function GoogleAdsPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* Date Range Picker */}
-                    {['overview', 'campaigns', 'keywords'].includes(activeTab) && (
+                    {['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo'].includes(activeTab) && (
                         <div style={{ display: 'flex', gap: 4, background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
                             {PRESETS.map((p) => (
                                 <button
@@ -819,11 +1176,17 @@ export default function GoogleAdsPage() {
             </div>
 
             {/* Tab Content */}
-            {activeTab === 'overview' && <OverviewTab preset={preset} />}
-            {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
-            {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
-            {activeTab === 'creatives' && <CreativesTab />}
-            {activeTab === 'alerts' && <AlertsTab />}
+            <div style={{ padding: '20px 0' }}>
+                {activeTab === 'overview' && <OverviewTab preset={preset} />}
+                {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
+                {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
+                {activeTab === 'competitors' && <CompetitorsTab preset={preset} />}
+                {activeTab === 'search-terms' && <SearchTermsTab preset={preset} />}
+                {activeTab === 'intelligence' && <IntelligenceTab />}
+                {activeTab === 'geo' && <GeoTab preset={preset} />}
+                {activeTab === 'creatives' && <CreativesTab />}
+                {activeTab === 'alerts' && <AlertsTab />}
+            </div>
         </div>
     );
 }

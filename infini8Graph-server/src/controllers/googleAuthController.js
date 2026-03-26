@@ -14,6 +14,12 @@ import {
     getAdCreativePreviews,
     getCrossPlatformSummary,
     getRecommendations,
+    getAuctionInsights,
+    getSearchTermInsights,
+    getQualityScoreDiagnostics,
+    getAssetPerformance,
+    getBiddingInsights,
+    getGeoPerformance,
 } from '../services/googleAdsService.js';
 import dotenv from 'dotenv';
 
@@ -163,4 +169,92 @@ export async function getAlerts(req, res) {
     }
 }
 
-export default { login, callback, getStatus, getAdsPerformanceData, disconnect, getCampaigns, getBudget, getKeywords, getCreatives, getCrossPlatform, getAlerts };
+export async function getAuctionInsightsData(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const { preset = '30d' } = req.query;
+        const data = await getAuctionInsights(userId, preset);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Auction insights controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export async function getSearchTerms(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const { preset = '30d' } = req.query;
+        const data = await getSearchTermInsights(userId, preset);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Search terms controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export async function getQualityScore(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const data = await getQualityScoreDiagnostics(userId);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Quality score controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export async function getAssetData(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const data = await getAssetPerformance(userId);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Asset performance controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export async function getBiddingData(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const { preset = '30d' } = req.query;
+        const data = await getBiddingInsights(userId, preset);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Bidding insights controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export async function getGeoData(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const { preset = '30d' } = req.query;
+        const data = await getGeoPerformance(userId, preset);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Geo performance controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export default { 
+    login, 
+    callback, 
+    getStatus, 
+    getAdsPerformanceData, 
+    disconnect, 
+    getCampaigns, 
+    getBudget, 
+    getKeywords, 
+    getCreatives, 
+    getCrossPlatform, 
+    getAlerts,
+    getAuctionInsightsData,
+    getSearchTerms,
+    getQualityScore,
+    getAssetData,
+    getBiddingData,
+    getGeoData
+};

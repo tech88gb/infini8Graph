@@ -649,6 +649,270 @@ export async function getRecommendations(userId) {
     }
 }
 
+// ===================== AUCTION INSIGHTS (COMPETITORS) =====================
+
+export async function getAuctionInsights(userId, preset = '30d') {
+    try {
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+        const { startDate, endDate } = getDateRange(preset);
+
+        // Auction insights can be queried at campaign level or customer level
+        // We'll pull a high-level overview of competitors
+        const rows = await customer.query(`
+            SELECT
+                campaign_auction_insight_stats.domain,
+                campaign_auction_insight_stats.impression_share,
+                campaign_auction_insight_stats.overlap_rate,
+                campaign_auction_insight_stats.outranking_share,
+                campaign_auction_insight_stats.position_above_rate,
+                campaign_auction_insight_stats.top_of_page_rate,
+                campaign.name
+            FROM campaign_auction_insight_stats
+            WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+            LIMIT 50
+        `);
+
+        const competitors = (rows || []).map(r => ({
+            domain: r.campaign_auction_insight_stats?.domain || 'Unknown',
+            impressionShare: parseFloat((r.campaign_auction_insight_stats?.impression_share || 0) * 100).toFixed(2),
+            overlapRate: parseFloat((r.campaign_auction_insight_stats?.overlap_rate || 0) * 100).toFixed(2),
+            outrankingShare: parseFloat((r.campaign_auction_insight_stats?.outranking_share || 0) * 100).toFixed(2),
+            positionAboveRate: parseFloat((r.campaign_auction_insight_stats?.position_above_rate || 0) * 100).toFixed(2),
+            topOfPageRate: parseFloat((r.campaign_auction_insight_stats?.top_of_page_rate || 0) * 100).toFixed(2),
+            campaign: r.campaign?.name || 'All'
+        })).filter(c => c.domain !== 'You');
+
+        return { connected: true, competitors };
+    } catch (error) {
+        console.error('❌ Auction insights error:', error.message);
+        return { connected: true, competitors: [], error: error.message };
+    }
+}
+
+// ===================== SEARCH TERM INSIGHTS (WASTED SPEND) =====================
+
+export async function getSearchTermInsights(userId, preset = '30d') {
+    try {
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+        const { startDate, endDate } = getDateRange(preset);
+
+        const rows = await customer.query(`
+            SELECT
+                search_term_view.search_term,
+                search_term_view.status,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                campaign.name
+            FROM search_term_view
+            WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+            AND metrics.cost_micros > 0
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 100
+        `);
+
+        const terms = (rows || []).map(r => {
+            const spend = Number(r.metrics?.cost_micros || 0) / 1_000_000;
+            return {
+                term: r.search_term_view?.search_term || '',
+                status: r.search_term_view?.status || '',
+                campaign: r.campaign?.name || '',
+                impressions: Number(r.metrics?.impressions || 0),
+                clicks: Number(r.metrics?.clicks || 0),
+                spend: parseFloat(spend.toFixed(2)),
+                conversions: Number(r.metrics?.conversions || 0)
+            };
+        });
+
+        // Identify wasted spend (High spend, 0 conversions)
+        const wastedSpend = terms.filter(t => t.spend > 10 && t.conversions === 0)
+                                 .sort((a,b) => b.spend - a.spend)
+                                 .slice(0, 10);
+
+        return { connected: true, terms, wastedSpend };
+    } catch (error) {
+        console.error('❌ Search term insights error:', error.message);
+        return { connected: true, terms: [], wastedSpend: [], error: error.message };
+    }
+}
+
+// ===================== QUALITY SCORE DIAGNOSTICS =====================
+
+export async function getQualityScoreDiagnostics(userId) {
+    try {
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+
+        const rows = await customer.query(`
+            SELECT
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.quality_info.quality_score,
+                ad_group_criterion.quality_info.creative_quality_score,
+                ad_group_criterion.quality_info.post_click_quality_score,
+                ad_group_criterion.quality_info.search_predicted_ctr,
+                metrics.impressions,
+                campaign.name
+            FROM keyword_view
+            WHERE ad_group_criterion.status = 'ENABLED'
+            AND ad_group_criterion.quality_info.quality_score IS NOT NULL
+            ORDER BY metrics.impressions DESC
+            LIMIT 50
+        `);
+
+        const keywords = (rows || []).map(r => ({
+            keyword: r.ad_group_criterion?.keyword?.text || '',
+            qualityScore: r.ad_group_criterion?.quality_info?.quality_score || 0,
+            creativeQuality: r.ad_group_criterion?.quality_info?.creative_quality_score || 'UNKNOWN',
+            landingPageQuality: r.ad_group_criterion?.quality_info?.post_click_quality_score || 'UNKNOWN',
+            expectedCtr: r.ad_group_criterion?.quality_info?.search_predicted_ctr || 'UNKNOWN',
+            campaign: r.campaign?.name || ''
+        }));
+
+        return { connected: true, keywords };
+    } catch (error) {
+        console.error('❌ Quality score diagnostics error:', error.message);
+        return { connected: true, keywords: [], error: error.message };
+    }
+}
+
+// ===================== ASSET PERFORMANCE (RSA) =====================
+
+export async function getAssetPerformance(userId) {
+    try {
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+
+        // Responsive Search Ad Asset performance
+        const rows = await customer.query(`
+            SELECT
+                asset.id,
+                asset.text_asset.text,
+                ad_group_ad_asset_view.performance_label,
+                ad_group_ad_asset_view.field_type,
+                metrics.impressions,
+                metrics.clicks,
+                campaign.name
+            FROM ad_group_ad_asset_view
+            WHERE segments.date DURING LAST_30_DAYS
+            AND ad_group_ad_asset_view.performance_label != 'UNSPECIFIED'
+            ORDER BY metrics.impressions DESC
+            LIMIT 50
+        `);
+
+        const assets = (rows || []).map(r => ({
+            id: r.asset?.id,
+            text: r.asset?.text_asset?.text || '',
+            performance: r.ad_group_ad_asset_view?.performance_label || 'LEARNING',
+            type: r.ad_group_ad_asset_view?.field_type || '',
+            impressions: Number(r.metrics?.impressions || 0),
+            clicks: Number(r.metrics?.clicks || 0),
+            campaign: r.campaign?.name || ''
+        }));
+
+        return { connected: true, assets };
+    } catch (error) {
+        console.error('❌ Asset performance error:', error.message);
+        return { connected: true, assets: [], error: error.message };
+    }
+}
+
+// ===================== BIDDING HEATMAP (DAY/HOUR) =====================
+
+export async function getBiddingInsights(userId, preset = '30d') {
+    try {
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+        const { startDate, endDate } = getDateRange(preset);
+
+        const rows = await customer.query(`
+            SELECT
+                segments.day_of_week,
+                segments.hour,
+                metrics.cost_micros,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM campaign
+            WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+            AND campaign.status = 'ENABLED'
+        `);
+
+        const heatmap = (rows || []).map(r => {
+            const spend = Number(r.metrics?.cost_micros || 0) / 1_000_000;
+            const convValue = Number(r.metrics?.conversions_value || 0);
+            return {
+                day: r.segments?.day_of_week || 'UNKNOWN',
+                hour: r.segments?.hour || 0,
+                spend: parseFloat(spend.toFixed(2)),
+                impressions: Number(r.metrics?.impressions || 0),
+                clicks: Number(r.metrics?.clicks || 0),
+                conversions: Number(r.metrics?.conversions || 0),
+                roas: spend > 0 ? parseFloat((convValue / spend).toFixed(2)) : 0
+            };
+        });
+
+        return { connected: true, heatmap };
+    } catch (error) {
+        console.error('❌ Bidding insights error:', error.message);
+        return { connected: true, heatmap: [], error: error.message };
+    }
+}
+
+// ===================== GEO PERFORMANCE =====================
+
+export async function getGeoPerformance(userId, preset = '30d') {
+    try {
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+        const { startDate, endDate } = getDateRange(preset);
+
+        const rows = await customer.query(`
+            SELECT
+                geographic_view.country_criterion_id,
+                geographic_view.location_type,
+                metrics.cost_micros,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.conversions,
+                campaign.name
+            FROM geographic_view
+            WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+            AND metrics.cost_micros > 0
+            LIMIT 50
+        `);
+
+        // Note: country_criterion_id needs mapping but we can use resource_name parts for now
+        // or just aggregate broadly.
+        const locations = (rows || []).map(r => {
+            const spend = Number(r.metrics?.cost_micros || 0) / 1_000_000;
+            return {
+                id: r.geographic_view?.country_criterion_id,
+                type: r.geographic_view?.location_type || '',
+                spend: parseFloat(spend.toFixed(2)),
+                impressions: Number(r.metrics?.impressions || 0),
+                clicks: Number(r.metrics?.clicks || 0),
+                conversions: Number(r.metrics?.conversions || 0),
+                campaign: r.campaign?.name || ''
+            };
+        });
+
+        return { connected: true, locations };
+    } catch (error) {
+        console.error('❌ Geo performance error:', error.message);
+        return { connected: true, locations: [], error: error.message };
+    }
+}
+
 export default {
     getAdsPerformance,
     getCampaignBreakdown,
@@ -657,4 +921,11 @@ export default {
     getAdCreativePreviews,
     getCrossPlatformSummary,
     getRecommendations,
+    getAuctionInsights,
+    getSearchTermInsights,
+    getQualityScoreDiagnostics,
+    getAssetPerformance,
+    getBiddingInsights,
+    getGeoPerformance,
 };
+

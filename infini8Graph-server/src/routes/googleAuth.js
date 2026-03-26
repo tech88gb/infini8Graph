@@ -18,5 +18,11 @@ router.get('/keywords', authenticate, googleAuthController.getKeywords);
 router.get('/creatives', authenticate, googleAuthController.getCreatives);
 router.get('/cross-platform', authenticate, googleAuthController.getCrossPlatform);
 router.get('/alerts', authenticate, googleAuthController.getAlerts);
+router.get('/auction-insights', authenticate, googleAuthController.getAuctionInsightsData);
+router.get('/search-terms', authenticate, googleAuthController.getSearchTerms);
+router.get('/quality-score', authenticate, googleAuthController.getQualityScore);
+router.get('/assets', authenticate, googleAuthController.getAssetData);
+router.get('/bidding', authenticate, googleAuthController.getBiddingData);
+router.get('/geo', authenticate, googleAuthController.getGeoData);
 
 export default router;

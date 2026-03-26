@@ -99,6 +99,12 @@ export const googleAdsApi = {
     getCrossPlatform: (preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0) =>
         api.get(`/google/auth/cross-platform?preset=${preset}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
     getAlerts: () => api.get('/google/auth/alerts'),
+    getAuctionInsights: (preset = '30d') => api.get(`/google/auth/auction-insights?preset=${preset}`),
+    getSearchTerms: (preset = '30d') => api.get(`/google/auth/search-terms?preset=${preset}`),
+    getQualityScore: () => api.get('/google/auth/quality-score'),
+    getAssets: () => api.get('/google/auth/assets'),
+    getBidding: (preset = '30d') => api.get(`/google/auth/bidding?preset=${preset}`),
+    getGeo: (preset = '30d') => api.get(`/google/auth/geo?preset=${preset}`),
 };
 
 export default api;
