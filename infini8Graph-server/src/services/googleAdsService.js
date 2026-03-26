@@ -52,7 +52,8 @@ async function getCustomerId(userId) {
         developer_token: DEVELOPER_TOKEN,
     });
 
-    const accessible = await client.listAccessibleCustomers(tokens.refreshToken);
+    const accessibleResponse = await client.listAccessibleCustomers(tokens.refreshToken);
+    const accessible = accessibleResponse?.resource_names;
     if (!accessible || accessible.length === 0) return null;
 
     console.log('📋 Accessible Google customers:', accessible);
