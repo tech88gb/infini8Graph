@@ -35,6 +35,7 @@ export function buildClient(refreshToken, customerId, loginCustomerId) {
  * fires 4 simultaneous widget requests all calling listAccessibleCustomers.
  */
 const customerCache = new Map();
+const pendingPromises = new Map();
 
 /**
  * Resolves the correct ad account credentials for a user.
@@ -44,82 +45,102 @@ export async function getCustomerId(userId) {
     const now = Date.now();
     const cached = customerCache.get(cacheKey);
 
-    // Cache valid for 5 minutes
+    // 1. Check Result Cache (5 minutes)
     if (cached && now - cached.timestamp < 300000) {
         return cached.data;
     }
 
-    const tokens = await getGoogleTokensForUser(userId);
-    if (!tokens || !tokens.refreshToken) return null;
+    // 2. Check In-Flight Promise Cache (Deduplication)
+    if (pendingPromises.has(cacheKey)) {
+        return pendingPromises.get(cacheKey);
+    }
 
-    const client = new GoogleAdsApi({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        developer_token: DEVELOPER_TOKEN,
-    });
-
-    const accessibleResponse = await client.listAccessibleCustomers(tokens.refreshToken);
-    const accessible = accessibleResponse?.resource_names;
-    if (!accessible || accessible.length === 0) return null;
-
-    console.log('📋 Accessible Google customers:', accessible);
-
-    let fallbackClient = null;
-
-    for (const resource of accessible) {
-        const managerCandidateId = resource.replace('customers/', '');
-
+    // 3. Resolve if no cache exists
+    const resolvePromise = (async () => {
         try {
-            const managerCustomer = client.Customer({
-                customer_id: managerCandidateId,
-                refresh_token: tokens.refreshToken,
-                login_customer_id: managerCandidateId,
+            console.log(`📡 [GoogleAds] Resolving CID for user ${userId}...`);
+            const tokens = await getGoogleTokensForUser(userId);
+            if (!tokens || !tokens.refreshToken) return null;
+
+            const client = new GoogleAdsApi({
+                client_id: CLIENT_ID,
+                client_secret: CLIENT_SECRET,
+                developer_token: DEVELOPER_TOKEN,
             });
 
-            const clientRows = await managerCustomer.query(`
-                SELECT customer_client.id, customer_client.manager
-                FROM customer_client
-                WHERE customer_client.manager = false
-                AND customer_client.status = 'ENABLED'
-            `);
+            const accessibleResponse = await client.listAccessibleCustomers(tokens.refreshToken);
+            const accessible = accessibleResponse?.resource_names;
+            if (!accessible || accessible.length === 0) return null;
 
-            if (clientRows && clientRows.length > 0) {
-                const allClientIds = clientRows.map(r => String(r.customer_client.id));
-                const primaryClientId = allClientIds[0];
+            console.log('📋 Accessible Google customers:', accessible);
 
-                if (primaryClientId !== String(managerCandidateId)) {
-                    console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
-                    const result = {
-                        customerId: primaryClientId,
-                        loginCustomerId: managerCandidateId,
-                        allClientIds,
-                        refreshToken: tokens.refreshToken,
-                    };
-                    customerCache.set(cacheKey, { data: result, timestamp: now });
-                    return result;
-                } else {
-                    if (!fallbackClient) {
-                        fallbackClient = {
-                            customerId: managerCandidateId,
-                            loginCustomerId: managerCandidateId,
-                            allClientIds: [managerCandidateId],
-                            refreshToken: tokens.refreshToken,
-                        };
+            let fallbackClient = null;
+
+            for (const resource of accessible) {
+                const managerCandidateId = resource.replace('customers/', '');
+
+                try {
+                    const managerCustomer = client.Customer({
+                        customer_id: managerCandidateId,
+                        refresh_token: tokens.refreshToken,
+                        login_customer_id: managerCandidateId,
+                    });
+
+                    const clientRows = await managerCustomer.query(`
+                        SELECT customer_client.id, customer_client.manager
+                        FROM customer_client
+                        WHERE customer_client.manager = false
+                        AND customer_client.status = 'ENABLED'
+                    `);
+
+                    if (clientRows && clientRows.length > 0) {
+                        const allClientIds = clientRows.map(r => String(r.customer_client.id));
+                        const primaryClientId = allClientIds[0];
+
+                        if (primaryClientId !== String(managerCandidateId)) {
+                            console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
+                            const result = {
+                                customerId: primaryClientId,
+                                loginCustomerId: managerCandidateId,
+                                allClientIds,
+                                refreshToken: tokens.refreshToken,
+                            };
+                            customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
+                            return result;
+                        } else {
+                            if (!fallbackClient) {
+                                fallbackClient = {
+                                    customerId: managerCandidateId,
+                                    loginCustomerId: managerCandidateId,
+                                    allClientIds: [managerCandidateId],
+                                    refreshToken: tokens.refreshToken,
+                                };
+                            }
+                        }
                     }
+                } catch (err) {
+                    console.log(`⚠️  Could not query clients for ${managerCandidateId}: ${err.message?.slice(0, 80)}`);
                 }
             }
-        } catch (err) {
-            console.log(`⚠️  Could not query clients for ${managerCandidateId}: ${err.message?.slice(0, 80)}`);
+
+            if (fallbackClient) {
+                console.log(`📌 Using ${fallbackClient.customerId} as fallback direct account`);
+                customerCache.set(cacheKey, { data: fallbackClient, timestamp: Date.now() });
+                return fallbackClient;
+            }
+
+            return null;
+        } catch (error) {
+            console.error(`❌ [GoogleAds] Error resolving CID:`, error.message);
+            return null;
+        } finally {
+            // Remove from pending so next cycle can retry if needed
+            pendingPromises.delete(cacheKey);
         }
-    }
+    })();
 
-    if (fallbackClient) {
-        console.log(`📌 Using ${fallbackClient.customerId} as fallback direct account`);
-        customerCache.set(cacheKey, { data: fallbackClient, timestamp: now });
-        return fallbackClient;
-    }
-
-    return null;
+    pendingPromises.set(cacheKey, resolvePromise);
+    return resolvePromise;
 }
 
 /**
