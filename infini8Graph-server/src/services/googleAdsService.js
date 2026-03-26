@@ -658,30 +658,28 @@ export async function getAuctionInsights(userId, preset = '30d') {
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const { startDate, endDate } = getDateRange(preset);
 
-        // Auction insights can be queried at campaign level or customer level
-        // We'll pull a high-level overview of competitors
+        // Using customer_auction_insight_stats for better data density and account-level overview
         const rows = await customer.query(`
             SELECT
-                campaign_auction_insight_stats.domain,
-                campaign_auction_insight_stats.impression_share,
-                campaign_auction_insight_stats.overlap_rate,
-                campaign_auction_insight_stats.outranking_share,
-                campaign_auction_insight_stats.position_above_rate,
-                campaign_auction_insight_stats.top_of_page_rate,
-                campaign.name
-            FROM campaign_auction_insight_stats
+                customer_auction_insight_stats.domain,
+                customer_auction_insight_stats.impression_share,
+                customer_auction_insight_stats.overlap_rate,
+                customer_auction_insight_stats.outranking_share,
+                customer_auction_insight_stats.position_above_rate,
+                customer_auction_insight_stats.top_of_page_rate
+            FROM customer_auction_insight_stats
             WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
             LIMIT 50
         `);
 
         const competitors = (rows || []).map(r => ({
-            domain: r.campaign_auction_insight_stats?.domain || 'Unknown',
-            impressionShare: parseFloat((r.campaign_auction_insight_stats?.impression_share || 0) * 100).toFixed(2),
-            overlapRate: parseFloat((r.campaign_auction_insight_stats?.overlap_rate || 0) * 100).toFixed(2),
-            outrankingShare: parseFloat((r.campaign_auction_insight_stats?.outranking_share || 0) * 100).toFixed(2),
-            positionAboveRate: parseFloat((r.campaign_auction_insight_stats?.position_above_rate || 0) * 100).toFixed(2),
-            topOfPageRate: parseFloat((r.campaign_auction_insight_stats?.top_of_page_rate || 0) * 100).toFixed(2),
-            campaign: r.campaign?.name || 'All'
+            domain: r.customer_auction_insight_stats?.domain || 'Unknown',
+            impressionShare: parseFloat((r.customer_auction_insight_stats?.impression_share || 0) * 100).toFixed(2),
+            overlapRate: parseFloat((r.customer_auction_insight_stats?.overlap_rate || 0) * 100).toFixed(2),
+            outrankingShare: parseFloat((r.customer_auction_insight_stats?.outranking_share || 0) * 100).toFixed(2),
+            positionAboveRate: parseFloat((r.customer_auction_insight_stats?.position_above_rate || 0) * 100).toFixed(2),
+            topOfPageRate: parseFloat((r.customer_auction_insight_stats?.top_of_page_rate || 0) * 100).toFixed(2),
+            campaign: 'Account-wide'
         })).filter(c => c.domain !== 'You');
 
         return { connected: true, competitors };

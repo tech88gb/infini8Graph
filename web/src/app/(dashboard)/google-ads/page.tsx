@@ -572,7 +572,8 @@ function CompetitorsTab({ preset }: { preset: string }) {
         return (
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                 <Users size={40} style={{ color: 'var(--muted)', margin: '0 auto 16px' }} />
-                <p className="text-muted">No auction insight data available for this account.</p>
+                <p className="text-muted">No auction insight data available.</p>
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Note: Auction data requires sufficient campaign history and competition density.</p>
             </div>
         );
     }
@@ -802,7 +803,7 @@ function IntelligenceTab() {
                                                 fontSize: 10, fontWeight: 700,
                                                 color: p.value === 'ABOVE_AVERAGE' ? '#10b981' : p.value === 'AVERAGE' ? '#f59e0b' : '#ef4444'
                                             }}>
-                                                {p.value.replace('_AVERAGE', '')}
+                                                {String(p.value || 'UNKNOWN').replace('_AVERAGE', '')}
                                             </span>
                                         </div>
                                     ))}
@@ -830,7 +831,7 @@ function IntelligenceTab() {
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.text}</div>
-                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{a.type.replace('RSA_', '')} · {fmt(a.impressions, 0)} impressions</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{String(a.type || '').replace('RSA_', '')} · {fmt(a.impressions, 0)} impressions</div>
                                 </div>
                             </div>
                         ))}
