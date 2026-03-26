@@ -9,11 +9,12 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 /**
- * Build a GoogleAdsApi client and return a Customer object.
+ * Build a GoogleAdsApi customer object.
  * @param {string} refreshToken
- * @param {string} customerId
+ * @param {string} customerId      - The actual ad account (client) to query
+ * @param {string} loginCustomerId - The manager account to authenticate as (same as customerId if not MCC)
  */
-function buildClient(refreshToken, customerId) {
+function buildClient(refreshToken, customerId, loginCustomerId) {
     const client = new GoogleAdsApi({
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
@@ -24,13 +25,22 @@ function buildClient(refreshToken, customerId) {
         customer: client.Customer({
             customer_id: customerId,
             refresh_token: refreshToken,
-            login_customer_id: customerId,
+            login_customer_id: loginCustomerId || customerId,
         }),
     };
 }
 
 /**
- * Get the first accessible Google Ads customer ID for a user.
+ * Resolves the correct ad account credentials for a user.
+ *
+ * Handles the MCC (manager account) case:
+ * - listAccessibleCustomers can return the manager account itself.
+ * - Campaigns and metrics live in CLIENT accounts (non-manager), not the manager.
+ * - We check each accessible account for sub-clients (customer_client query).
+ * - If sub-clients exist, we return the first enabled non-manager client ID
+ *   along with the manager's ID as login_customer_id.
+ *
+ * Returns: { customerId, loginCustomerId, allClientIds, refreshToken } or null
  */
 async function getCustomerId(userId) {
     const tokens = await getGoogleTokensForUser(userId);
@@ -44,8 +54,60 @@ async function getCustomerId(userId) {
 
     const accessible = await client.listAccessibleCustomers(tokens.refreshToken);
     if (!accessible || accessible.length === 0) return null;
-    const customerId = accessible[0].replace('customers/', '');
-    return { customerId, refreshToken: tokens.refreshToken };
+
+    console.log('📋 Accessible Google customers:', accessible);
+
+    for (const resource of accessible) {
+        const managerCandidateId = resource.replace('customers/', '');
+
+        try {
+            // Attempt to enumerate sub-clients — only works if this is a manager/MCC account
+            const managerCustomer = client.Customer({
+                customer_id: managerCandidateId,
+                refresh_token: tokens.refreshToken,
+                login_customer_id: managerCandidateId,
+            });
+
+            const clientRows = await managerCustomer.query(`
+                SELECT
+                    customer_client.id,
+                    customer_client.manager,
+                    customer_client.status,
+                    customer_client.descriptive_name
+                FROM customer_client
+                WHERE customer_client.manager = false
+                AND customer_client.status = 'ENABLED'
+            `);
+
+            if (clientRows && clientRows.length > 0) {
+                const allClientIds = clientRows.map(r => String(r.customer_client.id));
+                const primaryClientId = allClientIds[0];
+
+                console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
+
+                return {
+                    customerId: primaryClientId,
+                    loginCustomerId: managerCandidateId,
+                    allClientIds,
+                    refreshToken: tokens.refreshToken,
+                };
+            }
+        } catch (err) {
+            // Not a manager account or no permission to list clients — skip and try as direct account
+            console.log(`⚠️  Could not list clients for ${managerCandidateId}: ${err.message?.slice(0, 80)}`);
+        }
+
+        // Fallback: treat this as a direct (non-manager) ad account
+        console.log(`📌 Using ${managerCandidateId} as direct ad account`);
+        return {
+            customerId: managerCandidateId,
+            loginCustomerId: managerCandidateId,
+            allClientIds: [managerCandidateId],
+            refreshToken: tokens.refreshToken,
+        };
+    }
+
+    return null;
 }
 
 /**
@@ -67,7 +129,7 @@ export async function getAdsPerformance(userId, preset = '30d') {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
-        const { customer } = buildClient(creds.refreshToken, creds.customerId);
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const { startDate, endDate } = getDateRange(preset);
 
         const rows = await customer.query(`
@@ -128,7 +190,7 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
-        const { customer } = buildClient(creds.refreshToken, creds.customerId);
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const { startDate, endDate } = getDateRange(preset);
 
         const rows = await customer.query(`
@@ -209,7 +271,7 @@ export async function getBudgetUtilization(userId) {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
-        const { customer } = buildClient(creds.refreshToken, creds.customerId);
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const today = new Date().toISOString().split('T')[0];
 
         const rows = await customer.query(`
@@ -262,7 +324,7 @@ export async function getKeywordPerformance(userId, preset = '30d') {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
-        const { customer } = buildClient(creds.refreshToken, creds.customerId);
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const { startDate, endDate } = getDateRange(preset);
 
         const rows = await customer.query(`
@@ -344,7 +406,7 @@ export async function getAdCreativePreviews(userId) {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
-        const { customer } = buildClient(creds.refreshToken, creds.customerId);
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const { startDate, endDate } = getDateRange('30d');
 
         const rows = await customer.query(`
