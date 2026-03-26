@@ -24,7 +24,8 @@ import {
     ChevronDown,
     Check,
     Plus,
-    Globe
+    Globe,
+    BarChart2
 } from 'lucide-react';
 
 const navSections = [
@@ -44,7 +45,8 @@ const navSections = [
     {
         title: 'Advertising',
         items: [
-            { href: '/ads', icon: Megaphone, label: 'Ads' },
+            { href: '/ads', icon: Megaphone, label: 'Meta Ads' },
+            { href: '/google-ads', icon: BarChart2, label: 'Google Ads' },
         ]
     },
     {
@@ -84,7 +86,6 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     };
 
     const handleAddAccount = () => {
-        // Redirect to login to add another account
         login();
     };
 
@@ -215,7 +216,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                     Switch Account
                                 </div>
 
-                                {accounts.map(account => (
+                                {accounts.map((account: any) => (
                                     <button
                                         key={account.id}
                                         onClick={() => handleSwitchAccount(account.id)}

@@ -86,4 +86,18 @@ export const adsApi = {
         api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}`)
 };
 
+export const googleAdsApi = {
+    getStatus: () => api.get('/google/auth/status'),
+    login: () => api.get('/google/auth/login'),
+    disconnect: () => api.post('/google/auth/disconnect'),
+    getPerformance: (preset = '30d') => api.get(`/google/auth/ads-performance?preset=${preset}`),
+    getCampaigns: (preset = '30d') => api.get(`/google/auth/campaigns?preset=${preset}`),
+    getBudget: () => api.get('/google/auth/budget'),
+    getKeywords: (preset = '30d') => api.get(`/google/auth/keywords?preset=${preset}`),
+    getCreatives: () => api.get('/google/auth/creatives'),
+    getCrossPlatform: (preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0) =>
+        api.get(`/google/auth/cross-platform?preset=${preset}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
+    getAlerts: () => api.get('/google/auth/alerts'),
+};
+
 export default api;

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { instagramApi } from '@/lib/api';
+import { instagramApi, googleAdsApi } from '@/lib/api';
+import Link from 'next/link';
 import {
     Users, Heart, Eye, Bookmark, TrendingUp, TrendingDown, Image, RefreshCw, Instagram,
-    Globe, MapPin, HelpCircle, Clock
+    Globe, MapPin, HelpCircle, Clock, Zap, MousePointer, DollarSign, BarChart2, ExternalLink
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
@@ -65,6 +66,158 @@ function InfoTooltip({ text }: { text: string }) {
                     boxShadow: '0 16px 36px rgba(0,0,0,0.32)'
                 }}>
                     {text}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ==================== GOOGLE ADS WIDGET ====================
+
+function GoogleAdsWidget() {
+    const { data: statusData, isLoading: statusLoading } = useQuery({
+        queryKey: ['google-ads-status'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getStatus();
+            return res.data;
+        },
+        staleTime: 60_000,
+    });
+
+    const isConnected = statusData?.connected;
+
+    const { data: adsData, isLoading: adsLoading } = useQuery({
+        queryKey: ['google-ads-performance', '30d'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getPerformance('30d');
+            return res.data;
+        },
+        enabled: !!isConnected,
+        staleTime: 5 * 60_000,
+    });
+
+    if (statusLoading) return null;
+
+    // ---- Not Connected State ----
+    if (!isConnected) {
+        return (
+            <div style={{
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(236,72,153,0.06))',
+                border: '1px solid rgba(99,102,241,0.2)',
+                borderRadius: 12,
+                padding: '24px 28px',
+                marginBottom: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 20,
+                flexWrap: 'wrap' as const,
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{
+                        width: 48, height: 48, borderRadius: 12,
+                        background: 'linear-gradient(135deg, #4285F4, #34A853)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+                    }}>📊</div>
+                    <div>
+                        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Connect Google Ads</h3>
+                        <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 420 }}>
+                            See campaign performance, keyword scores, ROAS & cross-platform spend — all in one place.
+                        </p>
+                    </div>
+                </div>
+                <Link
+                    href="/google-ads"
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '10px 20px',
+                        background: 'linear-gradient(135deg, #4285F4, #34A853)',
+                        border: 'none', borderRadius: 8, color: '#fff',
+                        fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                        whiteSpace: 'nowrap' as const, textDecoration: 'none',
+                        boxShadow: '0 4px 12px rgba(66,133,244,0.3)',
+                    }}
+                >
+                    <BarChart2 size={14} />
+                    Connect Google Ads
+                </Link>
+            </div>
+        );
+    }
+
+    const adsMetrics = adsData?.data?.metrics;
+    const adsAccount = statusData?.account;
+
+    return (
+        <div style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 12, padding: '20px 24px', marginBottom: 24,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: 'linear-gradient(135deg, #4285F4, #34A853)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                    }}>📊</div>
+                    <div>
+                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Google Ads — Last 30 days</h3>
+                        {adsAccount && <p className="text-muted" style={{ fontSize: 11 }}>{adsAccount.email}</p>}
+                    </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <span style={{
+                        padding: '4px 10px',
+                        background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
+                        borderRadius: 20, color: '#10b981', fontSize: 11, fontWeight: 500,
+                    }}>● Connected</span>
+                    <Link
+                        href="/google-ads"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontSize: 12, color: 'var(--primary)', textDecoration: 'none',
+                            fontWeight: 600,
+                        }}
+                    >
+                        View Full Report <ExternalLink size={11} />
+                    </Link>
+                </div>
+            </div>
+
+            {adsLoading && (
+                <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    Loading Google Ads data...
+                </div>
+            )}
+
+            {!adsLoading && adsData?.data?.hasAdAccounts === false && (
+                <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    {adsData?.data?.message || 'No active Google Ads campaigns found.'}
+                </div>
+            )}
+
+            {!adsLoading && adsMetrics && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
+                    {[
+                        { label: 'Impressions', value: (adsMetrics.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
+                        { label: 'Clicks', value: (adsMetrics.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
+                        { label: 'Spend', value: `$${(adsMetrics.spend || 0).toFixed(2)}`, icon: DollarSign, color: '#10b981' },
+                        { label: 'CTR', value: `${adsMetrics.ctr || 0}%`, icon: Zap, color: '#ec4899' },
+                        { label: 'Conversions', value: (adsMetrics.conversions || 0).toLocaleString(), icon: BarChart2, color: '#f59e0b' },
+                        { label: 'ROAS', value: adsMetrics.roas ? `${adsMetrics.roas.toFixed(2)}x` : '—', icon: TrendingUp, color: adsMetrics.roas >= 4 ? '#10b981' : adsMetrics.roas >= 2 ? '#f59e0b' : '#ef4444' },
+                    ].map((m) => (
+                        <div key={m.label} style={{
+                            padding: '12px 14px', background: 'var(--background)',
+                            borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                                <m.icon size={12} style={{ color: m.color }} />
+                                <span className="text-muted" style={{ fontSize: 10 }}>{m.label}</span>
+                            </div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: m.color }}>{m.value}</div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
@@ -184,23 +337,7 @@ function PostRow({ post }: { post: any }) {
 function OnlineFollowersHeatmap({ data }: { data: any[] }) {
     if (!data || data.length === 0) return <p className="text-muted">No data available</p>;
 
-    // Process data into hourly format
     const hours = Array.from({ length: 24 }, (_, i) => i);
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    // Find max value for color scaling
-    let maxVal = 0;
-    const processedData: { [key: string]: { [key: number]: number } } = {};
-
-    data.forEach((item: any) => {
-        if (item.value) {
-            Object.entries(item.value).forEach(([hour, count]) => {
-                const h = parseInt(hour);
-                const c = count as number;
-                if (c > maxVal) maxVal = c;
-            });
-        }
-    });
 
     return (
         <div>
@@ -219,9 +356,6 @@ function OnlineFollowersHeatmap({ data }: { data: any[] }) {
                             height: 28,
                             borderRadius: 4,
                             background: `rgba(99, 102, 241, ${0.2 + (Math.random() * 0.6)})`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
                         }} />
                     </div>
                 ))}
@@ -236,9 +370,6 @@ function OnlineFollowersHeatmap({ data }: { data: any[] }) {
                             height: 28,
                             borderRadius: 4,
                             background: `rgba(99, 102, 241, ${0.2 + (Math.random() * 0.6)})`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
                         }} />
                     </div>
                 ))}
@@ -297,7 +428,6 @@ export default function DashboardPage() {
     const recentPosts = data?.recentPosts || [];
     const demographics = data?.demographics || {};
 
-    // Process chart data
     const chartData = recentPosts.slice(0, 10).reverse().map((post: any) => ({
         name: new Date(post.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         engagement: post.engagement,
@@ -305,27 +435,22 @@ export default function DashboardPage() {
         comments: post.comments
     }));
 
-    // Process demographics for display - sort by value to ensure logical accuracy
     const countryData = [...(demographics.countries || [])]
-        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
         .slice(0, 5)
-        .map((c: any) => ({
-            name: getCountryName(c.dimension_values?.[0] || ''),
-            value: c.value || 0
-        }));
+        .map((c: any) => ({ name: getCountryName(c.dimension_values?.[0] || ''), value: c.value || 0 }));
 
     const cityData = [...(demographics.cities || [])]
-        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
         .slice(0, 5)
         .map((c: any) => ({
-            name: (c.dimension_values?.[0] || 'Unknown').split(',')[0], // Just city name for cleaner UI
+            name: (c.dimension_values?.[0] || 'Unknown').split(',')[0],
             fullName: c.dimension_values?.[0] || 'Unknown',
             value: c.value || 0
         }));
 
-    // Format gender/age and sort
     const genderAgeData = [...(demographics.genderAge || [])]
-        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
         .slice(0, 8)
         .map((g: any) => {
             const gender = g.dimension_values?.[0] === 'M' ? 'Male' : g.dimension_values?.[0] === 'F' ? 'Female' : g.dimension_values?.[0] || '';
@@ -337,7 +462,6 @@ export default function DashboardPage() {
             };
         });
 
-    // Calculate computed metrics
     const viralScore = metrics.totalSaved && metrics.totalReach
         ? ((metrics.totalSaved / metrics.totalReach) * 100).toFixed(2)
         : '0';
@@ -369,6 +493,9 @@ export default function DashboardPage() {
                     Refresh
                 </button>
             </div>
+
+            {/* Google Ads Widget */}
+            <GoogleAdsWidget />
 
             {/* Core Metrics */}
             <div className="grid-metrics" style={{ marginBottom: 24 }}>
