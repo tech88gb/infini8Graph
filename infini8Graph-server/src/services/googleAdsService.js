@@ -573,8 +573,8 @@ export async function getRecommendations(userId) {
                         type: 'danger',
                         category: 'Campaign',
                         title: `No conversions: ${c.name}`,
-                        message: `$${c.spend} spent with 0 conversions. Check conversion tracking or landing page.`,
-                        metric: `$${c.spend} wasted`,
+                        message: `₹${c.spend} spent with 0 conversions. Check conversion tracking or landing page.`,
+                        metric: `₹${c.spend} wasted`,
                     });
                 }
                 // Negative ROAS (spent more than earned)
@@ -609,7 +609,7 @@ export async function getRecommendations(userId) {
                         category: 'Budget',
                         title: `Budget nearly exhausted: ${c.name}`,
                         message: `${c.utilization}% of daily budget used. Ads may stop showing before end of day.`,
-                        metric: `$${c.remaining} remaining`,
+                        metric: `₹${c.remaining} remaining`,
                     });
                 }
                 if (c.utilization < 20 && c.budgetAmount > 5) {
@@ -618,7 +618,7 @@ export async function getRecommendations(userId) {
                         category: 'Budget',
                         title: `Underspending: ${c.name}`,
                         message: `Only ${c.utilization}% of daily budget used. Ads may have limited reach or targeting issues.`,
-                        metric: `$${c.spent} / $${c.budgetAmount}`,
+                        metric: `₹${c.spent} / ₹${c.budgetAmount}`,
                     });
                 }
             });
@@ -633,7 +633,7 @@ export async function getRecommendations(userId) {
                     category: 'Keywords',
                     title: `Low quality score: "${k.keyword}"`,
                     message: `Quality Score ${k.qualityScore}/10. Improve ad relevance or landing page to lower CPC.`,
-                    metric: `QS ${k.qualityScore}/10 · $${k.cpc} CPC`,
+                    metric: `QS ${k.qualityScore}/10 · ₹${k.cpc} CPC`,
                 });
             });
         }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { instagramApi, googleAdsApi } from '@/lib/api';
+import { instagramApi, googleAdsApi, adsApi } from '@/lib/api';
 import Link from 'next/link';
 import {
     Users, Heart, Eye, Bookmark, TrendingUp, TrendingDown, Image, RefreshCw, Instagram,
@@ -202,7 +202,7 @@ function GoogleAdsWidget() {
                     {[
                         { label: 'Impressions', value: (adsMetrics.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
                         { label: 'Clicks', value: (adsMetrics.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
-                        { label: 'Spend', value: `$${(adsMetrics.spend || 0).toFixed(2)}`, icon: DollarSign, color: '#10b981' },
+                        { label: 'Spend', value: `₹${(adsMetrics.spend || 0).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
                         { label: 'CTR', value: `${adsMetrics.ctr || 0}%`, icon: Zap, color: '#ec4899' },
                         { label: 'Conversions', value: (adsMetrics.conversions || 0).toLocaleString(), icon: BarChart2, color: '#f59e0b' },
                         { label: 'ROAS', value: adsMetrics.roas ? `${adsMetrics.roas.toFixed(2)}x` : '—', icon: TrendingUp, color: adsMetrics.roas >= 4 ? '#10b981' : adsMetrics.roas >= 2 ? '#f59e0b' : '#ef4444' },
@@ -387,6 +387,150 @@ function OnlineFollowersHeatmap({ data }: { data: any[] }) {
     );
 }
 
+// ==================== META ADS WIDGET ====================
+
+function MetaAdsWidget() {
+    const { data: accountsData, isLoading: accountsLoading } = useQuery({
+        queryKey: ['ad-accounts'],
+        queryFn: async () => {
+            const res = await adsApi.getAdAccounts();
+            return res.data;
+        },
+        staleTime: 60_000,
+    });
+
+    const adAccounts = accountsData?.data?.adAccounts || [];
+    const effectiveAccount = adAccounts.find((a: any) => a.insights?.spend)?.account_id || adAccounts[0]?.account_id;
+
+    const { data: insightsData, isLoading: insightsLoading } = useQuery({
+        queryKey: ['ad-insights', effectiveAccount],
+        queryFn: async () => {
+            if (!effectiveAccount) return null;
+            const res = await adsApi.getAdInsights(effectiveAccount, 'last_30d');
+            return res.data;
+        },
+        enabled: !!effectiveAccount,
+        staleTime: 5 * 60_000,
+    });
+
+    if (accountsLoading) return null;
+
+    if (!effectiveAccount || adAccounts.length === 0) {
+        return (
+            <div style={{
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.06))',
+                border: '1px solid rgba(59,130,246,0.2)',
+                borderRadius: 12, padding: '24px 28px', marginBottom: 24,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{
+                        width: 48, height: 48, borderRadius: 12,
+                        background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+                    }}>📈</div>
+                    <div>
+                        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Connect Meta Ads</h3>
+                        <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 420 }}>
+                            See Facebook and Instagram campaign performance, ROAS & metrics.
+                        </p>
+                    </div>
+                </div>
+                <Link
+                    href="/settings"
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+                        background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
+                        border: 'none', borderRadius: 8, color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                        whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 4px 12px rgba(24,119,242,0.3)',
+                    }}
+                >
+                    <BarChart2 size={14} /> Connect Meta Ads
+                </Link>
+            </div>
+        );
+    }
+
+    const summary = insightsData?.data?.summary;
+
+    return (
+        <div style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 12, padding: '20px 24px', marginBottom: 24,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                    }}>📈</div>
+                    <div>
+                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Meta Ads — Last 30 days</h3>
+                        <p className="text-muted" style={{ fontSize: 11 }}>
+                             {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
+                        </p>
+                    </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <span style={{
+                        padding: '4px 10px',
+                        background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
+                        borderRadius: 20, color: '#10b981', fontSize: 11, fontWeight: 500,
+                    }}>● Connected</span>
+                    <Link
+                        href="/ads"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontSize: 12, color: 'var(--primary)', textDecoration: 'none',
+                            fontWeight: 600,
+                        }}
+                    >
+                        View Full Report <ExternalLink size={11} />
+                    </Link>
+                </div>
+            </div>
+
+            {insightsLoading && (
+                <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    Loading Meta Ads data...
+                </div>
+            )}
+
+            {!insightsLoading && !summary && (
+                <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    No active Meta Ads campaigns found.
+                </div>
+            )}
+
+            {!insightsLoading && summary && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
+                    {[
+                        { label: 'Impressions', value: parseInt(summary.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
+                        { label: 'Clicks', value: parseInt(summary.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
+                        { label: 'Spend', value: `₹${((parseFloat(summary.spend || 0)) / 100).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
+                        { label: 'CTR', value: `${parseFloat(summary.ctr || 0).toFixed(2)}%`, icon: Zap, color: '#ec4899' },
+                        { label: 'Reach', value: parseInt(summary.reach || 0).toLocaleString(), icon: Users, color: '#f59e0b' },
+                        { label: 'CPM', value: `₹${((parseFloat(summary.cpm || 0)) / 100).toFixed(2)}`, icon: TrendingUp, color: '#8b5cf6' },
+                    ].map((m) => (
+                        <div key={m.label} style={{
+                            padding: '12px 14px', background: 'var(--background)',
+                            borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                                <m.icon size={12} style={{ color: m.color }} />
+                                <span className="text-muted" style={{ fontSize: 10 }}>{m.label}</span>
+                            </div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: m.color }}>{m.value}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ==================== MAIN PAGE ====================
 
 export default function DashboardPage() {
@@ -494,12 +638,29 @@ export default function DashboardPage() {
                 </button>
             </div>
 
-            {/* Google Ads Widget */}
-            <GoogleAdsWidget />
+            {/* SOCIAL MEDIA WIDGET (Instagram) */}
+            <div style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 12, padding: '20px 24px', marginBottom: 24,
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                            width: 32, height: 32, borderRadius: 8,
+                            background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white'
+                        }}><Instagram size={18} /></div>
+                        <div>
+                            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Social Media — Last 30 days</h3>
+                            <p className="text-muted" style={{ fontSize: 11 }}>@{profile.username}</p>
+                        </div>
+                    </div>
+                </div>
 
-            {/* Core Metrics */}
-            <div className="grid-metrics" style={{ marginBottom: 24 }}>
-                <MetricCard
+                {/* Core Metrics */}
+                <div className="grid-metrics" style={{ marginBottom: 24 }}>
+                    <MetricCard
                     label="Followers"
                     value={metrics.followers || 0}
                     icon={Users}
@@ -737,6 +898,13 @@ export default function DashboardPage() {
                     </div>
                 )}
             </div>
+            
+            </div> {/* END SOCIAL MEDIA WIDGET */}
+
+            {/* PAID ADS WIDGETS */}
+            <MetaAdsWidget />
+            <GoogleAdsWidget />
+
         </div>
     );
 }

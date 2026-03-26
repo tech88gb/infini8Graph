@@ -381,8 +381,8 @@ export default function AdsPage() {
                             onClick={() => setSelectedAccount(account.account_id)}
                             className="btn btn-sm"
                             style={{
-                                background: effectiveAccount === account.account_id ? 'var(--primary)' : 'white',
-                                color: effectiveAccount === account.account_id ? 'white' : 'var(--foreground)',
+                                background: effectiveAccount === account.account_id ? 'var(--primary)' : 'transparent',
+                                color: effectiveAccount === account.account_id ? 'white' : 'var(--muted)',
                                 border: '1px solid var(--border)'
                             }}
                         >

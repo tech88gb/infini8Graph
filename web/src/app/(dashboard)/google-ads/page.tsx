@@ -19,7 +19,7 @@ const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'
 // ==================== HELPERS ====================
 
 const fmt = (n: number, dec = 2) => n?.toLocaleString('en-US', { maximumFractionDigits: dec }) ?? '—';
-const fmtUSD = (n: number) => `$${fmt(n, 2)}`;
+const fmtINR = (n: number) => `₹${fmt(n, 2)}`;
 const fmtPct = (n: number) => `${fmt(n, 2)}%`;
 
 function ROAS({ value }: { value: number }) {
@@ -196,14 +196,14 @@ function OverviewTab({ preset }: { preset: string }) {
             {/* Top Metrics */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 {[
-                    { label: 'Total Spend', value: fmtUSD(m.spend), icon: DollarSign, color: '#6366f1' },
+                    { label: 'Total Spend', value: fmtINR(m.spend), icon: DollarSign, color: '#6366f1' },
                     { label: 'Impressions', value: fmt(m.impressions, 0), icon: Eye, color: '#0ea5e9' },
                     { label: 'Clicks', value: fmt(m.clicks, 0), icon: MousePointer, color: '#ec4899' },
                     { label: 'CTR', value: fmtPct(m.ctr), icon: Activity, color: '#10b981' },
                     { label: 'Conversions', value: fmt(m.conversions, 0), icon: Target, color: '#f59e0b' },
-                    { label: 'Conv. Value', value: fmtUSD(m.conversionValue), icon: TrendingUp, color: '#8b5cf6' },
+                    { label: 'Conv. Value', value: fmtINR(m.conversionValue), icon: TrendingUp, color: '#8b5cf6' },
                     { label: 'ROAS', value: m.roas ? `${m.roas.toFixed(2)}x` : '—', icon: BarChart2, color: m.roas >= 4 ? '#10b981' : m.roas >= 2 ? '#f59e0b' : '#ef4444' },
-                    { label: 'Cost / Conv.', value: fmtUSD(m.costPerConversion), icon: Zap, color: '#0ea5e9' },
+                    { label: 'Cost / Conv.', value: fmtINR(m.costPerConversion), icon: Zap, color: '#0ea5e9' },
                 ].map((stat, i) => (
                     <div key={i} className="card" style={{ padding: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -230,7 +230,7 @@ function OverviewTab({ preset }: { preset: string }) {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                                     <span style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</span>
                                     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                        <span className="text-muted" style={{ fontSize: 12 }}>{fmtUSD(c.spent)} / {fmtUSD(c.budgetAmount)}</span>
+                                        <span className="text-muted" style={{ fontSize: 12 }}>{fmtINR(c.spent)} / {fmtINR(c.budgetAmount)}</span>
                                         <span style={{
                                             fontSize: 11, fontWeight: 700,
                                             color: c.utilization > 90 ? '#ef4444' : c.utilization > 60 ? '#f59e0b' : '#10b981'
@@ -260,14 +260,14 @@ function OverviewTab({ preset }: { preset: string }) {
                     <div className="card-header">
                         <h3 className="card-title">Cross-Platform Ad Spend</h3>
                         <span className="text-muted" style={{ fontSize: 13 }}>
-                            Total: {fmtUSD(crossData.combined?.totalSpend || 0)}
+                            Total: {fmtINR(crossData.combined?.totalSpend || 0)}
                         </span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, alignItems: 'center' }}>
                         {/* Google */}
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 10, textAlign: 'center' }}>
                             <div style={{ color: '#4285F4', fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Google Ads</div>
-                            <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{fmtUSD(crossData.google?.spend)}</div>
+                            <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{fmtINR(crossData.google?.spend)}</div>
                             <div className="text-muted" style={{ fontSize: 12 }}>{crossData.combined?.googleShare}% of budget</div>
                             <div style={{ marginTop: 8, fontSize: 12 }}>CTR: <b>{fmtPct(crossData.google?.ctr)}</b> · ROAS: <b>{crossData.google?.roas?.toFixed(2) || '—'}x</b></div>
                         </div>
@@ -279,14 +279,14 @@ function OverviewTab({ preset }: { preset: string }) {
                                     <Cell fill="#4285F4" />
                                     <Cell fill="#0081FB" />
                                 </Pie>
-                                <Tooltip formatter={(v: any) => fmtUSD(v)} />
+                                <Tooltip formatter={(v: any) => fmtINR(v)} />
                             </PieChart>
                         </div>
 
                         {/* Meta */}
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 10, textAlign: 'center' }}>
                             <div style={{ color: '#0081FB', fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Meta Ads</div>
-                            <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{fmtUSD(crossData.meta?.spend)}</div>
+                            <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{fmtINR(crossData.meta?.spend)}</div>
                             <div className="text-muted" style={{ fontSize: 12 }}>{crossData.combined?.metaShare}% of budget</div>
                             <div style={{ marginTop: 8, fontSize: 12 }}>Impressions: <b>{fmt(crossData.meta?.impressions, 0)}</b></div>
                         </div>
@@ -353,14 +353,14 @@ function CampaignsTab({ preset }: { preset: string }) {
                                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.channelType}</div>
                                 </td>
                                 <td><StatusBadge status={c.status} /></td>
-                                <td style={{ fontWeight: 600 }}>{fmtUSD(c.spend)}</td>
+                                <td style={{ fontWeight: 600 }}>{fmtINR(c.spend)}</td>
                                 <td>{fmt(c.impressions, 0)}</td>
                                 <td>{fmt(c.clicks, 0)}</td>
                                 <td>{fmtPct(c.ctr)}</td>
-                                <td>{fmtUSD(c.cpc)}</td>
+                                <td>{fmtINR(c.cpc)}</td>
                                 <td>{fmt(c.conversions, 0)}</td>
                                 <td><ROAS value={c.roas} /></td>
-                                <td>{c.costPerConversion > 0 ? fmtUSD(c.costPerConversion) : '—'}</td>
+                                <td>{c.costPerConversion > 0 ? fmtINR(c.costPerConversion) : '—'}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -456,8 +456,8 @@ function KeywordsTab({ preset }: { preset: string }) {
                                     <td>{fmt(k.impressions, 0)}</td>
                                     <td>{fmt(k.clicks, 0)}</td>
                                     <td>{fmtPct(k.ctr)}</td>
-                                    <td>{fmtUSD(k.cpc)}</td>
-                                    <td style={{ fontWeight: 600 }}>{fmtUSD(k.spend)}</td>
+                                    <td>{fmtINR(k.cpc)}</td>
+                                    <td style={{ fontWeight: 600 }}>{fmtINR(k.spend)}</td>
                                     <td>{fmt(k.conversions, 0)}</td>
                                 </tr>
                             ))}
@@ -542,7 +542,7 @@ function CreativesTab() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span className="text-muted">{fmt(ad.clicks, 0)} clicks · {fmtUSD(ad.spend)}</span>
+                        <span className="text-muted">{fmt(ad.clicks, 0)} clicks · {fmtINR(ad.spend)}</span>
                         <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--card-hover)', color: 'var(--muted)' }}>
                             {String(ad.type || '').replace('AD_TYPE_', '') || 'RSA'}
                         </span>
