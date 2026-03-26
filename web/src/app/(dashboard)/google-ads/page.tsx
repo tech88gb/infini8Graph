@@ -28,7 +28,7 @@ function ROAS({ value }: { value: number }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-    const s = status?.toUpperCase();
+    const s = String(status || '').toUpperCase();
     const color = s === 'ENABLED' || s === 'ACTIVE' ? '#10b981' : s === 'PAUSED' ? '#f59e0b' : '#6b7280';
     return (
         <span style={{
@@ -388,7 +388,7 @@ function KeywordsTab({ preset }: { preset: string }) {
     const allKeywords = data?.keywords || [];
     const lowQuality = data?.lowQuality || [];
     const keywords = filter
-        ? allKeywords.filter((k: any) => k.keyword.toLowerCase().includes(filter.toLowerCase()))
+        ? allKeywords.filter((k: any) => String(k.keyword || '').toLowerCase().includes(filter.toLowerCase()))
         : allKeywords;
 
     return (
@@ -530,7 +530,7 @@ function CreativesTab() {
                         {/* URL */}
                         {ad.finalUrl && (
                             <div style={{ fontSize: 12, color: '#0d652d', marginBottom: 6 }}>
-                                {ad.finalUrl.replace('https://', '').split('/')[0]}
+                                {String(ad.finalUrl).replace('https://', '').split('/')[0]}
                             </div>
                         )}
                         {/* Descriptions */}

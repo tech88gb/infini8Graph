@@ -14,7 +14,7 @@ const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
  * @param {string} customerId      - The actual ad account (client) to query
  * @param {string} loginCustomerId - The manager account to authenticate as (same as customerId if not MCC)
  */
-function buildClient(refreshToken, customerId, loginCustomerId) {
+export function buildClient(refreshToken, customerId, loginCustomerId) {
     const client = new GoogleAdsApi({
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
@@ -58,11 +58,12 @@ async function getCustomerId(userId) {
 
     console.log('📋 Accessible Google customers:', accessible);
 
+    let fallbackClient = null;
+
     for (const resource of accessible) {
         const managerCandidateId = resource.replace('customers/', '');
 
         try {
-            // Attempt to enumerate sub-clients — only works if this is a manager/MCC account
             const managerCustomer = client.Customer({
                 customer_id: managerCandidateId,
                 refresh_token: tokens.refreshToken,
@@ -70,11 +71,7 @@ async function getCustomerId(userId) {
             });
 
             const clientRows = await managerCustomer.query(`
-                SELECT
-                    customer_client.id,
-                    customer_client.manager,
-                    customer_client.status,
-                    customer_client.descriptive_name
+                SELECT customer_client.id, customer_client.manager
                 FROM customer_client
                 WHERE customer_client.manager = false
                 AND customer_client.status = 'ENABLED'
@@ -84,28 +81,35 @@ async function getCustomerId(userId) {
                 const allClientIds = clientRows.map(r => String(r.customer_client.id));
                 const primaryClientId = allClientIds[0];
 
-                console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
-
-                return {
-                    customerId: primaryClientId,
-                    loginCustomerId: managerCandidateId,
-                    allClientIds,
-                    refreshToken: tokens.refreshToken,
-                };
+                // If the returned sub-client ID is different from the manager's ID, it's a TRUE hierarchy account!
+                if (primaryClientId !== String(managerCandidateId)) {
+                    console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
+                    return {
+                        customerId: primaryClientId,
+                        loginCustomerId: managerCandidateId,
+                        allClientIds,
+                        refreshToken: tokens.refreshToken,
+                    };
+                } else {
+                    // It returned itself. We save this as a fallback and KEEP checking for a real MCC first.
+                    if (!fallbackClient) {
+                        fallbackClient = {
+                            customerId: managerCandidateId,
+                            loginCustomerId: managerCandidateId,
+                            allClientIds: [managerCandidateId],
+                            refreshToken: tokens.refreshToken,
+                        };
+                    }
+                }
             }
         } catch (err) {
-            // Not a manager account or no permission to list clients — skip and try as direct account
-            console.log(`⚠️  Could not list clients for ${managerCandidateId}: ${err.message?.slice(0, 80)}`);
+            console.log(`⚠️  Could not query clients for ${managerCandidateId}: ${err.message?.slice(0, 80)}`);
         }
+    }
 
-        // Fallback: treat this as a direct (non-manager) ad account
-        console.log(`📌 Using ${managerCandidateId} as direct ad account`);
-        return {
-            customerId: managerCandidateId,
-            loginCustomerId: managerCandidateId,
-            allClientIds: [managerCandidateId],
-            refreshToken: tokens.refreshToken,
-        };
+    if (fallbackClient) {
+        console.log(`📌 Using ${fallbackClient.customerId} as fallback direct account`);
+        return fallbackClient;
     }
 
     return null;
