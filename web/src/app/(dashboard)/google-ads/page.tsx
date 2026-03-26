@@ -434,7 +434,7 @@ function KeywordsTab({ preset }: { preset: string }) {
                                     <td style={{ fontWeight: 500, fontSize: 13 }}>{k.keyword}</td>
                                     <td>
                                         <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--card-hover)', color: 'var(--muted)' }}>
-                                            {k.matchType?.replace('MATCH_TYPE_', '') || '—'}
+                                            {String(k.matchType || '').replace('MATCH_TYPE_', '') || '—'}
                                         </span>
                                     </td>
                                     <td><QualityScore score={k.qualityScore} /></td>
@@ -529,7 +529,7 @@ function CreativesTab() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                         <span className="text-muted">{fmt(ad.clicks, 0)} clicks · {fmtUSD(ad.spend)}</span>
                         <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--card-hover)', color: 'var(--muted)' }}>
-                            {ad.type?.replace('AD_TYPE_', '') || 'RSA'}
+                            {String(ad.type || '').replace('AD_TYPE_', '') || 'RSA'}
                         </span>
                     </div>
                 </div>
