@@ -31,18 +31,24 @@ export function buildClient(refreshToken, customerId, loginCustomerId) {
 }
 
 /**
- * Resolves the correct ad account credentials for a user.
- *
- * Handles the MCC (manager account) case:
- * - listAccessibleCustomers can return the manager account itself.
- * - Campaigns and metrics live in CLIENT accounts (non-manager), not the manager.
- * - We check each accessible account for sub-clients (customer_client query).
- * - If sub-clients exist, we return the first enabled non-manager client ID
- *   along with the manager's ID as login_customer_id.
- *
- * Returns: { customerId, loginCustomerId, allClientIds, refreshToken } or null
+ * Memory cache to prevent Google Ads rate-limit hanging when the frontend
+ * fires 4 simultaneous widget requests all calling listAccessibleCustomers.
  */
-async function getCustomerId(userId) {
+const customerCache = new Map();
+
+/**
+ * Resolves the correct ad account credentials for a user.
+ */
+export async function getCustomerId(userId) {
+    const cacheKey = String(userId);
+    const now = Date.now();
+    const cached = customerCache.get(cacheKey);
+
+    // Cache valid for 5 minutes
+    if (cached && now - cached.timestamp < 300000) {
+        return cached.data;
+    }
+
     const tokens = await getGoogleTokensForUser(userId);
     if (!tokens || !tokens.refreshToken) return null;
 
@@ -81,17 +87,17 @@ async function getCustomerId(userId) {
                 const allClientIds = clientRows.map(r => String(r.customer_client.id));
                 const primaryClientId = allClientIds[0];
 
-                // If the returned sub-client ID is different from the manager's ID, it's a TRUE hierarchy account!
                 if (primaryClientId !== String(managerCandidateId)) {
                     console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
-                    return {
+                    const result = {
                         customerId: primaryClientId,
                         loginCustomerId: managerCandidateId,
                         allClientIds,
                         refreshToken: tokens.refreshToken,
                     };
+                    customerCache.set(cacheKey, { data: result, timestamp: now });
+                    return result;
                 } else {
-                    // It returned itself. We save this as a fallback and KEEP checking for a real MCC first.
                     if (!fallbackClient) {
                         fallbackClient = {
                             customerId: managerCandidateId,
@@ -109,6 +115,7 @@ async function getCustomerId(userId) {
 
     if (fallbackClient) {
         console.log(`📌 Using ${fallbackClient.customerId} as fallback direct account`);
+        customerCache.set(cacheKey, { data: fallbackClient, timestamp: now });
         return fallbackClient;
     }
 
