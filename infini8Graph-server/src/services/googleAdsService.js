@@ -710,6 +710,18 @@ export async function getAuctionInsights(userId, preset = '30d') {
     }
 }
 
+// Helper to map Quality Score numeric enums to strings
+function mapQsLabel(val) {
+    const labels = {
+        0: 'UNSPECIFIED',
+        1: 'UNKNOWN',
+        2: 'BELOW AVERAGE',
+        3: 'AVERAGE',
+        4: 'ABOVE AVERAGE'
+    };
+    return labels[val] || String(val || 'UNKNOWN');
+}
+
 // ===================== SEARCH TERM INSIGHTS (WASTED SPEND) =====================
 
 export async function getSearchTermInsights(userId, preset = '30d') {
@@ -749,7 +761,8 @@ export async function getSearchTermInsights(userId, preset = '30d') {
         });
 
         // Identify wasted spend (High spend, 0 conversions)
-        const wastedSpend = terms.filter(t => t.spend > 10 && t.conversions === 0)
+        // Lowered threshold to ₹5 to show more potential waste in the UI
+        const wastedSpend = terms.filter(t => t.spend >= 5 && t.conversions === 0)
                                  .sort((a,b) => b.spend - a.spend)
                                  .slice(0, 10);
 
@@ -787,9 +800,9 @@ export async function getQualityScoreDiagnostics(userId) {
         const keywords = (rows || []).map(r => ({
             keyword: r.ad_group_criterion?.keyword?.text || '',
             qualityScore: r.ad_group_criterion?.quality_info?.quality_score || 0,
-            creativeQuality: r.ad_group_criterion?.quality_info?.creative_quality_score || 'UNKNOWN',
-            landingPageQuality: r.ad_group_criterion?.quality_info?.post_click_quality_score || 'UNKNOWN',
-            expectedCtr: r.ad_group_criterion?.quality_info?.search_predicted_ctr || 'UNKNOWN',
+            creativeQuality: mapQsLabel(r.ad_group_criterion?.quality_info?.creative_quality_score),
+            landingPageQuality: mapQsLabel(r.ad_group_criterion?.quality_info?.post_click_quality_score),
+            expectedCtr: mapQsLabel(r.ad_group_criterion?.quality_info?.search_predicted_ctr),
             campaign: r.campaign?.name || ''
         }));
 
@@ -820,7 +833,7 @@ export async function getAssetPerformance(userId) {
                 campaign.name
             FROM ad_group_ad_asset_view
             WHERE segments.date DURING LAST_30_DAYS
-            AND ad_group_ad_asset_view.performance_label != 'UNSPECIFIED'
+            AND metrics.impressions > 0
             ORDER BY metrics.impressions DESC
             LIMIT 50
         `);
