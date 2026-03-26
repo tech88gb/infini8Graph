@@ -10,6 +10,7 @@ import instagramRoutes from './routes/instagram.js';
 import adsRoutes from './routes/ads.js';
 import webhookRoutes from './routes/webhook.js';
 import automationRoutes from './routes/automationRoutes.js';
+import googleAuthRoutes from './routes/googleAuth.js';
 
 dotenv.config();
 
@@ -74,6 +75,7 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/ads', adsRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/automation', automationRoutes);
+app.use('/api/google/auth', googleAuthRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
