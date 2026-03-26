@@ -129,12 +129,14 @@ function Tab({ label, icon: Icon, active, onClick, badge }: { label: string; ico
 // ==================== OVERVIEW TAB ====================
 
 function OverviewTab({ preset }: { preset: string }) {
-    const { data: perf, isLoading } = useQuery({
+    const { data: perf, isLoading, isError, error } = useQuery({
         queryKey: ['google-perf', preset],
         queryFn: async () => {
             const res = await googleAdsApi.getPerformance(preset);
+            if (!res.data.success) throw new Error(res.data.error || 'Failed to fetch performance data');
             return res.data.data;
-        }
+        },
+        retry: 1
     });
 
     const { data: budgetData } = useQuery({
@@ -142,7 +144,8 @@ function OverviewTab({ preset }: { preset: string }) {
         queryFn: async () => {
             const res = await googleAdsApi.getBudget();
             return res.data.data;
-        }
+        },
+        retry: 1
     });
 
     const { data: crossData } = useQuery({
@@ -155,13 +158,25 @@ function OverviewTab({ preset }: { preset: string }) {
 
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
+    if (isError) {
+        return (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <BarChart2 size={40} style={{ color: '#ef4444', margin: '0 auto 16px' }} />
+                <p style={{ fontWeight: 500, marginBottom: 8 }}>Unable to load Google Ads metrics</p>
+                <p className="text-muted" style={{ fontSize: 13, maxWidth: 400, margin: '0 auto' }}>
+                    {(error as any)?.message || 'There was a timeout or connection issue communicating with the Google Ads API.'}
+                </p>
+            </div>
+        );
+    }
+
     if (!perf?.hasAdAccounts) {
         return (
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                 <BarChart2 size={40} style={{ color: 'var(--muted)', margin: '0 auto 16px' }} />
                 <p style={{ fontWeight: 500, marginBottom: 8 }}>No Google Ads accounts found</p>
                 <p className="text-muted" style={{ fontSize: 13 }}>
-                    {perf?.message || 'No active Google Ads campaigns were found on this account.'}
+                    {perf?.message || perf?.error || 'No active Google Ads campaigns were found on your connected Google Ads Manager / account.'}
                 </p>
             </div>
         );
