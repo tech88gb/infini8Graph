@@ -48,7 +48,7 @@ export default function LoginPage() {
 
                     <h1 className="text-5xl font-bold text-white leading-tight mb-6">
                         The intelligence layer<br />
-                        <span className="text-[#b4bcd0]">for serious Instagram growth.</span>
+                        <span className="text-[#b4bcd0]">for cross-channel growth.</span>
                     </h1>
 
                     <p className="text-xl text-[#b4bcd0] mb-12 max-w-md leading-relaxed">
@@ -57,9 +57,9 @@ export default function LoginPage() {
 
                     <div className="space-y-4">
                         {[
-                            { icon: BarChart3, text: 'Clear post-level analytics without dashboard clutter' },
+                            { icon: BarChart3, text: 'Clear post-level Instagram analytics without clutter' },
                             { icon: TrendingUp, text: 'Audience and growth signals you can actually act on' },
-                            { icon: Zap, text: 'Automation tools that keep engagement responsive at scale' },
+                            { icon: Zap, text: 'Cross-channel spend tracking and Google Ads Intelligence' },
                         ].map((item, i) => (
                             <div key={i} className="flex items-center gap-4 text-[#d7dced]">
                                 <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
@@ -70,9 +70,15 @@ export default function LoginPage() {
                         ))}
                     </div>
 
-                    <div className="mt-12 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08] text-sm text-[#d7dced] w-fit">
-                        <Shield size={14} className="text-indigo-300" />
-                        Official Instagram Graph API connection
+                    <div className="mt-12 flex flex-wrap gap-3">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08] text-sm text-[#d7dced] w-fit">
+                            <Shield size={14} className="text-indigo-300" />
+                            Official Instagram Graph API connection
+                        </div>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08] text-sm text-[#d7dced] w-fit">
+                            <Shield size={14} className="text-emerald-300" />
+                            Official Google Ads API connection
+                        </div>
                     </div>
                 </div>
 

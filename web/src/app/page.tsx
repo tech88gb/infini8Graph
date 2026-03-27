@@ -22,7 +22,7 @@ export default function LandingPage() {
                     
                     <div className="flex items-center gap-8 text-[14px] font-medium text-[#ffffffa8]">
                         <a href="#features" className="hover:text-white transition-colors duration-200 hidden md:block">Features</a>
-                        <Link href="/privacy" className="hover:text-white transition-colors duration-200 hidden md:block">Privacy</Link>
+                        <Link href="/privacy" className="hover:text-white transition-colors duration-200 hidden md:block">Privacy Policy</Link>
                         <Link href="/terms" className="hover:text-white transition-colors duration-200 hidden md:block">Terms</Link>
                         
                         <div className="flex items-center gap-4">
@@ -53,11 +53,11 @@ export default function LandingPage() {
                         
                         <h1 className="text-5xl md:text-7xl lg:text-[80px] font-bold mb-6 tracking-tighter leading-[1.05] text-white">
                             The intelligence layer <br className="hidden md:block" />
-                            <span className="text-[#b4bcd0]">for modern creators.</span>
+                            <span className="text-[#b4bcd0]">for cross-channel growth.</span>
                         </h1>
                         
                         <p className="text-lg md:text-xl text-[#b4bcd0] max-w-2xl font-normal leading-relaxed mb-10">
-                            Transform your Instagram presence with precision analytics, demographic insights, and automated community management—built for scale.
+                            Transform your Instagram presence and Google Ads performance with precision analytics, cross-platform tracking, and automated community management—built for scale.
                         </p>
 
                         <div className="flex flex-wrap items-center justify-center gap-3 mb-10 max-w-3xl">
@@ -332,7 +332,7 @@ export default function LandingPage() {
                             <p className="text-lg text-[#b4bcd0] font-normal leading-relaxed">Purpose-built tools designed to give you exact data and save you hours of manual work every week.</p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
                             {/* Feature 1 */}
                             <div className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:border-white/[0.1] hover:bg-white/[0.03] transition-all relative overflow-hidden group">
                                 <div className="absolute inset-0 bg-gradient-to-b from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -340,7 +340,7 @@ export default function LandingPage() {
                                     <BarChart3 className="text-gray-300" size={20} />
                                 </div>
                                 <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Deep Analytics</h3>
-                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">See reach, impressions, saves, shares, profile visits, and follower growth in one dashboard for every post, reel, and campaign.</p>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">See reach, impressions, saves, shares, and growth in one dashboard for every post and campaign.</p>
                             </div>
 
                             {/* Feature 2 */}
@@ -350,7 +350,7 @@ export default function LandingPage() {
                                     <TrendingUp className="text-gray-300" size={20} />
                                 </div>
                                 <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Audience Intelligence</h3>
-                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Know exactly where your audience lives, which age groups respond best, and how your follower mix shifts over time.</p>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Know exactly where your audience lives, which age groups respond best, and how your follower mix shifts.</p>
                             </div>
 
                             {/* Feature 3 */}
@@ -360,7 +360,17 @@ export default function LandingPage() {
                                     <MessageCircle className="text-gray-300" size={20} />
                                 </div>
                                 <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Smart Auto-Reply</h3>
-                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Automatically reply to common comment triggers, send DMs instantly, and stay responsive without monitoring your inbox all day.</p>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Automatically reply to common comment triggers, send DMs instantly, and stay responsive at all times.</p>
+                            </div>
+
+                            {/* Feature 4 */}
+                            <div className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:border-white/[0.1] hover:bg-white/[0.03] transition-all relative overflow-hidden group">
+                                <div className="absolute inset-0 bg-gradient-to-b from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                <div className="w-10 h-10 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-6 shadow-sm">
+                                    <Activity className="text-gray-300" size={20} />
+                                </div>
+                                <h3 className="text-[17px] font-semibold mb-3 text-white tracking-tight">Google Ads Insights</h3>
+                                <p className="text-[#b4bcd0] leading-relaxed font-normal text-[15px]">Track campaign ROAS, assess keyword quality scores, audit budget waste, and compare cross-channel spend.</p>
                             </div>
                         </div>
                     </div>
