@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export const metadata = {
     title: 'Privacy Policy - infini8Graph',
-    description: 'Privacy Policy for infini8Graph Instagram Analytics Platform',
+    description: 'Privacy Policy for infini8Graph Cross-Channel Analytics Platform',
 };
 
 export default function PrivacyPage() {
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
                 </Link>
 
                 <h1 className="text-4xl font-bold mb-2 gradient-text">Privacy Policy</h1>
-                <p className="text-[var(--muted)] mb-12">Last updated: January 20, 2026</p>
+                <p className="text-[var(--muted)] mb-12">Last updated: March 27, 2026</p>
 
                 <div className="prose prose-invert max-w-none space-y-8">
                     <p className="text-lg text-[var(--foreground)]">
@@ -29,37 +29,34 @@ export default function PrivacyPage() {
                     <section className="card">
                         <h2 className="text-2xl font-bold mb-4">1. Information We Collect</h2>
 
-                        <h3 className="text-xl font-semibold mb-3 text-[var(--primary)]">1.1 Information You Provide via Instagram Login</h3>
+                        <h3 className="text-xl font-semibold mb-3 text-[var(--primary)]">1.1 Information Provided via OAuth Login (Meta & Google)</h3>
                         <p className="text-[var(--muted)] mb-4">
-                            When you sign in using Instagram (via Meta OAuth), we collect and store limited information necessary to provide analytics services, including:
+                            When you sign in using Instagram (Meta) or Google Ads (Google via OAuth), we collect and store information necessary to provide cross-channel analytics services:
                         </p>
                         <ul className="list-disc list-inside text-[var(--muted)] space-y-1 mb-4">
-                            <li>Instagram User ID</li>
-                            <li>Instagram username</li>
-                            <li>Account metadata required for analytics access</li>
+                            <li><strong>Meta Platform:</strong> User ID, username, and analytics metadata.</li>
+                            <li><strong>Google Ads API:</strong> Google User ID, email, and advertising account metadata required for analytics access.</li>
                         </ul>
-                        <p className="text-[var(--foreground)] font-medium">We do not collect your Instagram password.</p>
+                        <p className="text-[var(--foreground)] font-medium">We do not collect or store your Instagram or Google account passwords.</p>
 
                         <h3 className="text-xl font-semibold mb-3 mt-6 text-[var(--primary)]">1.2 Access Tokens</h3>
-                        <p className="text-[var(--muted)] mb-2">To access Instagram analytics securely, we store:</p>
+                        <p className="text-[var(--muted)] mb-2">To access cross-channel analytics securely, we store:</p>
                         <ul className="list-disc list-inside text-[var(--muted)] space-y-1 mb-4">
-                            <li>Instagram access tokens</li>
+                            <li>OAuth access tokens and refresh tokens</li>
                             <li>Token expiration timestamps</li>
                         </ul>
                         <p className="text-[var(--foreground)]">
-                            All access tokens are <strong>encrypted at rest</strong> using industry-standard encryption and are never exposed to the client browser.
+                            All access and refresh tokens are <strong>encrypted at rest</strong> using industry-standard AES encryption and are never exposed to the client browser.
                         </p>
 
                         <h3 className="text-xl font-semibold mb-3 mt-6 text-[var(--primary)]">1.3 Analytics Data</h3>
                         <p className="text-[var(--muted)] mb-2">We temporarily process and cache analytics data such as:</p>
                         <ul className="list-disc list-inside text-[var(--muted)] space-y-1 mb-4">
-                            <li>Follower counts and growth trends</li>
-                            <li>Engagement metrics (likes, comments, saves, reach, impressions)</li>
-                            <li>Post, Reel, and hashtag performance</li>
-                            <li>Derived KPIs (e.g. engagement rate, reach ratio)</li>
+                            <li><strong>Instagram:</strong> Reach, impressions, saves, and audience demographics.</li>
+                            <li><strong>Google Ads:</strong> Campaign performance (ROAS, spend, CTR), keyword quality scores, and asset performance labels.</li>
                         </ul>
                         <p className="text-[var(--foreground)]">
-                            This data is used only to generate insights for your account and is <strong>not sold, shared, or used for advertising</strong>.
+                            Our use of Google data is strictly limited to the practices disclosed here and conforms to the <strong>Google API Services User Data Policy</strong>, including the Limited Use requirements. This data is used only to generate insights for your account and is <strong>not sold, shared, or used for third-party advertising</strong>.
                         </p>
 
                         <h3 className="text-xl font-semibold mb-3 mt-6 text-[var(--primary)]">1.4 Automatically Collected Information</h3>

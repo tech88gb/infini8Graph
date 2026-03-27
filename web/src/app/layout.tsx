@@ -6,8 +6,8 @@ import { Providers } from "@/components/Providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "infini8Graph - Instagram Analytics Platform",
-  description: "Professional Instagram analytics for creators and businesses",
+  title: "infini8Graph - Cross-Channel Intelligence & Ads Dashboard",
+  description: "Transform your Instagram presence and Google Ads performance with precision analytics and automation built for growth.",
 };
 
 export default function RootLayout({
