@@ -202,7 +202,6 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
                 .from('users')
                 .update({
                     facebook_user_id: facebookUserId, // Ensure this is set
-                    name: existingUser.name || meResponse.data.name,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', userId);
@@ -213,8 +212,7 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
                 .insert({
                     facebook_user_id: facebookUserId,
                     instagram_user_id: accountsData[0].instagramUserId, // Legacy support
-                    username: accountsData[0].username,
-                    name: meResponse.data.name
+                    username: accountsData[0].username
                 })
                 .select('id')
                 .single();
