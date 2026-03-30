@@ -206,6 +206,10 @@ class AutoReplyService {
      */
     async getAutomationRules(instagramAccountId, currentMediaId = null) {
         try {
+            console.log(`   │  🔍 FETCHING AUTOMATION RULES`);
+            console.log(`   │     Account ID : ${instagramAccountId}`);
+            console.log(`   │     Media ID   : ${currentMediaId || '(none)'}`);
+            
             // Fetch ALL rules for this account (both active general + active specific)
             // We intentionally do NOT filter by is_active at the top level
             // because general and specific rules are independent entities.
@@ -214,9 +218,22 @@ class AutoReplyService {
                 .select('*')
                 .eq('instagram_account_id', instagramAccountId);
 
-            if (error || !allRules || allRules.length === 0) {
+            if (error) {
+                console.log(`   │     ❌ Database error: ${error.message}`);
                 return null;
             }
+
+            if (!allRules || allRules.length === 0) {
+                console.log(`   │     📭 No rules found in database`);
+                return null;
+            }
+
+            console.log(`   │     ✅ Found ${allRules.length} total rule(s) in database`);
+
+            // Log all rules for debugging
+            allRules.forEach((rule, idx) => {
+                console.log(`   │     Rule ${idx + 1}: "${rule.name}" | Active: ${rule.is_active} | media_ids: ${JSON.stringify(rule.media_ids)} | media_id: ${rule.media_id || 'null'}`);
+            });
 
             // Separate rules into specific (post override) and general
             const specificRules = allRules.filter(rule =>
@@ -225,10 +242,16 @@ class AutoReplyService {
                     (rule.media_ids && Array.isArray(rule.media_ids) && rule.media_ids.includes(currentMediaId)))
             );
 
+            console.log(`   │     🔎 Checking for post-specific overrides matching media: ${currentMediaId}`);
+            console.log(`   │     Found ${specificRules.length} matching active override(s)`);
+
             // If there are active specific rules for this post, use ONLY those.
             // The general rule is completely excluded for posts with overrides.
             if (specificRules.length > 0) {
                 console.log(`   │  📋 ${specificRules.length} post-specific override(s) found for media ${currentMediaId}. General rule excluded.`);
+                specificRules.forEach(r => {
+                    console.log(`   │     ✅ Using override: "${r.name}"`);
+                });
                 return specificRules.map(r => ({
                     keywords: r.keywords,
                     reply: r.comment_reply,
@@ -246,12 +269,18 @@ class AutoReplyService {
                 (!rule.media_ids || rule.media_ids.length === 0)
             );
 
+            console.log(`   │     🔎 No post overrides found, checking for general rule`);
+            console.log(`   │     Found ${generalRules.length} active general rule(s)`);
+
             if (generalRules.length === 0) {
                 console.log(`   │  📭 No active general rule and no post overrides for media ${currentMediaId}. Skipping.`);
                 return null;
             }
 
             console.log(`   │  📋 Using general rule for media ${currentMediaId} (no post-specific override found).`);
+            generalRules.forEach(r => {
+                console.log(`   │     ✅ Using general: "${r.name}"`);
+            });
             return generalRules.map(r => ({
                 keywords: r.keywords,
                 reply: r.comment_reply,

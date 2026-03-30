@@ -30,6 +30,7 @@ export async function receiveWebhook(req, res) {
     console.log(`📨 WEBHOOK EVENT RECEIVED`);
     console.log(`   Timestamp : ${timestamp}`);
     console.log(`   Object    : ${body.object}`);
+    console.log(`   RAW BODY  : ${JSON.stringify(body, null, 2)}`);
     console.log('═'.repeat(70));
 
     try {
