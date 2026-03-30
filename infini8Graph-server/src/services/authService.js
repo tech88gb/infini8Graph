@@ -187,11 +187,15 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
 
         // 1. Create or Update User (Unified Identity)
         // Check if user exists by facebook_user_id (new) or legacy instagram_user_id
-        let { data: existingUser } = await supabase
+        let { data: existingUsers } = await supabase
             .from('users')
             .select('*')
-            .or(`facebook_user_id.eq.${facebookUserId},instagram_user_id.eq.${accountsData[0].instagramUserId}`)
-            .single();
+            .or(`facebook_user_id.eq.${facebookUserId},instagram_user_id.eq.${accountsData[0].instagramUserId}`);
+
+        let existingUser = null;
+        if (existingUsers && existingUsers.length > 0) {
+            existingUser = existingUsers.find(u => u.facebook_user_id === facebookUserId) || existingUsers[0];
+        }
 
         let userId;
 
@@ -284,6 +288,22 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
                 primaryAccountId = instagramAccountId;
                 primaryAccountData = account;
             }
+
+            // --- 🌟 NEW: Automatically Subscribe Page to Webhook 🌟 ---
+            try {
+                if (account.pageId && account.pageToken) {
+                    await axios.post(`${GRAPH_API_BASE}/${account.pageId}/subscribed_apps`, null, {
+                        params: {
+                            access_token: account.pageToken,
+                            subscribed_fields: 'messages,messaging_postbacks,messaging_optins,comments,feed'
+                        }
+                    });
+                    console.log(`✅ Automatically subscribed page ${account.pageId} to webhooks!`);
+                }
+            } catch (err) {
+                 console.error(`⚠️ Failed to subscribe page ${account.pageId} to webhooks:`, err.response?.data || err.message);
+            }
+            // --------------------------------------------------------
 
             // 3. Store Auth Token for THIS account
             const expiresAt = new Date();
