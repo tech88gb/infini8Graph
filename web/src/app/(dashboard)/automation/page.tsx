@@ -71,9 +71,14 @@ export default function AutomationPage() {
             if (rulesRes.ok) {
                 const data = await rulesRes.json();
                 const allRules: AutomationRule[] = data.rules || [];
+                console.log('📋 Fetched rules from API:', allRules.length, allRules);
                 setRules(allRules);
                 const def = allRules.find(r => !r.media_id && (!r.media_ids || r.media_ids.length === 0));
                 if (def) { setDefaultRule(def); if (def.keywords?.length > 0) setShowKeywords(true); }
+                
+                // Log specific rules
+                const specific = allRules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
+                console.log('🎯 Specific rules (overrides):', specific.length, specific);
             }
             if (mediaRes.ok) {
                 const data = await mediaRes.json();
@@ -111,6 +116,7 @@ export default function AutomationPage() {
     }, [fetchStats]);
 
     const specificRules = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
+    console.log('📋 All rules:', rules.length, '| Specific rules:', specificRules.length);
     const notify = (type: 'success' | 'error', message: string) => { setToast({ type, message }); setTimeout(() => setToast(null), 3000); };
 
     const toggleDefault = async (checked: boolean) => {
@@ -154,10 +160,25 @@ export default function AutomationPage() {
         if (!newRule.comment_reply.trim()) return notify('error', 'Enter a reply');
         setSaving(true);
         try {
+            console.log('🔧 Creating override:', newRule);
             const res = await fetch(`${API_BASE}/api/automation/rules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(newRule) });
-            if (res.ok) { notify('success', 'Override created!'); setShowCreateOverride(false); setNewRule({ name: '', keywords: [], comment_reply: '', dm_reply: '', send_dm: true, is_active: true, media_id: null, media_ids: [] }); fetchData(); }
-            else notify('error', 'Failed to create');
-        } catch { notify('error', 'Network error'); } finally { setSaving(false); }
+            const data = await res.json();
+            console.log('📥 Create response:', data);
+            if (res.ok) { 
+                notify('success', 'Override created!'); 
+                setShowCreateOverride(false); 
+                setNewRule({ name: '', keywords: [], comment_reply: '', dm_reply: '', send_dm: true, is_active: true, media_id: null, media_ids: [] }); 
+                await fetchData();
+                console.log('✅ Rules after fetch:', rules.length);
+            }
+            else {
+                console.error('❌ Create failed:', data);
+                notify('error', data.error || 'Failed to create');
+            }
+        } catch (err) { 
+            console.error('❌ Network error:', err);
+            notify('error', 'Network error'); 
+        } finally { setSaving(false); }
     };
 
     const deleteRule = async (id: string) => {
