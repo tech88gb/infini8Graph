@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import {
     Card, CardHeader, CardTitle, CardBody,
@@ -115,8 +115,12 @@ export default function AutomationPage() {
         return () => clearInterval(timer);
     }, [fetchStats]);
 
-    const specificRules = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
-    console.log('📋 All rules:', rules.length, '| Specific rules:', specificRules.length);
+    const specificRules = useMemo(() => {
+        const filtered = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
+        console.log('🎯 Computing specificRules:', filtered.length, 'from', rules.length, 'total rules');
+        return filtered;
+    }, [rules]);
+    
     const notify = (type: 'success' | 'error', message: string) => { setToast({ type, message }); setTimeout(() => setToast(null), 3000); };
 
     const toggleDefault = async (checked: boolean) => {
@@ -168,8 +172,16 @@ export default function AutomationPage() {
                 notify('success', 'Override created!'); 
                 setShowCreateOverride(false); 
                 setNewRule({ name: '', keywords: [], comment_reply: '', dm_reply: '', send_dm: true, is_active: true, media_id: null, media_ids: [] }); 
-                await fetchData();
-                console.log('✅ Rules after fetch:', rules.length);
+                
+                // Force immediate refresh
+                setLoading(true);
+                const rulesRes = await fetch(`${API_BASE}/api/automation/rules`, { credentials: 'include' });
+                if (rulesRes.ok) {
+                    const rulesData = await rulesRes.json();
+                    console.log('🔄 Refreshed rules:', rulesData.rules?.length, rulesData.rules);
+                    setRules(rulesData.rules || []);
+                }
+                setLoading(false);
             }
             else {
                 console.error('❌ Create failed:', data);
