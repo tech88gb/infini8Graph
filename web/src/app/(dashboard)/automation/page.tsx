@@ -66,7 +66,7 @@ export default function AutomationPage() {
         try {
             const [rulesRes, mediaRes] = await Promise.all([
                 fetch(`${API_BASE}/api/automation/rules`, { credentials: 'include' }),
-                fetch(`${API_BASE}/api/instagram/posts?limit=100`, { credentials: 'include' })
+                fetch(`${API_BASE}/api/instagram/posts?limit=100&includeCollabs=true`, { credentials: 'include' })
             ]);
             if (rulesRes.ok) {
                 const data = await rulesRes.json();
@@ -77,7 +77,13 @@ export default function AutomationPage() {
             }
             if (mediaRes.ok) {
                 const data = await mediaRes.json();
-                setMedia((data.data?.all || []).map((p: any) => ({ id: p.id, media_url: p.thumbnail, caption: p.caption || '' })));
+                console.log('📸 Fetched posts:', data.data?.total, 'posts (', data.data?.owned_count, 'owned,', data.data?.collab_count, 'collabs)');
+                setMedia((data.data?.all || []).map((p: any) => ({ 
+                    id: p.id, 
+                    media_url: p.thumbnail || p.media_url, 
+                    caption: p.caption || '',
+                    is_collaboration: p.is_collaboration || false
+                })));
             }
         } catch (err) { console.error(err); } finally { setLoading(false); }
     }, []);

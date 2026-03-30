@@ -188,12 +188,15 @@ class InstagramService {
         const basicFields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
         
         try {
-            return await this.apiRequest(`/${this.instagramUserId}/tags`, {
+            console.log(`🔍 Fetching tagged media for user ${this.instagramUserId}...`);
+            const result = await this.apiRequest(`/${this.instagramUserId}/tags`, {
                 fields: basicFields,
                 limit: limit
             });
+            console.log(`✅ Tagged media fetched: ${result.data?.length || 0} posts`);
+            return result;
         } catch (error) {
-            console.warn('Tagged media fetch failed:', error.message);
+            console.warn('⚠️ Tagged media fetch failed:', error.message);
             return { data: [] };
         }
     }
@@ -205,19 +208,24 @@ class InstagramService {
      */
     async getAllMediaIncludingCollabs(limit = 100) {
         try {
+            console.log(`📸 Fetching all media including collabs (limit: ${limit})...`);
+            
             // Fetch owned posts
             const ownedResponse = await this.getMedia(limit);
             const ownedPosts = ownedResponse.data || [];
+            console.log(`   ✅ Owned posts: ${ownedPosts.length}`);
 
             // Fetch tagged posts (includes collabs)
             const taggedResponse = await this.getTaggedMedia(limit);
             const taggedPosts = taggedResponse.data || [];
+            console.log(`   ✅ Tagged posts: ${taggedPosts.length}`);
 
             // Combine and deduplicate by ID
             const allPosts = [...ownedPosts];
             const ownedIds = new Set(ownedPosts.map(p => p.id));
 
             // Add tagged posts that aren't already in owned posts
+            let collabCount = 0;
             for (const post of taggedPosts) {
                 if (!ownedIds.has(post.id)) {
                     // Mark as collaboration/tagged
@@ -225,19 +233,24 @@ class InstagramService {
                         ...post,
                         is_collaboration: true
                     });
+                    collabCount++;
                 }
             }
+
+            console.log(`   🤝 Collaboration posts found: ${collabCount}`);
 
             // Sort by timestamp (newest first)
             allPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+            console.log(`   ✅ Total posts after merge: ${allPosts.length}`);
+
             return {
                 data: allPosts.slice(0, limit),
                 owned_count: ownedPosts.length,
-                collab_count: allPosts.length - ownedPosts.length
+                collab_count: collabCount
             };
         } catch (error) {
-            console.error('Error fetching all media including collabs:', error);
+            console.error('❌ Error fetching all media including collabs:', error);
             // Fallback to just owned posts
             const ownedResponse = await this.getMedia(limit);
             return {
