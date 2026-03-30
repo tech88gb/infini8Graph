@@ -12,17 +12,27 @@ const FRONTEND_REDIRECT_URL = process.env.FRONTEND_REDIRECT_URL || 'http://local
  */
 export async function login(req, res) {
     try {
+        console.log('🔥 LOGIN ENDPOINT HIT');
+        console.log('🔥 ENV CHECK:');
+        console.log('   META_APP_ID:', process.env.META_APP_ID ? '✅ SET' : '❌ MISSING');
+        console.log('   META_REDIRECT_URI:', process.env.META_REDIRECT_URI ? '✅ SET' : '❌ MISSING');
+        
         const loginUrl = authService.getLoginUrl();
         console.log('🔥 GENERATED LOGIN URL:', loginUrl);
+        
+        if (!loginUrl || loginUrl.includes('undefined')) {
+            throw new Error('Login URL contains undefined values - check environment variables');
+        }
+        
         res.json({
             success: true,
             loginUrl
         });
     } catch (error) {
-        console.error('Login initiation error:', error);
+        console.error('❌ Login initiation error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to initiate login'
+            error: error.message || 'Failed to initiate login'
         });
     }
 }
