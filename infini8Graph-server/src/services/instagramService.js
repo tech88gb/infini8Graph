@@ -181,6 +181,74 @@ class InstagramService {
     }
 
     /**
+     * Get tagged media (includes collaboration posts)
+     * @param {number} limit - Number of posts to fetch
+     */
+    async getTaggedMedia(limit = 25) {
+        const basicFields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
+        
+        try {
+            return await this.apiRequest(`/${this.instagramUserId}/tags`, {
+                fields: basicFields,
+                limit: limit
+            });
+        } catch (error) {
+            console.warn('Tagged media fetch failed:', error.message);
+            return { data: [] };
+        }
+    }
+
+    /**
+     * Get all media including collaborations
+     * Combines owned posts and tagged posts (which includes collabs)
+     * @param {number} limit - Number of posts to fetch
+     */
+    async getAllMediaIncludingCollabs(limit = 100) {
+        try {
+            // Fetch owned posts
+            const ownedResponse = await this.getMedia(limit);
+            const ownedPosts = ownedResponse.data || [];
+
+            // Fetch tagged posts (includes collabs)
+            const taggedResponse = await this.getTaggedMedia(limit);
+            const taggedPosts = taggedResponse.data || [];
+
+            // Combine and deduplicate by ID
+            const allPosts = [...ownedPosts];
+            const ownedIds = new Set(ownedPosts.map(p => p.id));
+
+            // Add tagged posts that aren't already in owned posts
+            for (const post of taggedPosts) {
+                if (!ownedIds.has(post.id)) {
+                    // Mark as collaboration/tagged
+                    allPosts.push({
+                        ...post,
+                        is_collaboration: true
+                    });
+                }
+            }
+
+            // Sort by timestamp (newest first)
+            allPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+            return {
+                data: allPosts.slice(0, limit),
+                owned_count: ownedPosts.length,
+                collab_count: allPosts.length - ownedPosts.length
+            };
+        } catch (error) {
+            console.error('Error fetching all media including collabs:', error);
+            // Fallback to just owned posts
+            const ownedResponse = await this.getMedia(limit);
+            return {
+                data: ownedResponse.data || [],
+                owned_count: ownedResponse.data?.length || 0,
+                collab_count: 0
+            };
+        }
+    }
+
+    /**
      * Get insights for a specific media item
      * @param {string} mediaId - The media ID
      * @param {string} mediaType - 'IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', or 'REEL'

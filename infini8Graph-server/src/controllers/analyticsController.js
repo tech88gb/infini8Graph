@@ -86,8 +86,35 @@ export async function getReels(req, res) {
 
 export async function getPosts(req, res) {
     try {
-        const { limit = 50 } = req.query;
+        const { limit = 50, includeCollabs = 'true' } = req.query;
         const analytics = await getAnalyticsService(req);
+        
+        // If includeCollabs is true, fetch all media including collaborations
+        if (includeCollabs === 'true') {
+            const result = await analytics.instagram.getAllMediaIncludingCollabs(parseInt(limit));
+            return res.json({ 
+                success: true, 
+                data: {
+                    all: result.data.map(p => ({
+                        id: p.id,
+                        media_type: p.media_type,
+                        caption: p.caption || '',
+                        media_url: p.media_url,
+                        thumbnail: p.thumbnail_url || p.media_url,
+                        permalink: p.permalink,
+                        timestamp: p.timestamp,
+                        like_count: p.like_count || 0,
+                        comments_count: p.comments_count || 0,
+                        is_collaboration: p.is_collaboration || false
+                    })),
+                    owned_count: result.owned_count,
+                    collab_count: result.collab_count,
+                    total: result.data.length
+                }
+            });
+        }
+        
+        // Otherwise use the standard analytics method
         const data = await analytics.getPostsAnalytics(parseInt(limit));
         res.json({ success: true, data });
     } catch (error) {
