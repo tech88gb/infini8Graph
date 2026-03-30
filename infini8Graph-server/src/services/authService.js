@@ -295,7 +295,7 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
                     await axios.post(`${GRAPH_API_BASE}/${account.pageId}/subscribed_apps`, null, {
                         params: {
                             access_token: account.pageToken,
-                            subscribed_fields: 'messages,messaging_postbacks,messaging_optins,comments,feed'
+                            subscribed_fields: 'messages,messaging_postbacks,messaging_optins,feed'
                         }
                     });
                     console.log(`✅ Automatically subscribed page ${account.pageId} to webhooks!`);
