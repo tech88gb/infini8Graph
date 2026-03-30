@@ -516,11 +516,12 @@ class AutoReplyService {
                 let rules = await this.getAutomationRules(tokenData.instagramAccountId, mediaId);
 
                 if (!rules || rules.length === 0) {
-                    rules = this.commentRules;
-                    console.log(`   │  Using default rules`);
-                } else {
-                    console.log(`   │  Using ${rules.length} custom rule(s)`);
+                    console.log(`   │  📭 No active rules for this post/account. Skipping.`);
+                    console.log(`   └─ END`);
+                    continue;
                 }
+
+                console.log(`   │  Using ${rules.length} custom rule(s)`);
 
                 const rule = this.findMatchingRule(text, rules);
                 if (!rule) {

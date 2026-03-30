@@ -291,33 +291,85 @@ export default function AutomationPage() {
                                     {showCreateOverride ? (<><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>Cancel</>) : (<><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>Add override</>)}
                                 </Button>
                             </CardHeader>
+                            
                             {showCreateOverride && (
-                                    <div style={{ padding: 'var(--space-6)', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-light)' }}>
-                                    <div className="mb-5">
-                                        <label className="form-label">Rule name</label>
-                                        <input type="text" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} placeholder="e.g. Summer Sale Post" className="input" />
+                                <div style={{ padding: 'var(--space-6)', background: 'var(--card-raised)', borderRadius: 'var(--radius-lg)', margin: 'var(--space-4)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid inset rgba(255,255,255,0.05)' }}>
+                                    <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--foreground)', marginBottom: 'var(--space-6)', borderBottom: '1px solid var(--border-light)', paddingBottom: 'var(--space-4)' }}>Create New Override</h3>
+                                    
+                                    <div className="mb-6">
+                                        <label className="form-label">Rule Name</label>
+                                        <input type="text" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} placeholder="e.g. Summer Sale Keyword Campaign" className="input" style={{ fontSize: '15px' }} />
                                     </div>
-                                    <div className="mb-5">
-                                        <label className="form-label">Select posts {(newRule.media_ids?.length || 0) > 0 && <span className="text-primary">({newRule.media_ids?.length} selected)</span>}</label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 'var(--space-2)', maxHeight: 160, overflowY: 'auto', padding: 'var(--space-3)', background: 'var(--card-raised)', borderRadius: 'var(--radius-lg)', border: '1.5px solid var(--border)' }}>
-                                            {media.length === 0 ? <p className="text-muted text-center" style={{ gridColumn: '1/-1', padding: 'var(--space-6)' }}>No posts available</p> : media.map(m => {
+                                    
+                                    {/* Select Posts Horizontal Scroll */}
+                                    <div className="mb-6">
+                                        <label className="form-label flex items-center justify-between">
+                                            <span>Select Posts {(newRule.media_ids?.length || 0) > 0 && <span className="text-primary ml-2">({newRule.media_ids?.length} selected)</span>}</span>
+                                            <span className="text-xs text-muted font-normal">Select one or more posts to target</span>
+                                        </label>
+                                        <div style={{ display: 'flex', gap: 'var(--space-4)', overflowX: 'auto', padding: 'var(--space-2) 0 var(--space-4) 0', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
+                                            {media.length === 0 ? <p className="text-muted p-4">No posts available. Connect an Instagram account with actively tracked posts.</p> : media.map(m => {
                                                 const selected = newRule.media_ids?.includes(m.id);
                                                 return (
-                                                    <div key={m.id} onClick={() => togglePost(m.id)} style={{ aspectRatio: '1', borderRadius: 'var(--radius-md)', overflow: 'hidden', cursor: 'pointer', position: 'relative', border: selected ? '2px solid var(--primary)' : '2px solid transparent', transition: 'border 0.2s' }}>
-                                                        <img src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                                                        {selected && <div style={{ position: 'absolute', inset: 0, background: 'rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 20, height: 20, borderRadius: 'var(--radius-full)', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="12" height="12" fill="none" stroke="white" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div></div>}
+                                                    <div key={m.id} onClick={() => togglePost(m.id)} style={{ 
+                                                        flex: '0 0 auto', width: 150, cursor: 'pointer', 
+                                                        background: selected ? 'var(--color-primary-900)' : 'var(--card-hover)',
+                                                        border: selected ? '2px solid var(--primary)' : '1px solid var(--border-light)',
+                                                        borderRadius: 'var(--radius-lg)', overflow: 'hidden', padding: 'var(--space-2)',
+                                                        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)', position: 'relative',
+                                                        transform: selected ? 'scale(1.02)' : 'scale(1)'
+                                                    }}>
+                                                        <div style={{ aspectRatio: '1', borderRadius: 'calc(var(--radius-lg) - var(--space-2))', overflow: 'hidden', position: 'relative' }}>
+                                                            <img src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                                                            {selected && <div style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.4)' }}><svg width="14" height="14" fill="none" stroke="white" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div>}
+                                                        </div>
+                                                        <p style={{ marginTop: 'var(--space-2)', fontSize: '11.5px', color: selected ? 'var(--primary-light)' : 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, padding: '0 2px' }}>
+                                                            {m.caption || 'No caption'}
+                                                        </p>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }} className="mb-5">
-                                        <div><label className="form-label">Comment reply</label><textarea value={newRule.comment_reply} onChange={e => setNewRule({ ...newRule, comment_reply: e.target.value })} placeholder="Your reply..." className="input" style={{ minHeight: 80 }} /></div>
-                                        <div><label className="form-label">Private DM</label><textarea value={newRule.dm_reply} onChange={e => setNewRule({ ...newRule, dm_reply: e.target.value })} placeholder="DM message..." className="input" style={{ minHeight: 80 }} /></div>
+
+                                    {/* Override Keywords (optional) */}
+                                    <div className="mb-6">
+                                        <label className="form-label flex items-center justify-between">
+                                            <span>Trigger Keywords</span>
+                                            <span className="text-xs text-muted font-normal">Optional</span>
+                                        </label>
+                                        <p className="text-xs text-muted mb-3" style={{ marginTop: '-4px' }}>If left empty, this rule will trigger for ALL comments on the selected posts. To trigger based on specific words, add them below.</p>
+                                        <div className="flex gap-3">
+                                            <input type="text" value={kwInput} onChange={e => setKwInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addKeyword(kwInput, setKwInput, newRule, setNewRule))} placeholder="e.g. price, link, info..." className="input" style={{ flex: 1 }} />
+                                            <Button variant="secondary" onClick={() => addKeyword(kwInput, setKwInput, newRule, setNewRule)}>Add</Button>
+                                        </div>
+                                        {newRule.keywords.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-3 p-3" style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                                                {newRule.keywords.map(k => <Chip key={k} onRemove={() => setNewRule({ ...newRule, keywords: newRule.keywords.filter(x => x !== k) })}>{k}</Chip>)}
+                                            </div>
+                                        )}
                                     </div>
-                                    <Button variant="primary" block onClick={createOverride} isLoading={saving}>Create override</Button>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--space-5)' }} className="mb-6">
+                                        <div>
+                                            <label className="form-label">Public Comment Reply</label>
+                                            <textarea value={newRule.comment_reply} onChange={e => setNewRule({ ...newRule, comment_reply: e.target.value })} placeholder="E.g. Thanks for your interest! Check your DMs. 📩" className="input" style={{ minHeight: 90, fontSize: '14px' }} />
+                                        </div>
+                                        <div>
+                                            <label className="form-label flex items-center justify-between">
+                                                <span>Private DM (Optional)</span>
+                                                <Checkbox checked={newRule.send_dm} onChange={(checked) => setNewRule({ ...newRule, send_dm: checked })} label="" />
+                                            </label>
+                                            <textarea value={newRule.dm_reply} onChange={e => setNewRule({ ...newRule, dm_reply: e.target.value })} placeholder="E.g. Hey! Here is the link you requested: https://..." className="input" style={{ minHeight: 90, fontSize: '14px', opacity: newRule.send_dm ? 1 : 0.4, transition: 'opacity 0.2s', pointerEvents: newRule.send_dm ? 'auto' : 'none' }} />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Button variant="primary" onClick={createOverride} isLoading={saving} style={{ flex: 1, height: '48px', fontSize: '15px' }}>Save Override Rule</Button>
+                                        <Button variant="ghost" onClick={() => setShowCreateOverride(false)} style={{ height: '48px', padding: '0 var(--space-6)' }}>Cancel</Button>
+                                    </div>
                                 </div>
                             )}
+
                             <div>
                                 {specificRules.length === 0 ? (
                                     <EmptyState icon={<svg width="24" height="24" fill="none" stroke="var(--muted)" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>} title="No overrides yet" description="Create custom replies for specific posts" />
