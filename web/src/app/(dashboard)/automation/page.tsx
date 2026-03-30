@@ -388,7 +388,6 @@ export default function AutomationPage() {
                                         <div style={{ display: 'flex', gap: 'var(--space-4)', overflowX: 'auto', padding: 'var(--space-2) 0 var(--space-4) 0', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
                                             {media.length === 0 ? <p className="text-muted p-4">No posts available.</p> : media.map(m => {
                                                 const selected = newRule.media_ids?.includes(m.id);
-                                                const isCollab = m.is_collaboration || false;
                                                 return (
                                                     <div key={m.id} onClick={() => togglePost(m.id)} style={{ 
                                                         flex: '0 0 auto', width: 140, cursor: 'pointer', 
@@ -401,10 +400,6 @@ export default function AutomationPage() {
                                                         <div style={{ aspectRatio: '1', borderRadius: 'calc(var(--radius-lg) - var(--space-2))', overflow: 'hidden', position: 'relative' }}>
                                                             <img src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                                                             {selected && <div style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="14" height="14" fill="none" stroke="white" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div>}
-                                                            {isCollab && <div style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: '4px', background: 'rgba(0,0,0,0.7)', fontSize: '9px', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                                                                <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                                                COLLAB
-                                                            </div>}
                                                         </div>
                                                         <p style={{ marginTop: 'var(--space-2)', fontSize: '11px', color: selected ? 'var(--primary-light)' : 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, padding: '0 2px' }}>
                                                             {m.caption || 'No caption'}
