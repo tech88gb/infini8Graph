@@ -206,57 +206,58 @@ class AutoReplyService {
      */
     async getAutomationRules(instagramAccountId, currentMediaId = null) {
         try {
-            // Fetch ALL active rules for this account
+            // Fetch ALL rules for this account (both active general + active specific)
+            // We intentionally do NOT filter by is_active at the top level
+            // because general and specific rules are independent entities.
             const { data: allRules, error } = await supabase
                 .from('automation_rules')
                 .select('*')
-                .eq('instagram_account_id', instagramAccountId)
-                .eq('is_active', true);
+                .eq('instagram_account_id', instagramAccountId);
 
             if (error || !allRules || allRules.length === 0) {
                 return null;
             }
 
-            // Filter for matching rules
-            const applicableRules = allRules.filter(rule => {
-                // 1. General Rule (Application to all posts)
-                if (!rule.media_id && (!rule.media_ids || rule.media_ids.length === 0)) {
-                    return true;
-                }
+            // Separate rules into specific (post override) and general
+            const specificRules = allRules.filter(rule =>
+                rule.is_active &&
+                (rule.media_id === currentMediaId ||
+                    (rule.media_ids && Array.isArray(rule.media_ids) && rule.media_ids.includes(currentMediaId)))
+            );
 
-                // 2. Specific Post Rule (Single ID)
-                if (rule.media_id === currentMediaId) {
-                    return true;
-                }
+            // If there are active specific rules for this post, use ONLY those.
+            // The general rule is completely excluded for posts with overrides.
+            if (specificRules.length > 0) {
+                console.log(`   │  📋 ${specificRules.length} post-specific override(s) found for media ${currentMediaId}. General rule excluded.`);
+                return specificRules.map(r => ({
+                    keywords: r.keywords,
+                    reply: r.comment_reply,
+                    dmReply: r.dm_reply,
+                    sendDM: r.send_dm,
+                    priority: 1,
+                    name: r.name
+                }));
+            }
 
-                // 3. Specific Post Rule (Multiple IDs)
-                if (rule.media_ids && Array.isArray(rule.media_ids) && rule.media_ids.includes(currentMediaId)) {
-                    return true;
-                }
+            // No specific overrides for this post — fall back to the general rule (if active)
+            const generalRules = allRules.filter(rule =>
+                rule.is_active &&
+                !rule.media_id &&
+                (!rule.media_ids || rule.media_ids.length === 0)
+            );
 
-                return false;
-            });
+            if (generalRules.length === 0) {
+                console.log(`   │  📭 No active general rule and no post overrides for media ${currentMediaId}. Skipping.`);
+                return null;
+            }
 
-            if (applicableRules.length === 0) return null;
-
-            // Sort by specificity (Specific posts > General)
-            applicableRules.sort((a, b) => {
-                const aIsSpecific = a.media_id || (a.media_ids && a.media_ids.length > 0);
-                const bIsSpecific = b.media_id || (b.media_ids && b.media_ids.length > 0);
-                if (aIsSpecific && !bIsSpecific) return -1; // a comes first
-                if (!aIsSpecific && bIsSpecific) return 1;  // b comes first
-                return 0;
-            });
-
-            console.log(`   │  📋 ${applicableRules.length} matching rule(s) for media ${currentMediaId || 'all posts'}`);
-
-            return applicableRules.map(r => ({
+            console.log(`   │  📋 Using general rule for media ${currentMediaId} (no post-specific override found).`);
+            return generalRules.map(r => ({
                 keywords: r.keywords,
                 reply: r.comment_reply,
                 dmReply: r.dm_reply,
                 sendDM: r.send_dm,
-                // Assign priority: 1 for specific, 2 for general
-                priority: (r.media_id || (r.media_ids && r.media_ids.length > 0)) ? 1 : 2,
+                priority: 2,
                 name: r.name
             }));
 
