@@ -38,6 +38,24 @@ const customerCache = new Map();
 const pendingPromises = new Map();
 
 /**
+ * Result-level cache: keyed by `userId:endpoint:preset`.
+ * Prevents multiple simultaneous or near-simultaneous calls (e.g., alerts
+ * calling campaigns+keywords+budget, and OverviewTab calling budget at the
+ * same time) from hitting Google twice for the same data.
+ */
+const resultCache = new Map();
+
+function getCachedResult(key) {
+    const entry = resultCache.get(key);
+    if (entry && Date.now() - entry.ts < 300000) return entry.data;
+    return null;
+}
+
+function setCachedResult(key, data) {
+    resultCache.set(key, { data, ts: Date.now() });
+}
+
+/**
  * Resolves the correct ad account credentials for a user.
  */
 export async function getCustomerId(userId) {
@@ -158,6 +176,10 @@ function getDateRange(preset = '30d') {
 // ===================== OVERVIEW METRICS =====================
 
 export async function getAdsPerformance(userId, preset = '30d') {
+    const cacheKey = `${userId}:performance:${preset}`;
+    const cached = getCachedResult(cacheKey);
+    if (cached) { console.log(`⚡ [cache] performance:${preset}`); return cached; }
+
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
@@ -193,7 +215,7 @@ export async function getAdsPerformance(userId, preset = '30d') {
         const roas  = spend > 0 ? (convValue / spend).toFixed(2) : '0.00';
         const costPerConversion = conversions > 0 ? (spend / conversions).toFixed(2) : '0.00';
 
-        return {
+        const result = {
             connected: true,
             hasAdAccounts: true,
             customerId: creds.customerId,
@@ -209,6 +231,8 @@ export async function getAdsPerformance(userId, preset = '30d') {
             },
             period: preset,
         };
+        setCachedResult(cacheKey, result);
+        return result;
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;
         console.error('❌ Google Ads overview error:', msg);
@@ -219,6 +243,10 @@ export async function getAdsPerformance(userId, preset = '30d') {
 // ===================== CAMPAIGN BREAKDOWN =====================
 
 export async function getCampaignBreakdown(userId, preset = '30d') {
+    const cacheKey = `${userId}:campaigns:${preset}`;
+    const cached = getCachedResult(cacheKey);
+    if (cached) { console.log(`⚡ [cache] campaigns:${preset}`); return cached; }
+
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
@@ -289,7 +317,9 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
             };
         }).sort((a, b) => b.spend - a.spend);
 
-        return { connected: true, campaigns, period: preset };
+        const result = { connected: true, campaigns, period: preset };
+        setCachedResult(cacheKey, result);
+        return result;
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;
         console.error('❌ Campaign breakdown error:', msg);
@@ -300,6 +330,10 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
 // ===================== BUDGET UTILIZATION =====================
 
 export async function getBudgetUtilization(userId) {
+    const cacheKey = `${userId}:budget`;
+    const cached = getCachedResult(cacheKey);
+    if (cached) { console.log('⚡ [cache] budget'); return cached; }
+
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
@@ -342,7 +376,9 @@ export async function getBudgetUtilization(userId) {
         }).filter(c => c.budgetAmount > 0)
           .sort((a, b) => b.utilization - a.utilization);
 
-        return { connected: true, campaigns };
+        const result = { connected: true, campaigns };
+        setCachedResult(cacheKey, result);
+        return result;
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;
         console.error('❌ Budget utilization error:', msg);
@@ -527,8 +563,15 @@ export async function getAdCreativePreviews(userId) {
 
 // ===================== CROSS-PLATFORM COMPARISON =====================
 
+/**
+ * Cross-platform summary.
+ * IMPORTANT: We reuse the already-cached getAdsPerformance result - this
+ * does NOT fire an extra Google API call if performance was already fetched.
+ */
 export async function getCrossPlatformSummary(userId, metaSpend = 0, metaImpressions = 0, metaClicks = 0, preset = '30d') {
     try {
+        // getAdsPerformance is result-cached — this will be a cache hit if
+        // the OverviewTab already fetched it moments ago
         const perf = await getAdsPerformance(userId, preset);
         if (!perf.connected) return { connected: false };
 
@@ -539,6 +582,7 @@ export async function getCrossPlatformSummary(userId, metaSpend = 0, metaImpress
 
         return {
             connected: true,
+            combined: true,
             google: {
                 spend: googleSpend,
                 impressions: googleImpressions,

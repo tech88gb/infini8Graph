@@ -1123,13 +1123,16 @@ export default function GoogleAdsPage() {
         retry: 1
     });
 
+    // Alerts: only fetched when user is actually on the Alerts tab.
+    // getRecommendations runs 3 sub-queries (campaigns+keywords+budget) inside
+    // it — we do NOT want those hitting Google on every page load.
     const { data: alertsData } = useQuery({
         queryKey: ['google-alerts'],
         queryFn: async () => {
             const res = await googleAdsApi.getAlerts();
             return res.data.data;
         },
-        enabled: !!status?.connected,
+        enabled: !!status?.connected && activeTab === 'alerts',
         staleTime: 300000,
         refetchOnWindowFocus: false,
         retry: false
