@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+Allow: /_next/static/
+Allow: /google01aff837cb9d7777.html
+
+Sitemap: https://infini8graph.vercel.app/sitemap.xml

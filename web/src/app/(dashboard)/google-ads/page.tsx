@@ -7,8 +7,12 @@ import {
     BarChart2, TrendingUp, TrendingDown, DollarSign, MousePointer, Eye,
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
-    Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin
+    Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin,
+    Crosshair, UserCheck, ShieldAlert
 } from 'lucide-react';
+import {
+    TrueRoasTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab
+} from '@/components/GoogleAdsIntelligentTabs';
 import {
     AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
     BarChart as ReBarChart, Bar, PieChart, Pie, Cell, CartesianGrid, Legend
@@ -1153,13 +1157,13 @@ export default function GoogleAdsPage() {
 
     const tabs = [
         { key: 'overview', label: 'Overview', icon: BarChart2 },
+        { key: 'true-roas', label: 'True ROAS', icon: Activity },
+        { key: 'local', label: 'Local Impact', icon: MapPin },
+        { key: 'competitors', label: 'Threats', icon: Crosshair },
+        { key: 'search-terms', label: 'Wasted Spend', icon: ShieldAlert },
+        { key: 'persona', label: 'Customer Persona', icon: UserCheck },
         { key: 'campaigns', label: 'Campaigns', icon: Target },
         { key: 'keywords', label: 'Keywords', icon: Search },
-        { key: 'competitors', label: 'Competitors', icon: Users },
-        { key: 'search-terms', label: 'Search Terms', icon: Search },
-        { key: 'intelligence', label: 'Intelligence', icon: Cpu },
-        { key: 'geo', label: 'Location', icon: MapPin },
-        { key: 'creatives', label: 'Creatives', icon: Layers },
         { key: 'alerts', label: 'Alerts', icon: AlertTriangle, badge: urgentCount },
     ];
 
@@ -1179,7 +1183,7 @@ export default function GoogleAdsPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* Date Range Picker */}
-                    {['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo'].includes(activeTab) && (
+                    {['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo', 'true-roas'].includes(activeTab) && (
                         <div style={{ display: 'flex', gap: 4, background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
                             {PRESETS.map((p) => (
                                 <button
@@ -1227,13 +1231,13 @@ export default function GoogleAdsPage() {
             {/* Tab Content */}
             <div style={{ padding: '20px 0' }}>
                 {activeTab === 'overview' && <OverviewTab preset={preset} />}
+                {activeTab === 'true-roas' && <TrueRoasTab />}
+                {activeTab === 'local' && <LocalImpactTab />}
+                {activeTab === 'persona' && <PersonaBuilderTab />}
                 {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
                 {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
-                {activeTab === 'competitors' && <CompetitorsTab preset={preset} />}
-                {activeTab === 'search-terms' && <SearchTermsTab preset={preset} />}
-                {activeTab === 'intelligence' && <IntelligenceTab />}
-                {activeTab === 'geo' && <GeoTab preset={preset} />}
-                {activeTab === 'creatives' && <CreativesTab />}
+                {activeTab === 'competitors' && <CompetitorThreatTab preset={preset} />}
+                {activeTab === 'search-terms' && <WastedSpendTab preset={preset} />}
                 {activeTab === 'alerts' && <AlertsTab />}
             </div>
         </div>
