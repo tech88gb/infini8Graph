@@ -130,6 +130,47 @@ function Tab({ label, icon: Icon, active, onClick, badge }: { label: string; ico
     );
 }
 
+function AccountSelector({ currentId, allIds, onSelect, loading }: { currentId: string, allIds: string[], onSelect: (id: string) => void, loading: boolean }) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, padding: '12px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #4285F4, #34A853)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <BarChart size={16} color="#fff" />
+                </div>
+                <div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Ad Account</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{currentId || 'Discovering...'}</div>
+                </div>
+            </div>
+
+            <div style={{ flex: 1 }} />
+
+            <div style={{ display: 'flex', gap: 6 }}>
+                {allIds.map(id => (
+                    <button
+                        key={id}
+                        onClick={() => onSelect(id)}
+                        disabled={loading}
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            background: id === currentId ? 'var(--primary)' : 'transparent',
+                            color: id === currentId ? '#fff' : 'var(--muted)',
+                            border: id === currentId ? 'none' : '1px solid var(--border)'
+                        }}
+                    >
+                        {loading && id === currentId ? '...' : id}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // ==================== OVERVIEW TAB ====================
 
 function OverviewTab({ preset }: { preset: string }) {
@@ -733,7 +774,7 @@ function IntelligenceTab() {
     const { data: assetData, isLoading: assetLoading } = useQuery({
         queryKey: ['google-assets'],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssets();
+            const res = await googleAdsApi.getAssetData();
             return res.data.data;
         }
     });
@@ -1076,6 +1117,28 @@ export default function GoogleAdsPage() {
         retry: 1
     });
 
+    const { data: accountsData, isLoading: accountsLoading } = useQuery({
+        queryKey: ['google-accounts'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getDiscovery();
+            return res.data.data;
+        },
+        enabled: !!status?.connected,
+        staleTime: 300000
+    });
+
+    const switchMutation = useMutation({
+        mutationFn: async (id: string) => {
+            await googleAdsApi.updateAccount({ customerId: id });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['google-status'] });
+            queryClient.invalidateQueries({ queryKey: ['google-accounts'] });
+            queryClient.invalidateQueries({ queryKey: ['google-perf'] });
+            window.location.reload(); // Refresh to ensure all tab queries pick up new ID
+        }
+    });
+
     // Alerts: only fetched when user is actually on the Alerts tab.
     // getRecommendations runs 3 sub-queries (campaigns+keywords+budget) inside
     // it — we do NOT want those hitting Google on every page load.
@@ -1182,6 +1245,14 @@ export default function GoogleAdsPage() {
                     </button>
                 </div>
             </div>
+
+            {/* Account Picker */}
+            <AccountSelector
+                currentId={accountsData?.customerId || ''}
+                allIds={accountsData?.allClientIds || []}
+                onSelect={(id) => switchMutation.mutate(id)}
+                loading={switchMutation.isPending}
+            />
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>

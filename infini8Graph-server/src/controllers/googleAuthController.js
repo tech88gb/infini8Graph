@@ -239,6 +239,36 @@ export async function getGeoData(req, res) {
     }
 }
 
+export async function getAccounts(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const account = await getConnectedGoogleAccount(userId);
+        if (!account) return res.status(404).json({ success: false, error: 'Not connected' });
+        
+        // Return stored discovery info
+        return res.json({ 
+            success: true, 
+            data: { 
+                customerId: account.customer_id,
+                allClientIds: account.all_client_ids || []
+            } 
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+export async function updateAccount(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const { customerId, loginCustomerId, allClientIds } = req.body;
+        await updateConnectedAccount(userId, { customerId, loginCustomerId, allClientIds });
+        return res.json({ success: true });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: error.message });
+    }
+}
+
 export default { 
     login, 
     callback, 
@@ -256,5 +286,7 @@ export default {
     getQualityScore,
     getAssetData,
     getBiddingData,
-    getGeoData
+    getGeoData,
+    getAccounts,
+    updateAccount
 };

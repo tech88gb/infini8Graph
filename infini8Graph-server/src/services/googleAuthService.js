@@ -82,6 +82,9 @@ export async function saveUserAndTokens(userId, googleUserInfo, tokens) {
             email: googleUserInfo.email,
             name: googleUserInfo.name,
             picture: googleUserInfo.picture,
+            customer_id: null, // Reset on reconnect to force rediscovery
+            login_customer_id: null,
+            all_client_ids: null,
             updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' }) // One Google account per user for simplicity
         .select('id')
@@ -135,7 +138,7 @@ export async function getGoogleTokensForUser(userId) {
     try {
         const { data: account, error: accError } = await supabase
             .from('google_accounts')
-            .select('id, email')
+            .select('id, email, customer_id, login_customer_id, all_client_ids')
             .eq('user_id', userId)
             .maybeSingle();
 
@@ -189,12 +192,30 @@ export async function getGoogleTokensForUser(userId) {
 export async function getConnectedGoogleAccount(userId) {
     const { data, error } = await supabase
         .from('google_accounts')
-        .select('id, email, name, picture')
+        .select('id, email, name, picture, customer_id, login_customer_id, all_client_ids')
         .eq('user_id', userId)
         .maybeSingle();
 
     if (error || !data) return null;
     return data;
+}
+
+/**
+ * Update the preferred customer ID for an account
+ */
+export async function updateConnectedAccount(userId, payload) {
+    const { error } = await supabase
+        .from('google_accounts')
+        .update({
+            customer_id: payload.customerId,
+            login_customer_id: payload.loginCustomerId,
+            all_client_ids: payload.allClientIds,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+
+    if (error) throw error;
+    return true;
 }
 
 /**
@@ -221,5 +242,6 @@ export default {
     saveUserAndTokens,
     getGoogleTokensForUser,
     getConnectedGoogleAccount,
+    updateConnectedAccount,
     disconnectGoogleAccount,
 };

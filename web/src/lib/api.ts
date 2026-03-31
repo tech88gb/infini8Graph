@@ -136,9 +136,12 @@ export const googleAdsApi = {
     getAuctionInsights: (preset = '30d') => googleApi.get(`/google/auth/auction-insights?preset=${preset}`),
     getSearchTerms: (preset = '30d') => googleApi.get(`/google/auth/search-terms?preset=${preset}`),
     getQualityScore: () => googleApi.get('/google/auth/quality-score'),
-    getAssets: () => googleApi.get('/google/auth/assets'),
+    getAssetData: () => googleApi.get('/google/auth/assets'),
     getBidding: (preset = '30d') => googleApi.get(`/google/auth/bidding?preset=${preset}`),
     getGeo: (preset = '30d') => googleApi.get(`/google/auth/geo?preset=${preset}`),
+    getDiscovery: () => googleApi.get('/google/auth/accounts'),
+    updateAccount: (payload: { customerId: string; loginCustomerId?: string; allClientIds?: string[] }) =>
+        googleApi.post('/google/auth/update-account', payload),
 };
 
 export default api;

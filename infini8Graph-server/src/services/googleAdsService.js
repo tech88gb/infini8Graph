@@ -61,11 +61,11 @@ function setCachedResult(key, data) {
 export async function getCustomerId(userId) {
     const cacheKey = String(userId);
     const now = Date.now();
-    const cached = customerCache.get(cacheKey);
+    const memCached = customerCache.get(cacheKey);
 
-    // 1. Check Result Cache (5 minutes)
-    if (cached && now - cached.timestamp < 300000) {
-        return cached.data;
+    // 1. Check Memory Cache (5 minutes)
+    if (memCached && now - memCached.timestamp < 300000) {
+        return memCached.data;
     }
 
     // 2. Check In-Flight Promise Cache (Deduplication)
@@ -73,35 +73,49 @@ export async function getCustomerId(userId) {
         return pendingPromises.get(cacheKey);
     }
 
-    // 3. Resolve if no cache exists
+    // 3. Resolve
     const resolvePromise = (async () => {
         try {
             console.log(`📡 [GoogleAds] Resolving CID for user ${userId}...`);
-            const tokens = await getGoogleTokensForUser(userId);
-            if (!tokens || !tokens.refreshToken) return null;
+            const tokenData = await import('./googleAuthService.js');
+            const account = await tokenData.getGoogleTokensForUser(userId);
+            
+            if (!account || !account.refreshToken) return null;
 
+            // 4. DATABASE-LEVEL CACHE (Real Fix)
+            // If we already have a customerId stored in DB, use it immediately (0ms API calls)
+            if (account.customer_id) {
+                console.log(`✅ [DB Cache] Using stored CID: ${account.customer_id}`);
+                const result = {
+                    customerId: account.customer_id,
+                    loginCustomerId: account.login_customer_id,
+                    allClientIds: account.all_client_ids || [account.customer_id],
+                    refreshToken: account.refreshToken
+                };
+                customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
+                return result;
+            }
+
+            // 5. PARALLEL DISCOVERY (If no DB cache)
+            console.log("🔍 No DB cache. Starting Parallel Discovery...");
             const client = new GoogleAdsApi({
                 client_id: CLIENT_ID,
                 client_secret: CLIENT_SECRET,
                 developer_token: DEVELOPER_TOKEN,
             });
 
-            const accessibleResponse = await client.listAccessibleCustomers(tokens.refreshToken);
-            const accessible = accessibleResponse?.resource_names;
-            if (!accessible || accessible.length === 0) return null;
+            const accessibleResponse = await client.listAccessibleCustomers(account.refreshToken);
+            const accessible = accessibleResponse?.resource_names || [];
+            if (accessible.length === 0) return null;
 
-            console.log('📋 Accessible Google customers:', accessible);
-
-            let fallbackClient = null;
-
-            for (const resource of accessible) {
-                const managerCandidateId = resource.replace('customers/', '');
-
+            // Parallelized lookup for all accessible accounts
+            const discoveryTasks = accessible.map(async (resource) => {
+                const managerId = resource.replace('customers/', '');
                 try {
                     const managerCustomer = client.Customer({
-                        customer_id: managerCandidateId,
-                        refresh_token: tokens.refreshToken,
-                        login_customer_id: managerCandidateId,
+                        customer_id: managerId,
+                        refresh_token: account.refreshToken,
+                        login_customer_id: managerId,
                     });
 
                     const clientRows = await managerCustomer.query(`
@@ -112,39 +126,28 @@ export async function getCustomerId(userId) {
                     `);
 
                     if (clientRows && clientRows.length > 0) {
-                        const allClientIds = clientRows.map(r => String(r.customer_client.id));
-                        const primaryClientId = allClientIds[0];
-
-                        if (primaryClientId !== String(managerCandidateId)) {
-                            console.log(`✅ MCC detected: manager=${managerCandidateId}, clients=${allClientIds.join(', ')}`);
-                            const result = {
-                                customerId: primaryClientId,
-                                loginCustomerId: managerCandidateId,
-                                allClientIds,
-                                refreshToken: tokens.refreshToken,
-                            };
-                            customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
-                            return result;
-                        } else {
-                            if (!fallbackClient) {
-                                fallbackClient = {
-                                    customerId: managerCandidateId,
-                                    loginCustomerId: managerCandidateId,
-                                    allClientIds: [managerCandidateId],
-                                    refreshToken: tokens.refreshToken,
-                                };
-                            }
-                        }
+                        return {
+                            customerId: String(clientRows[0].customer_client.id),
+                            loginCustomerId: managerId,
+                            allClientIds: clientRows.map(r => String(r.customer_client.id))
+                        };
                     }
-                } catch (err) {
-                    console.log(`⚠️  Could not query clients for ${managerCandidateId}: ${err.message?.slice(0, 80)}`);
-                }
-            }
+                    return null;
+                } catch (err) { return null; }
+            });
 
-            if (fallbackClient) {
-                console.log(`📌 Using ${fallbackClient.customerId} as fallback direct account`);
-                customerCache.set(cacheKey, { data: fallbackClient, timestamp: Date.now() });
-                return fallbackClient;
+            const discoveryResults = (await Promise.all(discoveryTasks)).filter(Boolean);
+            
+            if (discoveryResults.length > 0) {
+                const primary = discoveryResults[0];
+                const result = { ...primary, refreshToken: account.refreshToken };
+
+                // 6. PERSIST TO DATABASE (Fix for future requests)
+                console.log(`💾 [DB Persist] Saving discovered IDs for user ${userId}`);
+                await tokenData.updateConnectedAccount(userId, result);
+
+                customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
+                return result;
             }
 
             return null;
@@ -152,7 +155,6 @@ export async function getCustomerId(userId) {
             console.error(`❌ [GoogleAds] Error resolving CID:`, error.message);
             return null;
         } finally {
-            // Remove from pending so next cycle can retry if needed
             pendingPromises.delete(cacheKey);
         }
     })();

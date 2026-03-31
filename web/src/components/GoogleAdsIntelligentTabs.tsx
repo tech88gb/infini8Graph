@@ -29,7 +29,7 @@ export function TrueRoasTab({ preset = '30d' }: { preset?: string }) {
     const { data: assetData, isLoading: assetLoading } = useQuery({
         queryKey: ['google-assets'],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssets();
+            const res = await googleAdsApi.getAssetData();
             return res.data.data;
         },
         staleTime: 300000,
