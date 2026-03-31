@@ -20,6 +20,7 @@ import {
     getAssetPerformance,
     getBiddingInsights,
     getGeoPerformance,
+    getCustomerId,
 } from '../services/googleAdsService.js';
 import dotenv from 'dotenv';
 
@@ -242,16 +243,18 @@ export async function getGeoData(req, res) {
 export async function getAccounts(req, res) {
     try {
         const userId = req.user?.userId;
-        const account = await getConnectedGoogleAccount(userId);
-        if (!account) return res.status(404).json({ success: false, error: 'Not connected' });
-        
-        // Return stored discovery info
-        return res.json({ 
-            success: true, 
-            data: { 
-                customerId: account.customer_id,
-                allClientIds: account.all_client_ids || []
-            } 
+        // Use getCustomerId — resolves via memory cache → DB columns → parallel discovery
+        // This ensures the AccountSelector never shows 'Discovering...' forever
+        const creds = await getCustomerId(userId);
+        if (!creds) return res.status(404).json({ success: false, error: 'No Google Ads account found' });
+
+        return res.json({
+            success: true,
+            data: {
+                customerId: creds.customerId,
+                loginCustomerId: creds.loginCustomerId,
+                allClientIds: creds.allClientIds || [creds.customerId]
+            }
         });
     } catch (error) {
         return res.status(500).json({ success: false, error: error.message });

@@ -340,16 +340,27 @@ export function WastedSpendTab({ preset }: { preset: string }) {
         retry: false
     });
 
-    if (stLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+    const { data: assetData, isLoading: assetLoading } = useQuery({
+        queryKey: ['google-assets'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getAssetData();
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
+    });
+
+    if (stLoading || assetLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const wasted = searchTerms?.wastedSpend || [];
-    
-    // Mocking Asset Fatigue Detector data
-    const fatiguedAssets = [
-        { type: 'Headline', text: 'Best IT Solution 2024', impressions: 14500, conversions: 0, spend: 5400 },
-        { type: 'Description', text: 'Award winning service designed specifically to help you grow your business.', impressions: 11200, conversions: 0, spend: 3200 },
-        { type: 'Image', text: '[Display Graphic_01.jpg]', impressions: 22000, conversions: 0, spend: 8100 },
-    ];
+
+    // Real fatigued assets: high impressions, zero conversions, meaningful spend
+    // Sourced from the Google Ads RSA Asset Performance API
+    const fatiguedAssets = (assetData?.assets || [])
+        .filter((a: any) => a.impressions > 5000 && a.conversions === 0 && a.performance !== 'BEST')
+        .sort((a: any, b: any) => b.impressions - a.impressions)
+        .slice(0, 5);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -370,14 +381,16 @@ export function WastedSpendTab({ preset }: { preset: string }) {
                                     <tr>
                                         <th>Term</th>
                                         <th>Spend</th>
+                                        <th>Clicks</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {wasted.slice(0, 5).map((t: any, i: number) => (
+                                    {wasted.slice(0, 8).map((t: any, i: number) => (
                                         <tr key={i}>
                                             <td style={{ fontSize: 12, fontWeight: 500 }}>"{t.term}"</td>
                                             <td style={{ fontWeight: 600, color: '#ef4444' }}>{t.spend > 0 ? `₹${t.spend}` : '₹0'}</td>
+                                            <td style={{ color: 'var(--muted)', fontSize: 12 }}>{t.clicks}</td>
                                             <td>
                                                 <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 10, background: '#ef444422', color: '#ef4444' }}>Exclude</button>
                                             </td>
@@ -394,30 +407,43 @@ export function WastedSpendTab({ preset }: { preset: string }) {
                     )}
                 </div>
 
-                {/* Asset Fatigue Detector */}
+                {/* Real Asset Fatigue Detector — from Google Ads RSA Asset Performance API */}
                 <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
                     <div className="card-header">
                         <h3 className="card-title">Asset Fatigue Alert</h3>
-                        <span className="badge" style={{ background: '#ef4444', color: '#fff' }}>Prune Assets</span>
+                        {fatiguedAssets.length > 0
+                            ? <span className="badge" style={{ background: '#ef4444', color: '#fff' }}>Prune {fatiguedAssets.length} Assets</span>
+                            : <span className="badge" style={{ background: '#10b981', color: '#fff' }}>All Clear</span>
+                        }
                     </div>
                     <div style={{ padding: '0 20px 20px', flex: 1 }}>
-                         <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, fontWeight: 600 }}>
-                            These assets have over 10,000+ impressions but zero conversions over 30 days. These have spent significant budget. Replace them immediately.
-                        </p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {fatiguedAssets.map((a, i) => (
-                                <div key={i} style={{ padding: 12, border: '1px dashed #ef4444', borderRadius: 8, background: '#ef444408' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>{a.type}</span>
-                                        <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>Failed: ₹{a.spend} spent</span>
-                                    </div>
-                                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{a.text}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                        <b>{a.impressions.toLocaleString()}</b> impressions • <b>0</b> conversions
-                                    </div>
+                        {fatiguedAssets.length > 0 ? (
+                            <>
+                                <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, fontWeight: 600 }}>
+                                    These real ad assets have 5,000+ impressions but zero conversions. They are draining budget with no returns.
+                                </p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {fatiguedAssets.map((a: any, i: number) => (
+                                        <div key={i} style={{ padding: 12, border: '1px dashed #ef4444', borderRadius: 8, background: '#ef444408' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>{a.type}</span>
+                                                <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b' }}>{a.performance === 'UNSPECIFIED' ? 'Learning' : a.performance} performance</span>
+                                            </div>
+                                            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8, wordBreak: 'break-word' }}>{a.text}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                <b>{a.impressions?.toLocaleString()}</b> impressions • <b>0</b> conversions
+                                                {a.campaignName && <span> • {a.campaignName}</span>}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </>
+                        ) : (
+                            <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <CheckCircle size={24} style={{ color: '#10b981', margin: '0 auto 12px' }} />
+                                <p style={{ fontSize: 13 }}>No fatigued assets detected. Your ad copy is performing well.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
