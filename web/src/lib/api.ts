@@ -87,24 +87,58 @@ export const adsApi = {
         api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}`)
 };
 
+/**
+ * Separate axios instance for Google Ads API calls.
+ * Google's GAQL engine + account discovery loop routinely takes 15-25s,
+ * which exceeds the global 15s timeout. Meta endpoints are fast (~2s)
+ * so we keep the global timeout tight for them.
+ */
+const googleApi = axios.create({
+    baseURL: `${API_URL}/api`,
+    withCredentials: true,
+    timeout: 60000, // 60s — Google Ads API needs this
+    headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+    }
+});
+
+// Reuse the same auth interceptor for Google requests
+googleApi.interceptors.request.use((config) => {
+    let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        config.headers['X-Auth-Token'] = token;
+    }
+    return config;
+}, (error) => Promise.reject(error));
+
+googleApi.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        console.error('Google API Error:', error.response?.status, error.message);
+        return Promise.reject(error);
+    }
+);
+
 export const googleAdsApi = {
-    getStatus: () => api.get('/google/auth/status'),
-    login: () => api.get('/google/auth/login'),
-    disconnect: () => api.post('/google/auth/disconnect'),
-    getPerformance: (preset = '30d') => api.get(`/google/auth/ads-performance?preset=${preset}`),
-    getCampaigns: (preset = '30d') => api.get(`/google/auth/campaigns?preset=${preset}`),
-    getBudget: () => api.get('/google/auth/budget'),
-    getKeywords: (preset = '30d') => api.get(`/google/auth/keywords?preset=${preset}`),
-    getCreatives: () => api.get('/google/auth/creatives'),
+    getStatus: () => googleApi.get('/google/auth/status'),
+    login: () => googleApi.get('/google/auth/login'),
+    disconnect: () => googleApi.post('/google/auth/disconnect'),
+    getPerformance: (preset = '30d') => googleApi.get(`/google/auth/ads-performance?preset=${preset}`),
+    getCampaigns: (preset = '30d') => googleApi.get(`/google/auth/campaigns?preset=${preset}`),
+    getBudget: () => googleApi.get('/google/auth/budget'),
+    getKeywords: (preset = '30d') => googleApi.get(`/google/auth/keywords?preset=${preset}`),
+    getCreatives: () => googleApi.get('/google/auth/creatives'),
     getCrossPlatform: (preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0) =>
-        api.get(`/google/auth/cross-platform?preset=${preset}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
-    getAlerts: () => api.get('/google/auth/alerts'),
-    getAuctionInsights: (preset = '30d') => api.get(`/google/auth/auction-insights?preset=${preset}`),
-    getSearchTerms: (preset = '30d') => api.get(`/google/auth/search-terms?preset=${preset}`),
-    getQualityScore: () => api.get('/google/auth/quality-score'),
-    getAssets: () => api.get('/google/auth/assets'),
-    getBidding: (preset = '30d') => api.get(`/google/auth/bidding?preset=${preset}`),
-    getGeo: (preset = '30d') => api.get(`/google/auth/geo?preset=${preset}`),
+        googleApi.get(`/google/auth/cross-platform?preset=${preset}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
+    getAlerts: () => googleApi.get('/google/auth/alerts'),
+    getAuctionInsights: (preset = '30d') => googleApi.get(`/google/auth/auction-insights?preset=${preset}`),
+    getSearchTerms: (preset = '30d') => googleApi.get(`/google/auth/search-terms?preset=${preset}`),
+    getQualityScore: () => googleApi.get('/google/auth/quality-score'),
+    getAssets: () => googleApi.get('/google/auth/assets'),
+    getBidding: (preset = '30d') => googleApi.get(`/google/auth/bidding?preset=${preset}`),
+    getGeo: (preset = '30d') => googleApi.get(`/google/auth/geo?preset=${preset}`),
 };
 
 export default api;
