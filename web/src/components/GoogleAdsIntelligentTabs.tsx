@@ -15,7 +15,32 @@ import {
 
 // ==================== TRUE ROAS (ADS + ANALYTICS) ====================
 
-export function TrueRoasTab() {
+export function TrueRoasTab({ preset = '30d' }: { preset?: string }) {
+    const { data: searchTerms, isLoading: stLoading } = useQuery({
+        queryKey: ['google-search-terms', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getSearchTerms(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+
+    const { data: assetData, isLoading: assetLoading } = useQuery({
+        queryKey: ['google-assets'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getAssets();
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+
+    if (stLoading || assetLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const wasted = searchTerms?.wastedSpend || [];
+    const highPotentials = searchTerms?.terms?.filter((t: any) => t.conversions > 0).slice(0, 3) || [];
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             <div style={{
@@ -26,76 +51,73 @@ export function TrueRoasTab() {
                     <Activity size={24} color="#fff" />
                 </div>
                 <div>
-                    <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>"Click-Bait" Detector & Post-Click Journey</h4>
+                    <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>Conversion Integrity & Waste Detector</h4>
                     <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
-                        Correlating high-CTR Ads with high-Bounce-Rate Analytics data to discover over-promising ads.
+                        Correlating high-cost search terms and creative assets with conversion data to identify budget leaks.
                     </p>
                 </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                {/* Click-Bait Detector */}
+                {/* Wasted Terms */}
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <AlertTriangle size={16} color="#ef4444" />
-                            "Click-Bait" Ads Identified
+                            Live "Zero-Conv" High Spend Terms
                         </h3>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                         <table className="table" style={{ fontSize: 13 }}>
                             <thead>
                                 <tr>
-                                    <th>Ad / Keyword</th>
-                                    <th>Ads CTR</th>
-                                    <th>GA Bounce Rate</th>
+                                    <th>Search Term</th>
+                                    <th>Real Spend</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr>
-                                    <td style={{ fontWeight: 500 }}>"Buy Cheap Laptops"</td>
-                                    <td style={{ color: '#10b981', fontWeight: 600 }}>12.4%</td>
-                                    <td style={{ color: '#ef4444', fontWeight: 600 }}>94.2%</td>
-                                </tr>
-                                <tr>
-                                    <td style={{ fontWeight: 500 }}>"Free Trial Pro"</td>
-                                    <td style={{ color: '#10b981', fontWeight: 600 }}>8.9%</td>
-                                    <td style={{ color: '#ef4444', fontWeight: 600 }}>88.5%</td>
-                                </tr>
+                                {wasted.length > 0 ? wasted.slice(0, 5).map((t: any, i: number) => (
+                                    <tr key={i}>
+                                        <td style={{ fontWeight: 500 }}>"{t.term}"</td>
+                                        <td style={{ color: '#ef4444', fontWeight: 600 }}>₹{t.spend}</td>
+                                        <td><span className="badge badge-danger">Wasted</span></td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={3} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>No high-waste terms detected currently.</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
                     <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
                         <Info size={12} style={{ display: 'inline', marginRight: 4 }} />
-                        These ads are wasting budget by promising something the landing page isn't delivering.
+                        These real terms have zero conversions. Consider adding them to your Negative Keyword list.
                     </div>
                 </div>
 
-                {/* Micro-Conversion Attribution */}
+                {/* Micro-Conversion Potential */}
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Target size={16} color="#6366f1" />
-                            Micro-Conversion Assistants
+                            High-Performance Real Assets
                         </h3>
                     </div>
                     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {[
-                            { name: 'Brand Story Video Ad', action: 'Watched 50% Video', value: '45 Assists' },
-                            { name: 'Blog Retargeting', action: 'Read 3+ Articles', value: '32 Assists' },
-                            { name: 'Whitepaper Display', action: 'Downloaded PDF', value: '18 Assists' }
-                        ].map((m, i) => (
+                        {assetData?.assets?.slice(0, 3).map((a: any, i: number) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: i === 2 ? 'none' : '1px solid var(--border)' }}>
-                                <div>
-                                    <div style={{ fontWeight: 600, fontSize: 13 }}>{m.name}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>GA Event: {m.action}</div>
+                                <div style={{ maxWidth: '70%' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.text}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>Type: {a.type} • {a.campaign}</div>
                                 </div>
-                                <div style={{ fontSize: 13, fontWeight: 700, color: '#6366f1' }}>{m.value}</div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{a.clicks} Clicks</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{a.performance} Label</div>
+                                </div>
                             </div>
                         ))}
-                    </div>
-                    <div style={{ padding: '0 20px 20px', fontSize: 12, color: 'var(--muted)' }}>
-                        These campaigns don't get final click credit in Ads, but Analytics shows they are vital mid-funnel assist drivers.
                     </div>
                 </div>
             </div>
@@ -105,82 +127,99 @@ export function TrueRoasTab() {
 
 // ==================== LOCAL IMPACT (ADS + GMB) ====================
 
-export function LocalImpactTab() {
+export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
+    const { data: geoData, isLoading } = useQuery({
+        queryKey: ['google-geo', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getGeo(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+
+    if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const locations = geoData?.locations || [];
+    const totalLocalSpend = locations.reduce((sum: number, l: any) => sum + l.spend, 0);
+    const totalLocalConversions = locations.reduce((sum: number, l: any) => sum + l.conversions, 0);
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
-                {/* Real-World Action Pipeline */}
+                {/* Real Geographic Action Pipeline */}
                 <div className="card" style={{ gridColumn: '1 / -1' }}>
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <MapPin size={16} color="#10b981" />
-                            Local Ads Spend vs. Maps Actions Pipeline
+                            Account Geographic Ad Spend vs. Outcomes
                         </h3>
-                        <span className="badge badge-success">High Correlation</span>
+                        {totalLocalConversions > 0 && <span className="badge badge-success">Data Connected</span>}
                     </div>
                     <div style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
                         <div style={{ flex: '1 1 300px' }}>
                             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-                                We've correlated your Google Ads local spend with "Get Directions" and "Calls" from your Google Business Profile.
+                                We are pulling real-time geographic performance data directly from your Google Ads account to identify location-based efficiency.
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                                <span style={{ fontWeight: 500, fontSize: 13 }}>Ad Spend (Local)</span>
-                                <span style={{ fontWeight: 700, color: '#6366f1' }}>₹14,250</span>
+                                <span style={{ fontWeight: 500, fontSize: 13 }}>Live Account Spend</span>
+                                <span style={{ fontWeight: 700, color: '#6366f1' }}>₹{totalLocalSpend.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                                <span style={{ fontWeight: 500, fontSize: 13 }}>"Get Directions" Clicks</span>
-                                <span style={{ fontWeight: 700, color: '#10b981' }}>+42% 📈</span>
+                                <span style={{ fontWeight: 500, fontSize: 13 }}>Geographic Clicks</span>
+                                <span style={{ fontWeight: 700, color: '#10b981' }}>{locations.reduce((sum: number, l: any) => sum + l.clicks, 0).toLocaleString()} Total</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
-                                <span style={{ fontWeight: 500, fontSize: 13 }}>GMB Phone Calls</span>
-                                <span style={{ fontWeight: 700, color: '#f59e0b' }}>+18% 📈</span>
+                                <span style={{ fontWeight: 500, fontSize: 13 }}>Recorded Conversions</span>
+                                <span style={{ fontWeight: 700, color: '#f59e0b' }}>{totalLocalConversions.toLocaleString()}</span>
                             </div>
                         </div>
                         <div style={{ flex: '1.5 1 400px', height: 200 }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={[
-                                    { name: 'Mon', spend: 400, actions: 12 },
-                                    { name: 'Tue', spend: 300, actions: 10 },
-                                    { name: 'Wed', spend: 550, actions: 24 },
-                                    { name: 'Thu', spend: 600, actions: 30 },
-                                    { name: 'Fri', spend: 800, actions: 45 },
-                                    { name: 'Sat', spend: 950, actions: 60 },
-                                    { name: 'Sun', spend: 850, actions: 55 },
-                                ]}>
+                                <AreaChart data={locations.slice(0, 10).map((l: any) => ({
+                                    name: l.campaign.split(' ')[0],
+                                    spend: l.spend,
+                                    clicks: l.clicks
+                                }))}>
                                     <Tooltip />
-                                    <Area type="monotone" yAxisId="1" dataKey="spend" stroke="#6366f1" fill="#6366f133" name="Ad Spend (₹)" />
-                                    <Area type="monotone" yAxisId="2" dataKey="actions" stroke="#10b981" fill="none" strokeWidth={3} name="Maps Actions" />
+                                    <Area type="monotone" yAxisId="1" dataKey="spend" stroke="#6366f1" fill="#6366f133" name="Spend (₹)" />
+                                    <Area type="monotone" yAxisId="2" dataKey="clicks" stroke="#10b981" fill="none" strokeWidth={3} name="Clicks" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
 
-                {/* Reputation Alerts */}
+                {/* Performance Highlights */}
                 <div className="card" style={{ gridColumn: '1 / -1' }}>
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <ShieldAlert size={16} color="#ef4444" />
-                            Reputation-Protected Bidding Alerts
+                            <Globe size={16} color="#6366f1" />
+                            Location-Wise Real Efficiency
                         </h3>
                     </div>
                     <div style={{ padding: '0 20px 20px' }}>
-                        <div style={{
-                            padding: 16, borderRadius: 10, background: '#ef444411', border: '1px solid #ef444433',
-                            display: 'flex', gap: 12, alignItems: 'center', marginTop: 16, flexWrap: 'wrap'
-                        }}>
-                            <AlertCircle size={24} color="#ef4444" />
-                            <div style={{ flex: 1 }}>
-                                <h4 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#ef4444' }}>
-                                    Warning: Rating drop detected in "Downtown Branch"
-                                </h4>
-                                <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>
-                                    This location received a spike of 1-star reviews in the last 48 hours. <b>Consider pausing Local Campaigns for this branch</b> until operations improve to avoid wasting ad spend on negative experiences.
-                                </p>
-                            </div>
-                            <button className="btn btn-sm" style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
-                                Pause Ads
-                            </button>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table className="table" style={{ fontSize: 12 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Campaign Source</th>
+                                        <th>Real Spend</th>
+                                        <th>Clicks</th>
+                                        <th>Efficiency (CPC)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {locations.slice(0, 5).map((l: any, i: number) => (
+                                        <tr key={i}>
+                                            <td style={{ fontWeight: 600 }}>{l.campaign}</td>
+                                            <td>₹{l.spend}</td>
+                                            <td>{l.clicks}</td>
+                                            <td style={{ fontWeight: 700, color: '#6366f1' }}>₹{(l.spend / (l.clicks || 1)).toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -389,6 +428,20 @@ export function WastedSpendTab({ preset }: { preset: string }) {
 // ==================== PERSONA BUILDER (ANALYTICS + ADS) ====================
 
 export function PersonaBuilderTab() {
+    const { data: perf, isLoading } = useQuery({
+        queryKey: ['google-perf', '30d'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getPerformance('30d');
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+
+    if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+
+    const m = perf?.metrics || {};
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center', margin: '20px 0' }}>
             <div style={{
@@ -405,11 +458,9 @@ export function PersonaBuilderTab() {
                         <UserCheck size={28} color="#6366f1" />
                     </div>
                     <div>
-                        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>Unified Ideal Customer Persona</h2>
+                        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>Account Performance Persona</h2>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#4285F422', color: '#4285F4', fontWeight: 700 }}>Google Ads Target</span>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#F4B40022', color: '#F4B400', fontWeight: 700 }}>Analytics Data</span>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#0F9D5822', color: '#0F9D58', fontWeight: 700 }}>Auth Profiles</span>
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#4285F422', color: '#4285F4', fontWeight: 700 }}>Real-Time Account Insights</span>
                         </div>
                     </div>
                 </div>
@@ -419,17 +470,18 @@ export function PersonaBuilderTab() {
                     borderLeft: '4px solid #6366f1', fontSize: 15, lineHeight: 1.7,
                     color: 'var(--foreground)', marginBottom: 32
                 }}>
-                    "Your highest converting customer is a <b>25-34 year old female</b> interested in <b>Value Shoppers & Tech Enthusiasts</b> affinity categories. They usually interact and convert via <b>mobile on weekends</b> between 6 PM - 10 PM. 
+                    "Based on your last 30 days of data, your account has generated <b>{m.impressions?.toLocaleString()} impressions</b> resulting in <b>{m.clicks?.toLocaleString()} real clicks</b>. 
+                    Your current efficiency is <b>{m.ctr}% CTR</b> across all connected campaigns.
                     <br/><br/>
-                    <span style={{ color: '#ef4444', fontWeight: 600 }}>Intelligence Alert:</span> Your current Ads campaigns are over-spending on males 45+ by <b>22%</b>, but this demographic has a 0.2% conversion rate on your site. We recommend excluding age 45+ or adding a -50% bid modifier."
+                    <span style={{ color: '#10b981', fontWeight: 600 }}>Growth Insight:</span> Your ROAS is sitting at <b>{m.roas}x</b>. To scale this further, we recommend analyzing the conversion path of your highest performing ads."
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
                     {[
-                        { label: 'Core Age', value: '25-34', icon: Users },
-                        { label: 'Device', value: 'Mobile (82%)', icon: MapPin },
-                        { label: 'Best Time', value: 'Weekends 6-10PM', icon: Clock },
-                        { label: 'Conv. Rate', value: '4.8%', icon: Target }
+                        { label: 'Total Real Spend', value: `₹${m.spend?.toLocaleString()}`, icon: DollarSign },
+                        { label: 'Conv. Value', value: `₹${m.conversionValue?.toLocaleString()}`, icon: TrendingUp },
+                        { label: 'Conversions', value: m.conversions, icon: Target },
+                        { label: 'True ROAS', value: `${m.roas}x`, icon: Activity }
                     ].map((s, i) => (
                         <div key={i} style={{ textAlign: 'center', padding: '20px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
                             <s.icon size={20} style={{ color: '#6366f1', margin: '0 auto 12px' }} />
