@@ -174,10 +174,22 @@ export async function getGoogleTokensForUser(userId) {
                 })
                 .eq('google_account_id', account.id);
 
-            return { accessToken: credentials.access_token, refreshToken };
+            return {
+                accessToken: credentials.access_token,
+                refreshToken,
+                storedCustomerId: account.customer_id,
+                storedLoginCustomerId: account.login_customer_id,
+                storedAllClientIds: account.all_client_ids,
+            };
         }
 
-        return { accessToken, refreshToken };
+        return {
+            accessToken,
+            refreshToken,
+            storedCustomerId: account.customer_id,
+            storedLoginCustomerId: account.login_customer_id,
+            storedAllClientIds: account.all_client_ids,
+        };
     } catch (error) {
         console.error('Error getting Google tokens:', error.message);
         return null;

@@ -63,8 +63,8 @@ export async function getCustomerId(userId) {
     const now = Date.now();
     const memCached = customerCache.get(cacheKey);
 
-    // 1. Check Memory Cache (5 minutes)
-    if (memCached && now - memCached.timestamp < 300000) {
+    // 1. Check Memory Cache (30 minutes — survives most Railway restart intervals)
+    if (memCached && now - memCached.timestamp < 1800000) {
         return memCached.data;
     }
 
@@ -77,27 +77,31 @@ export async function getCustomerId(userId) {
     const resolvePromise = (async () => {
         try {
             console.log(`📡 [GoogleAds] Resolving CID for user ${userId}...`);
-            const account = await getConnectedGoogleAccount(userId);
-            const tokenData = await getGoogleTokensForUser(userId);
-            
-            if (!tokenData || !tokenData.refreshToken) return null;
 
-            // 4. DATABASE-LEVEL CACHE (Real Fix)
-            // If we already have a customerId stored in DB, use it immediately (0ms API calls)
-            if (account && account.customer_id) {
-                console.log(`✅ [DB Cache] Using stored CID: ${account.customer_id}`);
+            // Single DB call: returns tokens + stored customer IDs together
+            const tokenData = await getGoogleTokensForUser(userId);
+            if (!tokenData || !tokenData.refreshToken) {
+                console.log(`❌ No refresh token for user ${userId}`);
+                return null;
+            }
+
+            // DB-level cache: customer_id stored after first discovery — instant lookup
+            if (tokenData.storedCustomerId) {
+                console.log(`✅ [DB Cache] Using stored CID: ${tokenData.storedCustomerId}`);
                 const result = {
-                    customerId: account.customer_id,
-                    loginCustomerId: account.login_customer_id,
-                    allClientIds: account.all_client_ids || [account.customer_id],
-                    refreshToken: tokenData.refreshToken
+                    customerId: String(tokenData.storedCustomerId),
+                    loginCustomerId: tokenData.storedLoginCustomerId
+                        ? String(tokenData.storedLoginCustomerId)
+                        : String(tokenData.storedCustomerId),
+                    allClientIds: tokenData.storedAllClientIds || [String(tokenData.storedCustomerId)],
+                    refreshToken: tokenData.refreshToken,
                 };
                 customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
                 return result;
             }
 
-            // 5. PARALLEL DISCOVERY (If no DB cache)
-            console.log("🔍 No DB cache. Starting Parallel Discovery...");
+            // PARALLEL DISCOVERY — only runs once (until persisted to DB)
+            console.log(`🔍 [Discovery] No stored CID. Running parallel discovery for ${userId}...`);
             const client = new GoogleAdsApi({
                 client_id: CLIENT_ID,
                 client_secret: CLIENT_SECRET,
@@ -106,9 +110,13 @@ export async function getCustomerId(userId) {
 
             const accessibleResponse = await client.listAccessibleCustomers(tokenData.refreshToken);
             const accessible = accessibleResponse?.resource_names || [];
-            if (accessible.length === 0) return null;
+            if (accessible.length === 0) {
+                console.log(`⚠️ No accessible customers for ${userId}`);
+                return null;
+            }
 
-            // Parallelized lookup for all accessible accounts
+            console.log(`📋 Found ${accessible.length} accessible accounts`);
+
             const discoveryTasks = accessible.map(async (resource) => {
                 const managerId = resource.replace('customers/', '');
                 try {
@@ -126,21 +134,20 @@ export async function getCustomerId(userId) {
                     `);
 
                     if (clientRows && clientRows.length > 0) {
-                        // MCC account: sub-clients found
                         return {
                             customerId: String(clientRows[0].customer_client.id),
                             loginCustomerId: managerId,
-                            allClientIds: clientRows.map(r => String(r.customer_client.id))
+                            allClientIds: clientRows.map(r => String(r.customer_client.id)),
                         };
                     }
-                    // Direct account (no sub-clients): use managerId itself
+                    // Direct account (not MCC)
                     return {
                         customerId: managerId,
                         loginCustomerId: managerId,
                         allClientIds: [managerId],
                     };
                 } catch (err) {
-                    console.log(`⚠️ Could not query ${managerId}: ${err.message?.slice(0, 100)}`);
+                    console.log(`⚠️ Could not query ${managerId}: ${err.message?.slice(0, 80)}`);
                     return null;
                 }
             });
@@ -148,17 +155,16 @@ export async function getCustomerId(userId) {
             const discoveryResults = (await Promise.all(discoveryTasks)).filter(Boolean);
 
             if (discoveryResults.length > 0) {
-                // Prefer MCC accounts (loginCustomerId !== customerId) over direct accounts
                 const mccResult = discoveryResults.find(r => r.loginCustomerId !== r.customerId);
                 const primary = mccResult || discoveryResults[0];
                 const result = { ...primary, refreshToken: tokenData.refreshToken };
 
-                // 6. PERSIST TO DATABASE — so future requests skip discovery entirely
                 console.log(`💾 [DB Persist] Saving CID ${result.customerId} for user ${userId}`);
                 try {
                     await updateConnectedAccount(userId, result);
+                    console.log(`✅ [DB Persist] Saved successfully`);
                 } catch (persistErr) {
-                    console.error(`⚠️ DB persist failed (non-fatal): ${persistErr.message}`);
+                    console.error(`❌ [DB Persist] FAILED for user ${userId}:`, persistErr);
                 }
 
                 customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
