@@ -1,5 +1,5 @@
 import { GoogleAdsApi } from 'google-ads-api';
-import { getGoogleTokensForUser } from './googleAuthService.js';
+import { getGoogleTokensForUser, getConnectedGoogleAccount, updateConnectedAccount } from './googleAuthService.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -77,20 +77,20 @@ export async function getCustomerId(userId) {
     const resolvePromise = (async () => {
         try {
             console.log(`📡 [GoogleAds] Resolving CID for user ${userId}...`);
-            const tokenData = await import('./googleAuthService.js');
-            const account = await tokenData.getGoogleTokensForUser(userId);
+            const account = await getConnectedGoogleAccount(userId);
+            const tokenData = await getGoogleTokensForUser(userId);
             
-            if (!account || !account.refreshToken) return null;
+            if (!tokenData || !tokenData.refreshToken) return null;
 
             // 4. DATABASE-LEVEL CACHE (Real Fix)
             // If we already have a customerId stored in DB, use it immediately (0ms API calls)
-            if (account.customer_id) {
+            if (account && account.customer_id) {
                 console.log(`✅ [DB Cache] Using stored CID: ${account.customer_id}`);
                 const result = {
                     customerId: account.customer_id,
                     loginCustomerId: account.login_customer_id,
                     allClientIds: account.all_client_ids || [account.customer_id],
-                    refreshToken: account.refreshToken
+                    refreshToken: tokenData.refreshToken
                 };
                 customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
                 return result;
@@ -104,7 +104,7 @@ export async function getCustomerId(userId) {
                 developer_token: DEVELOPER_TOKEN,
             });
 
-            const accessibleResponse = await client.listAccessibleCustomers(account.refreshToken);
+            const accessibleResponse = await client.listAccessibleCustomers(tokenData.refreshToken);
             const accessible = accessibleResponse?.resource_names || [];
             if (accessible.length === 0) return null;
 
@@ -114,7 +114,7 @@ export async function getCustomerId(userId) {
                 try {
                     const managerCustomer = client.Customer({
                         customer_id: managerId,
-                        refresh_token: account.refreshToken,
+                        refresh_token: tokenData.refreshToken,
                         login_customer_id: managerId,
                     });
 
@@ -126,30 +126,46 @@ export async function getCustomerId(userId) {
                     `);
 
                     if (clientRows && clientRows.length > 0) {
+                        // MCC account: sub-clients found
                         return {
                             customerId: String(clientRows[0].customer_client.id),
                             loginCustomerId: managerId,
                             allClientIds: clientRows.map(r => String(r.customer_client.id))
                         };
                     }
+                    // Direct account (no sub-clients): use managerId itself
+                    return {
+                        customerId: managerId,
+                        loginCustomerId: managerId,
+                        allClientIds: [managerId],
+                    };
+                } catch (err) {
+                    console.log(`⚠️ Could not query ${managerId}: ${err.message?.slice(0, 100)}`);
                     return null;
-                } catch (err) { return null; }
+                }
             });
 
             const discoveryResults = (await Promise.all(discoveryTasks)).filter(Boolean);
-            
-            if (discoveryResults.length > 0) {
-                const primary = discoveryResults[0];
-                const result = { ...primary, refreshToken: account.refreshToken };
 
-                // 6. PERSIST TO DATABASE (Fix for future requests)
-                console.log(`💾 [DB Persist] Saving discovered IDs for user ${userId}`);
-                await tokenData.updateConnectedAccount(userId, result);
+            if (discoveryResults.length > 0) {
+                // Prefer MCC accounts (loginCustomerId !== customerId) over direct accounts
+                const mccResult = discoveryResults.find(r => r.loginCustomerId !== r.customerId);
+                const primary = mccResult || discoveryResults[0];
+                const result = { ...primary, refreshToken: tokenData.refreshToken };
+
+                // 6. PERSIST TO DATABASE — so future requests skip discovery entirely
+                console.log(`💾 [DB Persist] Saving CID ${result.customerId} for user ${userId}`);
+                try {
+                    await updateConnectedAccount(userId, result);
+                } catch (persistErr) {
+                    console.error(`⚠️ DB persist failed (non-fatal): ${persistErr.message}`);
+                }
 
                 customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
                 return result;
             }
 
+            console.log(`❌ Discovery found no usable accounts for user ${userId}`);
             return null;
         } catch (error) {
             console.error(`❌ [GoogleAds] Error resolving CID:`, error.message);
