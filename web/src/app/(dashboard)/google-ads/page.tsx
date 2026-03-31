@@ -140,7 +140,9 @@ function OverviewTab({ preset }: { preset: string }) {
             if (!res.data.success) throw new Error(res.data.error || 'Failed to fetch performance data');
             return res.data.data;
         },
-        retry: 1
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     const { data: budgetData } = useQuery({
@@ -149,7 +151,9 @@ function OverviewTab({ preset }: { preset: string }) {
             const res = await googleAdsApi.getBudget();
             return res.data.data;
         },
-        retry: 1
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     const { data: crossData } = useQuery({
@@ -157,7 +161,10 @@ function OverviewTab({ preset }: { preset: string }) {
         queryFn: async () => {
             const res = await googleAdsApi.getCrossPlatform(preset);
             return res.data.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
@@ -1110,7 +1117,10 @@ export default function GoogleAdsPage() {
         queryFn: async () => {
             const res = await googleAdsApi.getStatus();
             return res.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: 1
     });
 
     const { data: alertsData } = useQuery({
@@ -1119,7 +1129,10 @@ export default function GoogleAdsPage() {
             const res = await googleAdsApi.getAlerts();
             return res.data.data;
         },
-        enabled: !!status?.connected
+        enabled: !!status?.connected,
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     const disconnectMutation = useMutation({

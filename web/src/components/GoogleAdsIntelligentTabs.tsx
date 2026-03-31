@@ -197,7 +197,10 @@ export function CompetitorThreatTab({ preset }: { preset: string }) {
         queryFn: async () => {
             const res = await googleAdsApi.getAuctionInsights(preset);
             return res.data.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
@@ -292,7 +295,10 @@ export function WastedSpendTab({ preset }: { preset: string }) {
         queryFn: async () => {
             const res = await googleAdsApi.getSearchTerms(preset);
             return res.data.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     if (stLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
