@@ -133,6 +133,7 @@ function Tab({ label, icon: Icon, active, onClick, badge }: { label: string; ico
 // ==================== OVERVIEW TAB ====================
 
 function OverviewTab({ preset }: { preset: string }) {
+    // Primary query — this is the ONLY Google API call on initial load
     const { data: perf, isLoading, isError, error } = useQuery({
         queryKey: ['google-perf', preset],
         queryFn: async () => {
@@ -145,23 +146,14 @@ function OverviewTab({ preset }: { preset: string }) {
         retry: false
     });
 
+    // Budget loads lazily AFTER performance succeeds — not simultaneously
     const { data: budgetData } = useQuery({
         queryKey: ['google-budget'],
         queryFn: async () => {
             const res = await googleAdsApi.getBudget();
             return res.data.data;
         },
-        staleTime: 300000,
-        refetchOnWindowFocus: false,
-        retry: false
-    });
-
-    const { data: crossData } = useQuery({
-        queryKey: ['google-cross', preset],
-        queryFn: async () => {
-            const res = await googleAdsApi.getCrossPlatform(preset);
-            return res.data.data;
-        },
+        enabled: !!perf?.hasAdAccounts,
         staleTime: 300000,
         refetchOnWindowFocus: false,
         retry: false
@@ -194,12 +186,6 @@ function OverviewTab({ preset }: { preset: string }) {
     }
 
     const m = perf.metrics || {};
-    const pieData = crossData?.combined
-        ? [
-            { name: 'Google Ads', value: crossData.google?.spend || 0 },
-            { name: 'Meta Ads', value: crossData.meta?.spend || 0 },
-        ]
-        : [];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -265,45 +251,6 @@ function OverviewTab({ preset }: { preset: string }) {
                 </div>
             )}
 
-            {/* Cross-Platform Comparison */}
-            {crossData?.connected && (crossData.google?.spend > 0 || crossData.meta?.spend > 0) && (
-                <div className="card">
-                    <div className="card-header">
-                        <h3 className="card-title">Cross-Platform Ad Spend</h3>
-                        <span className="text-muted" style={{ fontSize: 13 }}>
-                            Total: {fmtINR(crossData.combined?.totalSpend || 0)}
-                        </span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, alignItems: 'center' }}>
-                        {/* Google */}
-                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 10, textAlign: 'center' }}>
-                            <div style={{ color: '#4285F4', fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Google Ads</div>
-                            <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{fmtINR(crossData.google?.spend)}</div>
-                            <div className="text-muted" style={{ fontSize: 12 }}>{crossData.combined?.googleShare}% of budget</div>
-                            <div style={{ marginTop: 8, fontSize: 12 }}>CTR: <b>{fmtPct(crossData.google?.ctr)}</b> · ROAS: <b>{crossData.google?.roas?.toFixed(2) || '—'}x</b></div>
-                        </div>
-
-                        {/* Donut chart */}
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                            <PieChart width={140} height={140}>
-                                <Pie data={pieData} cx={65} cy={65} innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
-                                    <Cell fill="#4285F4" />
-                                    <Cell fill="#0081FB" />
-                                </Pie>
-                                <Tooltip formatter={(v: any) => fmtINR(v)} />
-                            </PieChart>
-                        </div>
-
-                        {/* Meta */}
-                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 10, textAlign: 'center' }}>
-                            <div style={{ color: '#0081FB', fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Meta Ads</div>
-                            <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{fmtINR(crossData.meta?.spend)}</div>
-                            <div className="text-muted" style={{ fontSize: 12 }}>{crossData.combined?.metaShare}% of budget</div>
-                            <div style={{ marginTop: 8, fontSize: 12 }}>Impressions: <b>{fmt(crossData.meta?.impressions, 0)}</b></div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
@@ -316,7 +263,10 @@ function CampaignsTab({ preset }: { preset: string }) {
         queryFn: async () => {
             const res = await googleAdsApi.getCampaigns(preset);
             return res.data.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
@@ -391,7 +341,10 @@ function KeywordsTab({ preset }: { preset: string }) {
         queryFn: async () => {
             const res = await googleAdsApi.getKeywords(preset);
             return res.data.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
