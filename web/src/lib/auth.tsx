@@ -112,8 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // list, making the last account/page/business item unreachable.
             const width = 600;
             const height = 700;
-            const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
-            const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+            // Center relative to the screen, accounting for where the browser window is
+            // (important for multi-monitor setups)
+            const left = Math.round(window.screenLeft + (window.outerWidth - width) / 2);
+            const top = Math.round(window.screenTop + (window.outerHeight - height) / 2);
 
             const popup = window.open(
                 loginUrl,
