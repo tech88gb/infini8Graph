@@ -1,203 +1,100 @@
-# infini8Graph
+# ∞ infini8Graph
 
-A production-grade Instagram Analytics Web Platform with a Next.js frontend and Node.js/Express backend, backed by Supabase PostgreSQL.
+**A State-of-the-Art Multi-Channel Advertising & Analytics Command Center**
+
+Infini8Graph is a high-performance, production-grade intelligence platform designed to bridge the gap between Meta Ads (Instagram/Facebook) and Google Ads. It provides unified cross-platform insights, advanced content analytics, and automated response systems for modern digital marketers.
 
 ---
 
-## Project Structurses
+## 🚀 The Stack
+Built with the latest cutting-edge technologies for maximum performance and stability:
 
-```
-infini8Graphs/
-├── infini8Graph-server/     # Backend API (Express.js)
+### Frontend
+- **Framework**: [Next.js 16 (App Router)](https://nextjs.org/)
+- **Runtime**: [React 19](https://react.dev/)
+- **State Management**: [TanStack Query v5](https://tanstack.com/query)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) & Vanilla CSS
+- **Visuals**: [Recharts](https://recharts.org/) & [Lucide Icons](https://lucide.dev/)
+
+### Backend
+- **Core**: Node.js & Express.js
+- **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
+- **Security**: JWT Authentication (HttpOnly) & AES-256 Token Encryption
+- **Infrastructure**: Automated Cache TTL Management (Instagram Graph API)
+
+---
+
+## 📊 Feature Ecosystem
+
+| Ecosystem | Feature | Description |
+| :--- | :--- | :--- |
+| **Meta Analytics** | **Content Intel** | Deep-dive post analysis with quality scores and virality matching. |
+| | **Growth & Engagement** | Longitudinal trend analysis and post-by-post efficiency metrics. |
+| | **Best Time & Hashtags** | Algorithmic timing optimization and semantic hashtag tracking. |
+| **Google Ads Intel** | **True ROAS** | Advanced attribution modeling for accurate return on spend. |
+| | **Wasted Spend** | Identification of negative keywords and inefficient search terms. |
+| | **Competitor Threat** | Auction insight analysis for share-of-voice tracking. |
+| **Intelligence** | **Persona Builder** | AI-driven audience profiling based on ad performance data. |
+| | **Local Impact** | Geographic performance mapping for physical store conversion. |
+| **Automation** | **Auto-Reply** | Instagram Webhook-driven automated comment and DM response system. |
+| **Experience** | **Unified Dashboard** | Cross-platform KPI comparison (Meta vs. Google) in a single view. |
+
+---
+
+## 📂 Project Structure
+
+```text
+infini8Graph/
+├── infini8Graph-server/     # Node.js/Express Backend API
 │   ├── src/
-│   │   ├── app.js           # Main server entry
-│   │   ├── config/          # Database configuration
-│   │   ├── controllers/     # Route handlers
-│   │   ├── middleware/      # Auth middleware
-│   │   ├── routes/          # API routes
-│   │   ├── services/        # Business logic
-│   │   └── utils/           # Encryption, JWT utilities
-│   ├── .env                 # Environment variables
-│   └── package.json
+│   │   ├── controllers/      # Route logic for Ads, Auth, & Instagram
+│   │   ├── services/         # Business logic & 3rd party API integrations
+│   │   ├── middleware/       # Auth & Security layers
+│   │   └── utils/            # Encryption & JWT helpers
+│   └── scripts/             # Cache clearing and automation debugging
 │
-└── web/                     # Frontend (Next.js)
+└── web/                     # Next.js 16 Frontend
     ├── src/
-    │   ├── app/
-    │   │   ├── login/       # Login page
-    │   │   └── (dashboard)/ # Protected dashboard routes
-    │   │       ├── dashboard/
-    │   │       ├── growth/
-    │   │       ├── engagement/
-    │   │       ├── reels/
-    │   │       ├── best-time/
-    │   │       ├── hashtags/
-    │   │       ├── ads/
-    │   │       ├── export/
-    │   │       └── settings/
-    │   ├── components/      # React components
-    │   └── lib/             # API client, auth context
-    ├── .env.local           # Frontend environment
-    └── package.json
+    │   ├── app/              # App Router (Dashboard, Google Ads, unified)
+    │   ├── components/       # Premium UI components & Intel-Tabs
+    │   └── lib/              # API clients and Auth context providers
+    └── public/               # Asset management
 ```
 
 ---
 
-## Setup Instructions
+## 🛠️ Infrastructure Setup
 
-### Prerequisites
+### 1. Prerequisites
+- **Node.js 18+**
+- **Supabase Instance** (Database + Authentication)
+- **Meta Developer App** (Graph API + Webhooks)
+- **Google Cloud Console** (Google Ads API + Developer Token)
 
-- Node.js 18+
-- Supabase account with the database schema applied
-- Meta Developer App with Instagram Basic Display & Graph API configured
-
-### 1. Backend Setup
-
+### 2. Backend Initialization
 ```bash
 cd infini8Graph-server
 npm install
-```
-
-Configure `.env` with your credentials:
-
-- `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
-- `META_APP_ID` and `META_APP_SECRET`
-- `META_REDIRECT_URI` (your Cloudflare tunnel URL + `/api/auth/callback`)
-- `JWT_SECRET` and `ENCRYPTION_KEY`
-
-Start the server:
-
-```bash
+# Configure .env based on .env.example
 npm run dev
 ```
 
-### 2. Frontend Setup
-
+### 3. Frontend Initialization
 ```bash
 cd web
 npm install
-```
-
-Configure `.env.local`:
-
-```
-NEXT_PUBLIC_API_URL=https://your-cloudflare-tunnel-url
-```
-
-Start the frontend:
-
-```bash
+# Configure .env.local for NEXT_PUBLIC_API_URL
 npm run dev
 ```
 
-### 3. Cloudflare Tunnel (Development)
+---
 
-Run a Cloudflare tunnel to get a public HTTPS URL:
-
-```bash
-cloudflared tunnel --url http://localhost:3001
-```
-
-Update `META_REDIRECT_URI` in Meta Developer Console and backend `.env` with the tunnel URL.
+## 🛡️ Security Architecture
+- **Stateless Authentication**: JWT tokens stored in secure, HttpOnly cookies.
+- **Data Privacy**: All sensitive OAuth tokens (Meta & Google) are stored with AES-256 encryption using the system `ENCRYPTION_KEY`.
+- **API Resilience**: Built-in rate limiting and Helmet.js headers for XSS protection.
 
 ---
 
-## Features
-
-| Feature       | Description                                          |
-|---------------|------------------------------------------------------|
-| Dashboard     | Overview of followers, engagement rate, recent posts |
-| Growth        | Trend analysis, week-over-week comparisons           |
-| Engagement    | Detailed post-by-post metrics                        |
-| Reels         | Video content performance vs regular posts           |
-| Best Time     | Optimal posting schedule based on historical data    |
-| Hashtags      | Top performing and most used hashtags                |
-| Ads           | Facebook/Instagram Ads performance analytics         |
-| Export        | Download analytics as JSON or CSV                    |
-
----
-
-## Security
-
-- JWT authentication with HttpOnly cookies
-- AES-256 encrypted Instagram access tokens
-- Rate limiting on API endpoints
-- CORS protection
-- Helmet.js security headers
-
----
-
-## Database Schema
-
-Apply the SQL schema to your Supabase project:
-
-| Table            | Description                      |
-|------------------|----------------------------------|
-| `users`          | Instagram user accounts          |
-| `auth_tokens`    | Encrypted access tokens          |
-| `analytics_cache`| Cached analytics with TTL        |
-
----
-
-## API Endpoints
-
-### Auth
-
-| Method | Endpoint               | Description          |
-|--------|------------------------|----------------------|
-| GET    | `/api/auth/login`      | Get OAuth URL        |
-| GET    | `/api/auth/callback`   | OAuth callback       |
-| GET    | `/api/auth/me`         | Get current user     |
-| POST   | `/api/auth/logout`     | Logout               |
-
-### Analytics
-
-| Method | Endpoint                     | Description          |
-|--------|------------------------------|----------------------|
-| GET    | `/api/instagram/overview`    | Dashboard metrics    |
-| GET    | `/api/instagram/growth`      | Growth analytics     |
-| GET    | `/api/instagram/posts`       | Posts with engagement|
-| GET    | `/api/instagram/reels`       | Reels analytics      |
-| GET    | `/api/instagram/best-time`   | Best time to post    |
-| GET    | `/api/instagram/hashtags`    | Hashtag analysis     |
-| GET    | `/api/instagram/export`      | Export data          |
-
-### Ads
-
-| Method | Endpoint                                   | Description                  |
-|--------|--------------------------------------------|------------------------------|
-| GET    | `/api/ads/accounts`                        | Get ad accounts              |
-| GET    | `/api/ads/accounts/:id/insights`           | Get account insights         |
-| GET    | `/api/ads/accounts/:id/campaigns`          | Get campaigns                |
-| GET    | `/api/ads/accounts/:id/adsets`             | Get ad sets                  |
-| GET    | `/api/ads/accounts/:id/ads`                | Get individual ads           |
-| GET    | `/api/ads/page-insights`                   | Get page insights            |
-
----
-
-## Tech Stack
-
-### Frontend
-
-| Technology     | Purpose                    |
-|----------------|----------------------------|
-| Next.js 15     | React framework (App Router)|
-| React Query    | Data fetching and caching  |
-| Recharts       | Charts and visualizations  |
-| Tailwind CSS   | Styling                    |
-| Lucide Icons   | Icon library               |
-
-### Backend
-
-| Technology     | Purpose                    |
-|----------------|----------------------------|
-| Node.js        | Runtime environment        |
-| Express        | Web framework              |
-| JWT            | Authentication             |
-| Supabase       | PostgreSQL database        |
-| Axios          | HTTP client for APIs       |
-
----
-
-## License
-
-MIT
+## 📄 License
+MIT © 2024 Infini8 Intelligence Group.
