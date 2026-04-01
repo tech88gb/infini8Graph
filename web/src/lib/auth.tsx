@@ -105,54 +105,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const response = await authApi.getLoginUrl();
             if (!response.data.success) return;
 
-            const loginUrl = response.data.loginUrl;
-
-            // Open in a popup sized to fit the Facebook OAuth dialog properly.
-            // Full-page redirect causes the fixed footer to overlap the scrollable
-            // list, making the last account/page/business item unreachable.
-            const width = 600;
-            const height = 700;
-            // Center on the physical screen (works correctly across all browsers)
-            const left = Math.round((screen.width - width) / 2);
-            const top = Math.round((screen.height - height) / 2);
-
-            const popup = window.open(
-                loginUrl,
-                'facebook_oauth',
-                `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
-            );
-
-            if (!popup) {
-                // Fallback: if popup was blocked, do a full redirect
-                window.location.href = loginUrl;
-                return;
-            }
-
-            // Listen for the callback page to post a message when auth is done
-            const handleMessage = async (event: MessageEvent) => {
-                if (event.data?.type === 'OAUTH_SUCCESS') {
-                    window.removeEventListener('message', handleMessage);
-                    popup.close();
-                    // Reload to pick up new session
-                    window.location.reload();
-                }
-            };
-            window.addEventListener('message', handleMessage);
-
-            // Fallback: poll for popup closure in case postMessage isn't sent
-            const pollTimer = setInterval(() => {
-                if (popup.closed) {
-                    clearInterval(pollTimer);
-                    window.removeEventListener('message', handleMessage);
-                    window.location.reload();
-                }
-            }, 800);
+            // Navigate the current tab to the Facebook OAuth URL.
+            // window.open() popup positioning is ignored by modern browsers (Chrome 87+,
+            // Safari, Firefox) as a security measure — no JS can reliably center a popup.
+            // The scroll/cutoff issue is fixed server-side via the display=popup OAuth param.
+            window.location.href = response.data.loginUrl;
 
         } catch (error) {
             console.error('Login error:', error);
             throw error;
         }
     };
+
 
 
     const logout = async () => {
