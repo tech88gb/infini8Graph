@@ -112,10 +112,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // list, making the last account/page/business item unreachable.
             const width = 600;
             const height = 700;
-            // Center relative to the screen, accounting for where the browser window is
-            // (important for multi-monitor setups)
-            const left = Math.round(window.screenLeft + (window.outerWidth - width) / 2);
-            const top = Math.round(window.screenTop + (window.outerHeight - height) / 2);
+            // Center on the physical screen (works correctly across all browsers)
+            const left = Math.round((screen.width - width) / 2);
+            const top = Math.round((screen.height - height) / 2);
 
             const popup = window.open(
                 loginUrl,
