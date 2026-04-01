@@ -67,6 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 // Clean URL without refresh
                 window.history.replaceState({}, '', window.location.pathname);
+
+                // If this page is running inside the OAuth popup, notify the
+                // parent window and close — the parent will do a full reload.
+                if (window.opener && !window.opener.closed) {
+                    window.opener.postMessage({ type: 'OAUTH_SUCCESS' }, window.location.origin);
+                    window.close();
+                    return; // Don't continue auth check in the popup
+                }
             }
         }
 
@@ -95,14 +103,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const login = async () => {
         try {
             const response = await authApi.getLoginUrl();
-            if (response.data.success) {
-                window.location.href = response.data.loginUrl;
+            if (!response.data.success) return;
+
+            const loginUrl = response.data.loginUrl;
+
+            // Open in a popup sized to fit the Facebook OAuth dialog properly.
+            // Full-page redirect causes the fixed footer to overlap the scrollable
+            // list, making the last account/page/business item unreachable.
+            const width = 600;
+            const height = 700;
+            const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+            const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+
+            const popup = window.open(
+                loginUrl,
+                'facebook_oauth',
+                `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+            );
+
+            if (!popup) {
+                // Fallback: if popup was blocked, do a full redirect
+                window.location.href = loginUrl;
+                return;
             }
+
+            // Listen for the callback page to post a message when auth is done
+            const handleMessage = async (event: MessageEvent) => {
+                if (event.data?.type === 'OAUTH_SUCCESS') {
+                    window.removeEventListener('message', handleMessage);
+                    popup.close();
+                    // Reload to pick up new session
+                    window.location.reload();
+                }
+            };
+            window.addEventListener('message', handleMessage);
+
+            // Fallback: poll for popup closure in case postMessage isn't sent
+            const pollTimer = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(pollTimer);
+                    window.removeEventListener('message', handleMessage);
+                    window.location.reload();
+                }
+            }, 800);
+
         } catch (error) {
             console.error('Login error:', error);
             throw error;
         }
     };
+
 
     const logout = async () => {
         try {
