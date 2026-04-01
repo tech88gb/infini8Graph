@@ -102,55 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const login = async () => {
         try {
-            // Open popup synchronously to avoid browser popup blockers
-            const width = 600;
-            const height = 700;
-            const left = Math.round((screen.width - width) / 2);
-            const top = Math.round((screen.height - height) / 2);
-
-            const popup = window.open(
-                '',
-                'facebook_oauth',
-                `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
-            );
-
             const response = await authApi.getLoginUrl();
-            if (!response.data.success) {
-                if (popup) popup.close();
-                return;
-            }
+            if (!response.data.success) return;
 
-            const loginUrl = response.data.loginUrl;
-
-            if (!popup) {
-                // Fallback: if popup was blocked, do a full redirect
-                window.location.href = loginUrl;
-                return;
-            }
-
-            // Navigate the open window
-            popup.location.href = loginUrl;
-
-            // Listen for the callback page to post a message when auth is done
-            const handleMessage = async (event: MessageEvent) => {
-                if (event.data?.type === 'OAUTH_SUCCESS') {
-                    window.removeEventListener('message', handleMessage);
-                    clearInterval(pollTimer);
-                    popup.close();
-                    window.location.reload();
-                }
-            };
-            window.addEventListener('message', handleMessage);
-
-            // Fallback poll
-            const pollTimer = setInterval(() => {
-                if (popup.closed) {
-                    clearInterval(pollTimer);
-                    window.removeEventListener('message', handleMessage);
-                    window.location.reload();
-                }
-            }, 800);
-
+            // User explicitly requested full-page redirect in same tab
+            window.location.href = response.data.loginUrl;
         } catch (error) {
             console.error('Login error:', error);
             throw error;
