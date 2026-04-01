@@ -457,14 +457,14 @@ content = content.replace(/\{activeTab === 'search-terms' && <SearchTermsTab pre
 // Add TrueRoas, LocalImpact, PersonaBuilder to tab content
 content = content.replace(
     /\{activeTab === 'alerts' && <AlertsTab \/>\}/,
-    \`{activeTab === 'alerts' && <AlertsTab />}
+    `{activeTab === 'alerts' && <AlertsTab />}
                 {activeTab === 'true-roas' && <TrueRoasTab preset={preset} />}
                 {activeTab === 'local' && <LocalImpactTab preset={preset} />}
-                {activeTab === 'persona' && <PersonaBuilderTab />}\`
+                {activeTab === 'persona' && <PersonaBuilderTab />}`
 );
 
 // Update tabs array in MAIN PAGE
-content = content.replace(/const tabs = \[\s+([\s\S]*?)\];/, \`const tabs = [
+content = content.replace(/const tabs = \[\s+([\s\S]*?)\];/, `const tabs = [
         { key: 'overview', label: 'Overview', icon: BarChart2 },
         { key: 'true-roas', label: 'True ROAS', icon: Activity },
         { key: 'local', label: 'Local Impact', icon: MapPin },
@@ -474,7 +474,7 @@ content = content.replace(/const tabs = \[\s+([\s\S]*?)\];/, \`const tabs = [
         { key: 'campaigns', label: 'Campaigns', icon: Target },
         { key: 'keywords', label: 'Keywords', icon: Search },
         { key: 'alerts', label: 'Alerts', icon: AlertTriangle, badge: urgentCount },
-    ];\`);
+    ];`);
     
 // Add the new date presets filter check
 content = content.replace(/\['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo'\]/, "['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'true-roas', 'local']");
