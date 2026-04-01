@@ -35,6 +35,7 @@ export function getLoginUrl() {
         redirect_uri: META_REDIRECT_URI,
         scope: scopes,
         response_type: 'code',
+        display: 'popup',   // Compact popup layout — fixes footer overlapping last list item
         state: generateState()
     });
 
