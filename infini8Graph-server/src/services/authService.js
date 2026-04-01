@@ -376,16 +376,19 @@ export async function getAccessToken(userId, instagramAccountId) {
             .select('access_token, expires_at');
 
         // 1. If a specific account ID is provided, use it
+        let activeAccount = null;
         if (instagramAccountId) {
             query = query.eq('instagram_account_id', instagramAccountId);
         } else {
             // 2. Otherwise, look for the active account
-            const { data: activeAccount } = await supabase
+            const { data: activeAcct } = await supabase
                 .from('instagram_accounts')
                 .select('id')
                 .eq('user_id', userId)
                 .eq('is_active', true)
                 .maybeSingle();
+
+            activeAccount = activeAcct;
 
             if (activeAccount) {
                 query = query.eq('instagram_account_id', activeAccount.id);
@@ -434,44 +437,35 @@ export async function getAccessToken(userId, instagramAccountId) {
 }
 
 /**
- * Log out user - remove token for the specific account only
+ * Log out user - clear session only, PRESERVE API tokens for automations
+ * 
+ * IMPORTANT: We intentionally do NOT delete auth_tokens here.
+ * Automation webhooks (auto-reply, DM replies) run 24/7 in the background
+ * and need valid API tokens to function even when the user is not logged in.
+ * Deleting tokens would silently kill all automations for that account.
+ * 
+ * Logout only:
+ *   1. Marks the active account as inactive (session-level flag)
+ *   2. The JWT cookie is cleared by the controller
+ * 
  * @param {string} userId - The user's UUID
  * @param {string} [instagramAccountId] - The specific IG account to log out
  */
 export async function logoutUser(userId, instagramAccountId = null) {
     try {
         if (instagramAccountId) {
-            // Only delete the token for the specific account being logged out
-            await supabase
-                .from('auth_tokens')
-                .delete()
-                .eq('instagram_account_id', instagramAccountId);
-
-            // Deactivate only this account
+            // Deactivate only this account's session — do NOT delete its API token
             await supabase
                 .from('instagram_accounts')
                 .update({ is_active: false })
                 .eq('id', instagramAccountId);
         } else {
-            // Fallback: only delete the token for the currently active account
-            const { data: activeAccount } = await supabase
+            // Fallback: deactivate the currently active account
+            await supabase
                 .from('instagram_accounts')
-                .select('id')
+                .update({ is_active: false })
                 .eq('user_id', userId)
-                .eq('is_active', true)
-                .maybeSingle();
-
-            if (activeAccount) {
-                await supabase
-                    .from('auth_tokens')
-                    .delete()
-                    .eq('instagram_account_id', activeAccount.id);
-
-                await supabase
-                    .from('instagram_accounts')
-                    .update({ is_active: false })
-                    .eq('id', activeAccount.id);
-            }
+                .eq('is_active', true);
         }
 
         return true;
