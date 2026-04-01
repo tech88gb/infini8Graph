@@ -105,18 +105,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const response = await authApi.getLoginUrl();
             if (!response.data.success) return;
 
-            // Navigate the current tab to the Facebook OAuth URL.
-            // window.open() popup positioning is ignored by modern browsers (Chrome 87+,
-            // Safari, Firefox) as a security measure — no JS can reliably center a popup.
-            // The scroll/cutoff issue is fixed server-side via the display=popup OAuth param.
-            window.location.href = response.data.loginUrl;
+            const loginUrl = response.data.loginUrl;
+
+            // Open the Facebook OAuth dialog in a real popup window.
+            // display=popup (set server-side) renders a compact layout designed for
+            // popup windows — it fixes scroll cutoff AND renders correctly centered
+            // inside the popup. We intentionally omit left/top so the browser/OS
+            // handles placement automatically (typically centered on screen).
+            const popup = window.open(
+                loginUrl,
+                'facebook_oauth',
+                'width=480,height=720,toolbar=no,menubar=no,scrollbars=yes,resizable=no'
+            );
+
+            if (!popup) {
+                // Popup was blocked — fall back to full-page redirect
+                window.location.href = loginUrl;
+                return;
+            }
+
+            // When the OAuth callback lands in the popup with a ?token=, it posts a
+            // message here and closes itself (handled in checkAuth below).
+            const handleMessage = (event: MessageEvent) => {
+                if (event.data?.type === 'OAUTH_SUCCESS') {
+                    window.removeEventListener('message', handleMessage);
+                    clearInterval(pollTimer);
+                    popup.close();
+                    window.location.reload();
+                }
+            };
+            window.addEventListener('message', handleMessage);
+
+            // Fallback poll in case postMessage doesn't fire
+            const pollTimer = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(pollTimer);
+                    window.removeEventListener('message', handleMessage);
+                    window.location.reload();
+                }
+            }, 800);
 
         } catch (error) {
             console.error('Login error:', error);
             throw error;
         }
     };
-
 
 
     const logout = async () => {
