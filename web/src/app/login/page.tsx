@@ -12,19 +12,62 @@ export default function LoginPage() {
     const handleLogin = async () => {
         setIsLoggingIn(true);
         setError(null);
+
+        // 1. Open the popup synchronously to prevent the browser from blocking it.
+        // If we wait for the fetch request first, the browser will block window.open().
+        const width = 600;
+        const height = 700;
+        const left = Math.round((screen.width - width) / 2);
+        const top = Math.round((screen.height - height) / 2);
+        
+        const popup = window.open(
+            '',
+            'facebook_oauth',
+            `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+        );
+
         try {
             const response = await fetch(`${API_URL}/api/auth/login`, {
                 credentials: 'include',
                 headers: { 'ngrok-skip-browser-warning': 'true' }
             });
             const data = await response.json();
+            
             if (data.success && data.loginUrl) {
-                window.location.href = data.loginUrl;
+                if (popup) {
+                    // 2. Assign the URL to our successfully opened popup
+                    popup.location.href = data.loginUrl;
+                    
+                    // 3. Listen for success message from the callback page
+                    const handleMessage = (event: MessageEvent) => {
+                        if (event.data?.type === 'OAUTH_SUCCESS') {
+                            window.removeEventListener('message', handleMessage);
+                            clearInterval(pollTimer);
+                            popup.close();
+                            window.location.href = '/dashboard'; // Login page specific redirect
+                        }
+                    };
+                    window.addEventListener('message', handleMessage);
+
+                    // Fallback poll
+                    const pollTimer = setInterval(() => {
+                        if (popup.closed) {
+                            clearInterval(pollTimer);
+                            window.removeEventListener('message', handleMessage);
+                            window.location.href = '/dashboard'; 
+                        }
+                    }, 800);
+                } else {
+                    // Fallback if popup was blocked despite synchronous opening
+                    window.location.href = data.loginUrl;
+                }
             } else {
+                if (popup) popup.close();
                 setError('Failed to get login URL');
                 setIsLoggingIn(false);
             }
         } catch (err) {
+            if (popup) popup.close();
             console.error('Login error:', err);
             setError('Connection error. Is the backend running?');
             setIsLoggingIn(false);

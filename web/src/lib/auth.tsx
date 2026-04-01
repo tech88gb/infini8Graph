@@ -102,31 +102,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const login = async () => {
         try {
+            // Open popup synchronously to avoid browser popup blockers
+            const width = 600;
+            const height = 700;
+            const left = Math.round((screen.width - width) / 2);
+            const top = Math.round((screen.height - height) / 2);
+
+            const popup = window.open(
+                '',
+                'facebook_oauth',
+                `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+            );
+
             const response = await authApi.getLoginUrl();
-            if (!response.data.success) return;
+            if (!response.data.success) {
+                if (popup) popup.close();
+                return;
+            }
 
             const loginUrl = response.data.loginUrl;
 
-            // Open the Facebook OAuth dialog in a real popup window.
-            // display=popup (set server-side) renders a compact layout designed for
-            // popup windows — it fixes scroll cutoff AND renders correctly centered
-            // inside the popup. We intentionally omit left/top so the browser/OS
-            // handles placement automatically (typically centered on screen).
-            const popup = window.open(
-                loginUrl,
-                'facebook_oauth',
-                'width=480,height=720,toolbar=no,menubar=no,scrollbars=yes,resizable=no'
-            );
-
             if (!popup) {
-                // Popup was blocked — fall back to full-page redirect
+                // Fallback: if popup was blocked, do a full redirect
                 window.location.href = loginUrl;
                 return;
             }
 
-            // When the OAuth callback lands in the popup with a ?token=, it posts a
-            // message here and closes itself (handled in checkAuth below).
-            const handleMessage = (event: MessageEvent) => {
+            // Navigate the open window
+            popup.location.href = loginUrl;
+
+            // Listen for the callback page to post a message when auth is done
+            const handleMessage = async (event: MessageEvent) => {
                 if (event.data?.type === 'OAUTH_SUCCESS') {
                     window.removeEventListener('message', handleMessage);
                     clearInterval(pollTimer);
@@ -136,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
             window.addEventListener('message', handleMessage);
 
-            // Fallback poll in case postMessage doesn't fire
+            // Fallback poll
             const pollTimer = setInterval(() => {
                 if (popup.closed) {
                     clearInterval(pollTimer);
