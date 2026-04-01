@@ -231,11 +231,32 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
         let primaryAccountId = null;
         let primaryAccountData = accountsData[0];
 
-        // Deactivate all accounts for this user initially (we'll activate the current session ones)
-        await supabase
+        // Collect the Instagram user IDs from the current auth session
+        const currentSessionIgIds = accountsData.map(a => a.instagramUserId);
+
+        // Only deactivate accounts NOT in the current auth session
+        // This preserves the active/token state of accounts the user isn't re-authing right now
+        const { data: allExistingAccounts } = await supabase
             .from('instagram_accounts')
-            .update({ is_active: false })
+            .select('id, instagram_user_id')
             .eq('user_id', userId);
+
+        if (allExistingAccounts) {
+            const accountsNotInSession = allExistingAccounts.filter(
+                a => !currentSessionIgIds.includes(a.instagram_user_id)
+            );
+            // Don't touch accounts not in this session — leave their is_active as-is
+            // Only deactivate the ones IN this session so we can re-activate the primary below
+            const accountsInSession = allExistingAccounts.filter(
+                a => currentSessionIgIds.includes(a.instagram_user_id)
+            );
+            if (accountsInSession.length > 0) {
+                await supabase
+                    .from('instagram_accounts')
+                    .update({ is_active: false })
+                    .in('id', accountsInSession.map(a => a.id));
+            }
+        }
 
         for (const account of accountsData) {
             let instagramAccountId;
@@ -413,15 +434,45 @@ export async function getAccessToken(userId, instagramAccountId) {
 }
 
 /**
- * Log out user - remove their token
+ * Log out user - remove token for the specific account only
  * @param {string} userId - The user's UUID
+ * @param {string} [instagramAccountId] - The specific IG account to log out
  */
-export async function logoutUser(userId) {
+export async function logoutUser(userId, instagramAccountId = null) {
     try {
-        await supabase
-            .from('auth_tokens')
-            .delete()
-            .eq('user_id', userId);
+        if (instagramAccountId) {
+            // Only delete the token for the specific account being logged out
+            await supabase
+                .from('auth_tokens')
+                .delete()
+                .eq('instagram_account_id', instagramAccountId);
+
+            // Deactivate only this account
+            await supabase
+                .from('instagram_accounts')
+                .update({ is_active: false })
+                .eq('id', instagramAccountId);
+        } else {
+            // Fallback: only delete the token for the currently active account
+            const { data: activeAccount } = await supabase
+                .from('instagram_accounts')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+
+            if (activeAccount) {
+                await supabase
+                    .from('auth_tokens')
+                    .delete()
+                    .eq('instagram_account_id', activeAccount.id);
+
+                await supabase
+                    .from('instagram_accounts')
+                    .update({ is_active: false })
+                    .eq('id', activeAccount.id);
+            }
+        }
 
         return true;
     } catch (error) {

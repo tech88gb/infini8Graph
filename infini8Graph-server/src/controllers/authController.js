@@ -113,7 +113,7 @@ export async function getMe(req, res) {
  */
 export async function logout(req, res) {
     try {
-        await authService.logoutUser(req.user.userId);
+        await authService.logoutUser(req.user.userId, req.user.instagramAccountId);
 
         // Clear the auth cookie
         res.clearCookie('auth_token', {
