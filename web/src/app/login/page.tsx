@@ -1,13 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { Instagram, BarChart3, TrendingUp, Zap, ArrowRight, Shield } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { Instagram, BarChart3, TrendingUp, Zap, ArrowRight, Shield, AlertCircle, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
-export default function LoginPage() {
+function LoginContent() {
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+
+    useEffect(() => {
+        const urlError = searchParams.get('error');
+        if (urlError) {
+            setError(urlError);
+        }
+    }, [searchParams]);
 
     const handleLogin = async () => {
         setIsLoggingIn(true);
@@ -21,7 +30,6 @@ export default function LoginPage() {
             const data = await response.json();
             
             if (data.success && data.loginUrl) {
-                // User explicitly requested full-page redirect in same tab
                 window.location.href = data.loginUrl;
             } else {
                 setError('Failed to get login URL');
@@ -33,6 +41,34 @@ export default function LoginPage() {
             setIsLoggingIn(false);
         }
     };
+
+    // Human-friendly error parsing
+    const getFriendlyErrorMessage = (err: string) => {
+        if (err.includes('No Instagram Business or Creator account found')) {
+            return {
+                title: 'Account Mismatch Detected',
+                message: 'We found your Facebook Page, but it doesn\'t have a linked Instagram Business or Creator account.',
+                steps: [
+                    'Ensure your Instagram is a Professional/Business account.',
+                    'Link it to your Facebook Page in Settings > Linked Accounts.',
+                    'Check "Confirm Connection" in Facebook Business Suite.'
+                ]
+            };
+        }
+        if (err.includes('No Facebook Pages found')) {
+            return {
+                title: 'No Pages Found',
+                message: 'Your Facebook account doesn\'t seem to have any Pages created or managed.',
+                steps: [
+                    'Make sure you have Admin access to a Facebook Page.',
+                    'Ensure the Page is published and not restricted.'
+                ]
+            };
+        }
+        return null;
+    };
+
+    const friendlyError = error ? getFriendlyErrorMessage(error) : null;
 
     return (
         <div className="min-h-screen flex bg-[#000212] text-white">
@@ -105,9 +141,31 @@ export default function LoginPage() {
                         <p className="text-[#b4bcd0]">Sign in with Instagram to access analytics, audience intelligence, and automation in one workspace.</p>
                     </div>
 
-                    <div className="card p-8 shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
-                        {error && (
-                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                        {friendlyError ? (
+                            <div className="mb-6 p-5 rounded-2xl bg-red-500/5 border border-red-500/20 shadow-xl">
+                                <div className="flex items-start gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                                        <AlertCircle className="text-red-400" size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-white mb-1">{friendlyError.title}</h3>
+                                        <p className="text-sm text-red-200/70 mb-4">{friendlyError.message}</p>
+                                        
+                                        <div className="space-y-3">
+                                            <p className="text-[11px] uppercase tracking-wider text-white/40 font-bold">Recommended Steps:</p>
+                                            {friendlyError.steps.map((step, i) => (
+                                                <div key={i} className="flex gap-3 text-xs text-[#b4bcd0] leading-relaxed">
+                                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center shrink-0 text-[10px] text-white/50">{i + 1}</span>
+                                                    <span>{step}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : error && (
+                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm flex gap-3 items-center">
+                                <AlertCircle size={18} className="shrink-0" />
                                 {error}
                             </div>
                         )}
@@ -115,7 +173,7 @@ export default function LoginPage() {
                         <button
                             onClick={handleLogin}
                             disabled={isLoggingIn}
-                            className="btn w-full py-4 text-lg font-semibold text-white"
+                            className="btn w-full py-4 text-lg font-semibold text-white mb-4"
                             style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.98) 0%, rgba(139,92,246,0.95) 100%)', boxShadow: '0 16px 40px rgba(99,102,241,0.25)' }}
                         >
                             {isLoggingIn ? (
@@ -123,24 +181,43 @@ export default function LoginPage() {
                             ) : (
                                 <>
                                     <Instagram size={24} />
-                                    Continue with Instagram
+                                    {friendlyError ? 'Try Login Again' : 'Continue with Instagram'}
                                     <ArrowRight size={18} />
                                 </>
                             )}
                         </button>
 
+                        <button 
+                            onClick={() => setError(null)}
+                            className="w-full py-2 text-xs text-[#8f98b3] hover:text-white transition-colors"
+                        >
+                            Clear error
+                        </button>
+
                         <div className="mt-6 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                             <p className="text-sm text-center text-[#b4bcd0]">
-                                <strong className="text-white">Note:</strong> You need an Instagram Business or Creator account connected to a Facebook Page.
+                                <strong className="text-white">Note:</strong> Connecting requires an <strong className="text-indigo-300">Instagram Business</strong> account linked to a Facebook Page.
                             </p>
                         </div>
                     </div>
 
                     <p className="mt-8 text-center text-sm text-[#8f98b3]">
-                        By continuing, you agree to our Terms of Service and Privacy Policy
+                        Infini8Graph respects your privacy and security. 
                     </p>
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#000212] flex items-center justify-center">
+                <div className="spinner"></div>
+            </div>
+        }>
+            <LoginContent />
+        </Suspense>
     );
 }
