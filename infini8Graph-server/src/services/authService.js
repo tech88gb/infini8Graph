@@ -27,7 +27,8 @@ export function getLoginUrl() {
         'pages_manage_metadata',       // Required for webhooks
         'business_management',
         'ads_read',                    // For ad account insights
-        'read_insights'                // For page/app insights
+        'read_insights',               // For page/app insights
+        'public_profile'               // Basic profile info
     ].join(',');
 
     const params = new URLSearchParams({

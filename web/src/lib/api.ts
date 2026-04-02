@@ -70,7 +70,7 @@ export const instagramApi = {
 
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
-    getAdAccounts: () => api.get('/ads/accounts'),
+    getAdAccounts: (datePreset = 'last_90d') => api.get(`/ads/accounts?datePreset=${datePreset}`),
     getAdInsights: (adAccountId: string, datePreset = 'last_90d') =>
         api.get(`/ads/accounts/${adAccountId}/insights?datePreset=${datePreset}`),
     getCampaigns: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/campaigns`),

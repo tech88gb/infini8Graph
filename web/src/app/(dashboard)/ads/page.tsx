@@ -240,13 +240,14 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 export default function AdsPage() {
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'placements' | 'geo'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'placements' | 'geo'>('overview'); 
+    const [datePreset, setDatePreset] = useState<'today' | 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d' | 'maximum'>('today');
 
     // Fetch accounts
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
-        queryKey: ['ad-accounts'],
+        queryKey: ['ad-accounts', datePreset],
         queryFn: async () => {
-            const res = await adsApi.getAdAccounts();
+            const res = await adsApi.getAdAccounts(datePreset);
             return res.data;
         }
     });
@@ -256,10 +257,10 @@ export default function AdsPage() {
 
     // Fetch detailed insights
     const { data: insightsData, isLoading: insightsLoading } = useQuery({
-        queryKey: ['ad-insights', effectiveAccount],
+        queryKey: ['ad-insights', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getAdInsights(effectiveAccount);
+            const res = await adsApi.getAdInsights(effectiveAccount, datePreset);
             return res.data;
         },
         enabled: !!effectiveAccount
@@ -278,10 +279,10 @@ export default function AdsPage() {
 
     // Fetch conversion funnel
     const { data: funnelData, isLoading: funnelLoading } = useQuery({
-        queryKey: ['funnel', effectiveAccount],
+        queryKey: ['funnel', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getConversionFunnel(effectiveAccount);
+            const res = await adsApi.getConversionFunnel(effectiveAccount, datePreset);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'funnel'
@@ -289,10 +290,10 @@ export default function AdsPage() {
 
     // Fetch campaign intelligence
     const { data: intelligenceData, isLoading: intelligenceLoading } = useQuery({
-        queryKey: ['intelligence', effectiveAccount],
+        queryKey: ['intelligence', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getCampaignIntelligence(effectiveAccount);
+            const res = await adsApi.getCampaignIntelligence(effectiveAccount, datePreset);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'intelligence'
@@ -300,10 +301,10 @@ export default function AdsPage() {
 
     // Fetch advanced analytics
     const { data: advancedData, isLoading: advancedLoading } = useQuery({
-        queryKey: ['advanced', effectiveAccount],
+        queryKey: ['advanced', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getAdvancedAnalytics(effectiveAccount);
+            const res = await adsApi.getAdvancedAnalytics(effectiveAccount, datePreset);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'advanced'
@@ -311,10 +312,10 @@ export default function AdsPage() {
 
     // Fetch deep insights (Nurture Funnel, Bounce Gap, Video Hook, Placement Arbitrage)
     const { data: deepInsightsData, isLoading: deepInsightsLoading } = useQuery({
-        queryKey: ['deep-insights', effectiveAccount],
+        queryKey: ['deep-insights', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount);
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'deep'
@@ -386,8 +387,43 @@ export default function AdsPage() {
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
             <div className="page-header" style={{ marginBottom: 20 }}>
-                <h1 className="page-title">Ads Analytics</h1>
-                <p className="page-subtitle">Facebook & Instagram advertising performance (Last 90 days)</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                        <h1 className="page-title">Ads Analytics</h1>
+                        <p className="page-subtitle">Facebook & Instagram advertising performance</p>
+                    </div>
+                    
+                    {/* Date Preset Selector */}
+                    <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
+                        {[
+                            { value: 'today', label: 'Today' },
+                            { value: 'last_7d', label: '7 Days' },
+                            { value: 'last_14d', label: '14 Days' },
+                            { value: 'last_30d', label: '30 Days' },
+                            { value: 'last_90d', label: '90 Days' },
+                            { value: 'maximum', label: 'Max' }
+                        ].map((preset) => (
+                            <button
+                                key={preset.value}
+                                onClick={() => setDatePreset(preset.value as any)}
+                                style={{
+                                    padding: '6px 14px',
+                                    fontSize: 13,
+                                    fontWeight: datePreset === preset.value ? 600 : 500,
+                                    borderRadius: 6,
+                                    background: datePreset === preset.value ? 'var(--primary)' : 'transparent',
+                                    color: datePreset === preset.value ? 'white' : 'var(--muted)',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {preset.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {/* Account Selector */}

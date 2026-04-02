@@ -29,6 +29,8 @@ export async function getAdAccounts(req, res) {
         const adAccounts = response.data.data || [];
         console.log(`📊 Found ${adAccounts.length} ad accounts`);
 
+        const { datePreset = 'last_90d' } = req.query;
+
         // Get insights for each account
         const accountsWithInsights = await Promise.all(
             adAccounts.map(async (account) => {
@@ -37,7 +39,7 @@ export async function getAdAccounts(req, res) {
                         params: {
                             access_token: accessToken,
                             fields: 'spend,impressions,reach,clicks,cpc,cpm,ctr,frequency',
-                            date_preset: 'last_90d'
+                            date_preset: datePreset
                         }
                     });
                     return { ...account, insights: insightsRes.data.data?.[0] || null };
