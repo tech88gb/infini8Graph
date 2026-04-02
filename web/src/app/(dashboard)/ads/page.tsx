@@ -141,7 +141,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
 // ==================== SECTION COMPONENTS ====================
 
 function SectionCard({ title, subtitle, children, collapsible = false, defaultOpen = true }: {
-    title: string; subtitle?: string; children: React.ReactNode; collapsible?: boolean; defaultOpen?: boolean;
+    title: string | React.ReactNode; subtitle?: string; children: React.ReactNode; collapsible?: boolean; defaultOpen?: boolean;
 }) {
     const [open, setOpen] = useState(defaultOpen);
 
@@ -651,7 +651,7 @@ export default function AdsPage() {
                     {/* Device Performance */}
                     {deviceChartData.length > 0 && (
                         <SectionCard
-                            title="Device Performance"
+                            title={<span style={{ display: 'flex', alignItems: 'center' }}>Device Performance <InfoTooltip text="How your ads perform across Mobile vs Desktop devices" /></span>}
                             subtitle="How your ads perform on different devices"
                         >
                             <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 32, alignItems: 'center' }}>
@@ -727,7 +727,7 @@ export default function AdsPage() {
 
             {/* ==================== CAMPAIGNS TAB ==================== */}
             {activeTab === 'campaigns' && (
-                <SectionCard title={`Campaigns (${campaigns.length})`} subtitle="All campaigns in this ad account">
+                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>{`Campaigns (${campaigns.length})`} <InfoTooltip text="List of all campaigns and their core performance metrics. Metrics like CTR (Click-Through Rate) show ad engagement." /></span>} subtitle="All campaigns in this ad account">
                     {campaigns.length > 0 ? (
                         <div style={{ overflowX: 'auto' }}>
                             <table className="table">
@@ -767,7 +767,7 @@ export default function AdsPage() {
 
             {/* ==================== DEMOGRAPHICS TAB ==================== */}
             {activeTab === 'demographics' && (
-                <SectionCard title="Demographics" subtitle="Breakdown by age and gender">
+                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Demographics <InfoTooltip text="Age and gender breakdown of who is interacting with your ads." /></span>} subtitle="Breakdown by age and gender">
                     {demographics.length > 0 ? (
                         <div style={{ overflowX: 'auto' }}>
                             <table className="table">
@@ -805,7 +805,7 @@ export default function AdsPage() {
             {activeTab === 'placements' && (
                 <div style={{ display: 'grid', gap: 20 }}>
                     {/* Platform Breakdown */}
-                    <SectionCard title="Platform Breakdown" subtitle="Performance on Facebook vs Instagram">
+                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Platform Breakdown <InfoTooltip text="Compares ad performance on Facebook vs Instagram networks." /></span>} subtitle="Performance on Facebook vs Instagram">
                         {placements.length > 0 ? (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
                                 {placements.map((p: any, i: number) => (
@@ -838,7 +838,7 @@ export default function AdsPage() {
                     </SectionCard>
 
                     {/* Position Breakdown */}
-                    <SectionCard title="Position Breakdown" subtitle="Performance by placement (Feed, Stories, Reels, etc.)">
+                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Position Breakdown <InfoTooltip text="Breaks down where your ads appear (Feed, Stories, Reels, etc.) allowing you to see which placement drives the most efficiency." /></span>} subtitle="Performance by placement (Feed, Stories, Reels, etc.)">
                         {positions.length > 0 ? (
                             <div style={{ overflowX: 'auto' }}>
                                 <table className="table">
@@ -877,7 +877,7 @@ export default function AdsPage() {
             {activeTab === 'geo' && (
                 <div style={{ display: 'grid', gap: 20 }}>
                     {/* Country Breakdown */}
-                    <SectionCard title="Country Performance" subtitle="How your ads perform in different countries">
+                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text="Geographical breakdown of your ad reach and performance at the country level." /></span>} subtitle="How your ads perform in different countries">
                         {countries.length > 0 ? (
                             <div style={{ overflowX: 'auto' }}>
                                 <table className="table">
@@ -916,7 +916,7 @@ export default function AdsPage() {
                     </SectionCard>
 
                     {/* Region Breakdown */}
-                    <SectionCard title="Region Performance" subtitle="Performance by state/region">
+                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="More granular geographical breakdown showing states or regions." /></span>} subtitle="Performance by state/region">
                         {regions.length > 0 ? (
                             <div style={{ overflowX: 'auto' }}>
                                 <table className="table">
@@ -969,7 +969,7 @@ export default function AdsPage() {
                         <>
                             {/* Funnel Summary */}
                             <SectionCard
-                                title="Conversion Funnel Overview"
+                                title={<span style={{ display: 'flex', alignItems: 'center' }}>Conversion Funnel Overview <InfoTooltip text="Shows the step-by-step customer journey. Key metrics like ROAS (Return On Ad Spend) indicate profitability, while Cost/Purchase shows acquisition efficiency." /></span>}
                                 subtitle="Track user journey from ad click to purchase — data from Meta's standard events"
                             >
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
@@ -1013,7 +1013,7 @@ export default function AdsPage() {
                             </SectionCard>
 
                             {/* Visual Funnel */}
-                            <SectionCard title="Conversion Funnel Visualization" subtitle="Watch where users drop off">
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Conversion Funnel Visualization <InfoTooltip text="Visual representation of drop-off rates at each stage of your funnel. Bottlenecks highlight where you lose the most potential conversions." /></span>} subtitle="Watch where users drop off">
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
                                     {(funnelData.data.funnel || []).map((stage: any, i: number) => {
                                         const maxCount = Math.max(...(funnelData.data.funnel || []).map((s: any) => s.count || 1));
@@ -1134,7 +1134,7 @@ export default function AdsPage() {
                         <>
                             {/* AI Recommendations */}
                             {intelligenceData.data.recommendations && (
-                                <SectionCard title="🎯 Smart Recommendations" subtitle="AI-powered insights for optimization">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🎯 Smart Recommendations <InfoTooltip text="AI-generated actionable advice based on historical data patterns to optimize your campaign scheduling and placements." /></span>} subtitle="AI-powered insights for optimization">
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                                         {intelligenceData.data.recommendations.bestHour && (
                                             <div style={{ padding: 16, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))', borderRadius: 8 }}>
@@ -1163,7 +1163,7 @@ export default function AdsPage() {
 
                             {/* Day of Week Heatmap */}
                             {(intelligenceData.data.dayOfWeekPerformance || []).length > 0 && (
-                                <SectionCard title="📅 Day of Week Performance" subtitle="Find your best performing days">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📅 Day of Week Performance <InfoTooltip text="Heatmap showing which days yield the highest CTR and lowest costs." /></span>} subtitle="Find your best performing days">
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
                                         {(intelligenceData.data.dayOfWeekPerformance || []).map((day: any) => {
                                             const maxCtr = Math.max(...(intelligenceData.data.dayOfWeekPerformance || []).map((d: any) => parseFloat(d.ctr) || 0));
@@ -1193,7 +1193,7 @@ export default function AdsPage() {
 
                             {/* Placement ROAS Matrix */}
                             {(intelligenceData.data.placementMatrix || []).length > 0 && (
-                                <SectionCard title="📊 Placement ROAS Matrix" subtitle="Find your most profitable placements">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Placement ROAS Matrix <InfoTooltip text="Maps out Return On Ad Spend by placement to identify your most profitable ad slots." /></span>} subtitle="Find your most profitable placements">
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
                                             <thead>
@@ -1236,7 +1236,7 @@ export default function AdsPage() {
 
                             {/* Top Campaigns by Efficiency */}
                             {(intelligenceData.data.campaigns || []).length > 0 && (
-                                <SectionCard title="🏆 Top Campaigns by Efficiency" subtitle="Campaigns ranked by our efficiency score">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🏆 Top Campaigns by Efficiency <InfoTooltip text="Lists your best campaigns based on our proprietary efficiency score combining CTR, conversions, and cost metrics." /></span>} subtitle="Campaigns ranked by our efficiency score">
                                     <div style={{ display: 'grid', gap: 12 }}>
                                         {(intelligenceData.data.campaigns || []).slice(0, 5).map((c: any, i: number) => (
                                             <div key={c.id} style={{
@@ -1299,7 +1299,7 @@ export default function AdsPage() {
                         <>
                             {/* Fatigue Early Warning */}
                             <SectionCard
-                                title="🚨 Fatigue Early Warning System"
+                                title={<span style={{ display: 'flex', alignItems: 'center' }}>🚨 Fatigue Early Warning System <InfoTooltip text="Tracks ad frequency and engagement drop-offs to predict when an ad creative is burning out and needs refreshing." /></span>}
                                 subtitle="Real-time monitoring of ad fatigue indicators"
                             >
                                 <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
@@ -1387,7 +1387,7 @@ export default function AdsPage() {
 
                             {/* Lead Quality Score */}
                             {advancedData.data.leadQualityScore && (
-                                <SectionCard title="📊 Lead Quality Score (LQS)" subtitle="Campaign quality ranking based on CTR, conversion rate, and engagement depth">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Lead Quality Score (LQS) <InfoTooltip text="An aggregated score out of 100 measuring the true quality of incoming traffic based on conversion intent rather than just cheap clicks." /></span>} subtitle="Campaign quality ranking based on CTR, conversion rate, and engagement depth">
                                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24 }}>
                                         <div style={{ textAlign: 'center' }}>
                                             <div style={{
@@ -1439,7 +1439,7 @@ export default function AdsPage() {
 
                             {/* Creative Forensics */}
                             {(advancedData.data.creativeForensics || []).length > 0 && (
-                                <SectionCard title="🔍 Creative Forensics" subtitle="Pattern detection for each creative — based on CTR vs conversions matrix">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Analyzes individual ad creatives to identify winners, clickbait risks, and hidden gems based on CTR vs. Conversion patterns." /></span>} subtitle="Pattern detection for each creative — based on CTR vs conversions matrix">
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                                         {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
                                             // Determine pattern based on data if not provided
@@ -1530,7 +1530,7 @@ export default function AdsPage() {
                             {/* Learning Phase Status */}
                             {(advancedData.data.learningPhase || []).length > 0 && (
                                 <SectionCard
-                                    title="📚 Learning Phase Status"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📚 Learning Phase Status <InfoTooltip text="Meta's algorithm needs 50 conversions in 7 days to optimize. This tracks progress for each ad set to tell you when it's safe to scale." /></span>}
                                     subtitle="Meta needs ~50 conversions per week to optimize delivery — track progress here"
                                 >
                                     <div style={{ display: 'grid', gap: 8 }}>
@@ -1610,7 +1610,7 @@ export default function AdsPage() {
 
                             {/* Retargeting Lift */}
                             {advancedData.data.retargetingLift && (
-                                <SectionCard title="🔄 Retargeting Lift Analysis" subtitle="Compare cold vs retargeting performance to diagnose acquisition quality">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔄 Retargeting Lift Analysis <InfoTooltip text="Measures how much more effectively your ads convert when shown to users who have already interacted with your brand." /></span>} subtitle="Compare cold vs retargeting performance to diagnose acquisition quality">
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 24, alignItems: 'center' }}>
                                         {/* Cold Traffic */}
                                         <div style={{ textAlign: 'center', padding: 20, background: 'rgba(99, 102, 241, 0.1)', borderRadius: 12 }}>
@@ -1676,7 +1676,7 @@ export default function AdsPage() {
 
                             {/* Placement Intent */}
                             {(advancedData.data.placementIntent || []).length > 0 && (
-                                <SectionCard title="🎯 Placement Intent Weighting" subtitle="Not all placements have equal intent - see intent-adjusted metrics">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🎯 Placement Intent Weighting <InfoTooltip text="Adjusts the value of a conversion based on the placement it came from. Search placements often have higher intent than Audience Network." /></span>} subtitle="Not all placements have equal intent - see intent-adjusted metrics">
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
                                             <thead>
@@ -1740,7 +1740,7 @@ export default function AdsPage() {
                             {/* Bounce Gap Analysis - Overall */}
                             {deepInsightsData.data.bounceGapAnalysis && (
                                 <SectionCard
-                                    title="🔍 Bounce Gap Analysis"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Bounce Gap Analysis <InfoTooltip text="Compares Link Clicks to actual Landing Page Views. A high gap indicates slow page speed or accidental clicks." /></span>}
                                     subtitle="The gap between Link Clicks and Landing Page Views reveals traffic quality"
                                 >
                                     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
@@ -1823,7 +1823,7 @@ export default function AdsPage() {
                             {/* Per-Campaign Funnel Comparison */}
                             {(deepInsightsData.data.campaignFunnels || []).length > 0 && (
                                 <SectionCard
-                                    title="📊 Per-Campaign Conversion Velocity"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Per-Campaign Conversion Velocity <InfoTooltip text="Measures the speed and efficiency at which traffic moves through your funnel, campaign by campaign." /></span>}
                                     subtitle="Compare funnel performance across campaigns to see why some convert better"
                                 >
                                     {/* Comparison Header if we have best/worst */}
@@ -1961,7 +1961,7 @@ export default function AdsPage() {
                             {/* Video Hook Analysis */}
                             {deepInsightsData.data.videoSummary && (
                                 <SectionCard
-                                    title="📹 Video Hook & Retention Analysis"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Analyzes user attention span on your video ads. A drop-off before 3s implies a weak hook, while later drop-offs imply content fatigue." /></span>}
                                     subtitle="Understand where viewers drop off to optimize your video ads"
                                 >
                                     {/* Summary Stats */}
