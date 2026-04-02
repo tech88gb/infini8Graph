@@ -51,6 +51,14 @@ export async function callback(req, res) {
         const userId = decodeURIComponent(state);
         const tokens = await exchangeCode(code);
         if (!tokens.access_token) throw new Error('No access token returned from Google');
+
+        // Verify if AdWords scope was granted (required for the app to function)
+        const grantedScopes = tokens.scope ? tokens.scope.split(' ') : [];
+        if (!grantedScopes.includes('https://www.googleapis.com/auth/adwords')) {
+            console.log(`❌ User did not grant AdWords scope`);
+            return res.redirect(`${FRONTEND_URL}/auth/google/callback?error=${encodeURIComponent('Google Ads permission is required. Please make sure to check the box for Google Ads permissions when connecting your account.')}`);
+        }
+
         const googleUserInfo = await getGoogleUserInfo(tokens.access_token);
         await saveUserAndTokens(userId, googleUserInfo, tokens);
         console.log(`✅ Google account connected: ${googleUserInfo.email}`);

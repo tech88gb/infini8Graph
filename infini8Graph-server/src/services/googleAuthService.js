@@ -37,6 +37,8 @@ export function getAuthUrl() {
         access_type: 'offline',
         scope: scopes,
         prompt: 'consent', // Force consent screen to always get a refresh token
+        enable_granular_consent: true,
+        include_granted_scopes: true
     });
 }
 
