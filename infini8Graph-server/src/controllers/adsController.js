@@ -22,7 +22,7 @@ export async function getAdAccounts(req, res) {
             params: {
                 access_token: accessToken,
                 fields: 'id,name,account_id,account_status,currency,timezone_name,business_name,amount_spent',
-                limit: 50
+                limit: 500
             }
         });
 
@@ -88,7 +88,7 @@ export async function getAdInsights(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'name,status,insights.date_preset(' + datePreset + '){quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,spend}',
-                    limit: 50
+                    limit: 500
                 }
             });
             adRelevanceData = adsResponse.data.data || [];
@@ -370,7 +370,7 @@ export async function getCampaigns(req, res) {
             params: {
                 access_token: accessToken,
                 fields: 'id,name,status,objective,created_time,updated_time,daily_budget,lifetime_budget,insights{spend,impressions,reach,clicks,cpc,cpm,ctr}',
-                limit: 50
+                limit: 500
             }
         });
 
@@ -404,7 +404,7 @@ export async function getAdSets(req, res) {
             params: {
                 access_token: accessToken,
                 fields: 'id,name,status,campaign_id,daily_budget,lifetime_budget,targeting,insights{spend,impressions,reach,clicks,cpc,cpm,ctr}',
-                limit: 50
+                limit: 500
             }
         });
 
@@ -436,7 +436,7 @@ export async function getAds(req, res) {
             params: {
                 access_token: accessToken,
                 fields: 'id,name,status,creative,adset_id,campaign_id,insights{spend,impressions,reach,clicks,cpc,cpm,ctr}',
-                limit: 50
+                limit: 500
             }
         });
 
@@ -633,7 +633,7 @@ export async function getCampaignIntelligence(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cpc,cpm,ctr,frequency,purchase_roas}',
-                    limit: 50
+                    limit: 500
                 }
             }),
             // Hourly breakdown for timing optimization
@@ -793,7 +793,7 @@ export async function getCampaignIntelligence(req, res) {
         res.json({
             success: true,
             data: {
-                campaigns: campaigns.slice(0, 20),
+                campaigns: campaigns.slice(0, 150),
                 topCampaign: campaigns.length > 0 ? campaigns[0] : null,
                 hourlyPerformance,
                 dayOfWeekPerformance,
@@ -855,7 +855,7 @@ export async function getAdvancedAnalytics(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal,bid_strategy,targeting,insights.date_preset(' + datePreset + '){spend,impressions,clicks,actions,frequency,ctr,cpc}',
-                    limit: 50
+                    limit: 500
                 }
             }),
             // Campaigns for retargeting comparison
@@ -863,7 +863,7 @@ export async function getAdvancedAnalytics(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'id,name,status,objective,insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,ctr,actions,action_values,frequency}',
-                    limit: 50
+                    limit: 500
                 }
             }),
             // Daily breakdown for fatigue detection
@@ -1397,7 +1397,7 @@ export async function getDeepInsights(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'id,name,status,objective,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cost_per_action_type,inline_link_clicks,outbound_clicks,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions}',
-                    limit: 50
+                    limit: 500
                 }
             }),
             // Account-level funnel data (overall bounce gap calculation)

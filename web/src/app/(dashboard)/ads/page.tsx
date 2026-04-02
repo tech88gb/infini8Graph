@@ -22,7 +22,7 @@ function formatCurrency(value: string | number, currency = 'INR') {
     if (isNaN(num) || num === 0) return '₹0';
     return new Intl.NumberFormat('en-IN', {
         style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0
-    }).format(num / 100);
+    }).format(num);
 }
 
 function formatNumber(value: string | number) {
@@ -353,7 +353,7 @@ export default function AdsPage() {
     // Chart data
     const dailyChartData = daily.map((d: any) => ({
         date: new Date(d.date_start).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        spend: parseFloat(d.spend || 0) / 100,
+        spend: parseFloat(d.spend || 0),
         impressions: parseInt(d.impressions || 0),
         clicks: parseInt(d.clicks || 0),
         ctr: parseFloat(d.ctr || 0)
@@ -361,13 +361,13 @@ export default function AdsPage() {
 
     const deviceChartData = devices.map((d: any) => ({
         name: d.device_platform === 'mobile_app' ? 'Mobile' : d.device_platform === 'desktop' ? 'Desktop' : d.device_platform,
-        spend: parseFloat(d.spend || 0) / 100,
+        spend: parseFloat(d.spend || 0),
         impressions: parseInt(d.impressions || 0)
     }));
 
     const positionChartData = positions.slice(0, 8).map((p: any) => ({
         name: `${p.publisher_platform || ''} ${p.platform_position || ''}`.replace(/_/g, ' ').trim(),
-        spend: parseFloat(p.spend || 0) / 100,
+        spend: parseFloat(p.spend || 0),
         impressions: parseInt(p.impressions || 0),
         ctr: parseFloat(p.ctr || 0)
     }));
@@ -429,7 +429,7 @@ export default function AdsPage() {
             {/* Account Selector */}
             {adAccounts.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-                    {adAccounts.filter((a: any) => a.insights?.spend).slice(0, 5).map((account: any) => (
+                    {adAccounts.map((account: any) => (
                         <button
                             key={account.id}
                             onClick={() => setSelectedAccount(account.account_id)}
