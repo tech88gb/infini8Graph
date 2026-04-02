@@ -37,6 +37,8 @@ app.use(helmet());
 // Allow both local dev and ngrok origins for CORS
 const allowedOrigins = [
     'http://localhost:3000',
+    'https://graph.infini8.org',
+    'https://infini8graph.vercel.app',
     process.env.FRONTEND_URL
 ].filter(Boolean);
 
