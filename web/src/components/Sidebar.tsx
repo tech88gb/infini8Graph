@@ -233,14 +233,18 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                     padding: 'var(--space-2)',
                                     zIndex: 100,
                                     boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
-                                    backdropFilter: 'blur(18px)'
+                                    backdropFilter: 'blur(18px)',
+                                    maxHeight: '350px',
+                                    display: 'flex',
+                                    flexDirection: 'column'
                                 }}
                             >
-                                <div style={{ fontSize: 11, color: 'var(--sidebar-muted)', padding: '6px 10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                <div style={{ flexShrink: 0, fontSize: 11, color: 'var(--sidebar-muted)', padding: '6px 10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                     Switch Account
                                 </div>
 
-                                {accounts.map((account: any) => (
+                                <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px', margin: '4px 0' }}>
+                                    {accounts.map((account: any) => (
                                     <button
                                         key={account.id}
                                         onClick={() => handleSwitchAccount(account.id)}
@@ -312,7 +316,8 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                             <Check size={16} style={{ color: '#6366f1' }} />
                                         )}
                                     </button>
-                                ))}
+                                    ))}
+                                </div>
 
                                 {/* Add Account Button */}
                                 <button
