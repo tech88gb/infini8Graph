@@ -141,6 +141,7 @@ function LoginContent() {
                         <p className="text-[#b4bcd0]">Sign in with Instagram to access analytics, audience intelligence, and automation in one workspace.</p>
                     </div>
 
+                    <div className="card p-8 shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
                         {friendlyError ? (
                             <div className="mb-6 p-5 rounded-2xl bg-red-500/5 border border-red-500/20 shadow-xl">
                                 <div className="flex items-start gap-4">
