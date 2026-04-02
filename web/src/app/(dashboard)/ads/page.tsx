@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { adsApi } from '@/lib/api';
 import {
@@ -50,30 +51,46 @@ const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'
 
 function InfoTooltip({ text }: { text: string }) {
     const [show, setShow] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const [rect, setRect] = useState<DOMRect | null>(null);
+    const iconRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const handleMouseEnter = () => {
+        if (iconRef.current) {
+            setRect(iconRef.current.getBoundingClientRect());
+            setShow(true);
+        }
+    };
+
     return (
-        <div style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }}>
+        <div ref={iconRef} style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }}>
             <HelpCircle
                 size={14}
                 style={{ color: 'var(--muted)', cursor: 'help', opacity: 0.7 }}
-                onMouseEnter={() => setShow(true)}
+                onMouseEnter={handleMouseEnter}
                 onMouseLeave={() => setShow(false)}
             />
-            {show && (
+            {mounted && show && rect && createPortal(
                 <div style={{
                     position: 'absolute',
-                    bottom: '100%',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
+                    top: rect.top + window.scrollY - 8,
+                    left: rect.left + rect.width / 2 + window.scrollX,
+                    transform: 'translate(-50%, -100%)',
                     background: '#1e293b',
                     color: 'white',
                     padding: '8px 12px',
                     borderRadius: 6,
                     fontSize: 12,
-                    width: 220,
-                    zIndex: 100,
-                    marginBottom: 6,
+                    width: Math.min(260, window.innerWidth - 32),
+                    zIndex: 999999,
+                    pointerEvents: 'none',
                     lineHeight: 1.5,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    textAlign: 'center'
                 }}>
                     {text}
                     <div style={{
@@ -85,7 +102,8 @@ function InfoTooltip({ text }: { text: string }) {
                         borderStyle: 'solid',
                         borderColor: '#1e293b transparent transparent transparent'
                     }} />
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -146,7 +164,7 @@ function SectionCard({ title, subtitle, children, collapsible = false, defaultOp
     const [open, setOpen] = useState(defaultOpen);
 
     return (
-        <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ marginBottom: 20, overflow: 'visible' }}>
             <div
                 className="card-header"
                 style={{ cursor: collapsible ? 'pointer' : 'default', marginBottom: open ? 16 : 0 }}
