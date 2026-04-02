@@ -44,27 +44,55 @@ function LoginContent() {
 
     // Human-friendly error parsing
     const getFriendlyErrorMessage = (err: string) => {
-        if (err.includes('No Instagram Business or Creator account found')) {
+        const lowerErr = err.toLowerCase();
+        
+        if (lowerErr.includes('no instagram business or creator account found')) {
             return {
-                title: 'Account Mismatch Detected',
-                message: 'We found your Facebook Page, but it doesn\'t have a linked Instagram Business or Creator account.',
+                title: 'Account Link Mismatch',
+                message: 'You selected a Facebook Page, but it doesn\'t have a linked Instagram Business account, or you didn\'t grant permission to see it.',
                 steps: [
-                    'Ensure your Instagram is a Professional/Business account.',
-                    'Link it to your Facebook Page in Settings > Linked Accounts.',
-                    'Check "Confirm Connection" in Facebook Business Suite.'
+                    'Ensure you checked ALL the boxes in the Facebook login screen.',
+                    'Verify your Instagram is a "Business" or "Creator" account (Personal accounts won\'t work).',
+                    'Check that the specific Instagram account is linked to the specific Facebook Page in Settings.'
                 ]
             };
         }
-        if (err.includes('No Facebook Pages found')) {
+        
+        if (lowerErr.includes('no facebook pages found')) {
             return {
-                title: 'No Pages Found',
-                message: 'Your Facebook account doesn\'t seem to have any Pages created or managed.',
+                title: 'No Pages Selected',
+                message: 'Your Facebook account has no Pages, or you didn\'t select any during login.',
                 steps: [
-                    'Make sure you have Admin access to a Facebook Page.',
-                    'Ensure the Page is published and not restricted.'
+                    'In the Facebook popup, make sure to check the box for your Facebook Page.',
+                    'Ensure you have "Admin" or "Editor" access to the Page.',
+                    'Ensure the Page is Published.'
                 ]
             };
         }
+
+        if (lowerErr.includes('permission') || lowerErr.includes('access_denied')) {
+            return {
+                title: 'Permission Required',
+                message: 'Some required permissions were declined or timed out.',
+                steps: [
+                    'Click "Continue" and allow all requested permissions.',
+                    'Do not uncheck any of the "Manage" boxes, as they are required for analytics.'
+                ]
+            };
+        }
+
+        if (lowerErr.includes('failed to fetch details for any instagram account')) {
+            return {
+                title: 'Data Fetching Error',
+                message: 'Meta refused to give us details for the Instagram accounts you selected.',
+                steps: [
+                    'Ensure you selected both the Facebook Page AND the Instagram account in the login screens.',
+                    'Don\'t uncheck the box for "Access basic info" or "Manage your pages".',
+                    'Try logging out of Facebook in your browser and logging back in here.'
+                ]
+            };
+        }
+
         return null;
     };
 
@@ -174,7 +202,7 @@ function LoginContent() {
                         <button
                             onClick={handleLogin}
                             disabled={isLoggingIn}
-                            className="btn w-full py-4 text-lg font-semibold text-white mb-4"
+                            className="btn w-full py-4 text-lg font-semibold text-white mb-2"
                             style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.98) 0%, rgba(139,92,246,0.95) 100%)', boxShadow: '0 16px 40px rgba(99,102,241,0.25)' }}
                         >
                             {isLoggingIn ? (
@@ -188,14 +216,20 @@ function LoginContent() {
                             )}
                         </button>
 
-                        <button 
-                            onClick={() => setError(null)}
-                            className="w-full py-2 text-xs text-[#8f98b3] hover:text-white transition-colors"
-                        >
-                            Clear error
-                        </button>
+                        {error && (
+                            <button 
+                                onClick={() => {
+                                    setError(null);
+                                    // Also clear from URL
+                                    window.history.replaceState({}, document.title, window.location.pathname);
+                                }}
+                                className="w-full py-2 text-xs text-[#8f98b3] hover:text-white transition-colors mb-4"
+                            >
+                                Clear current error
+                            </button>
+                        )}
 
-                        <div className="mt-6 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                        <div className="mt-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                             <p className="text-sm text-center text-[#b4bcd0]">
                                 <strong className="text-white">Note:</strong> Connecting requires an <strong className="text-indigo-300">Instagram Business</strong> account linked to a Facebook Page.
                             </p>
