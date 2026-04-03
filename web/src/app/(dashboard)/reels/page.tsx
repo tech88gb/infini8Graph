@@ -83,6 +83,8 @@ function MetricCard({ label, value, icon: Icon, color, tooltip }: {
 // ==================== MAIN PAGE ====================
 
 export default function ReelsPage() {
+    const [page, setPage] = useState(1);
+    const REELS_PER_PAGE = 24;
     const { data, isLoading } = useQuery({
         queryKey: ['reels'],
         queryFn: async () => {
@@ -320,8 +322,8 @@ export default function ReelsPage() {
                 }}>
                     <HelpCircle size={15} style={{ color: '#ec4899', flexShrink: 0, marginTop: 1 }} />
                     <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-                        <strong style={{ color: 'var(--foreground)' }}>Permission Required:</strong>{' '}
-                        <code style={{ background: 'rgba(236,72,153,0.12)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>instagram_manage_insights</code>
+                        <strong style={{ color: '#ec4899' }}>✓ Insights Active:</strong>{' '}
+                        Using <code style={{ background: 'rgba(236,72,153,0.12)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>instagram_manage_insights</code>
                         {' — '}Surfaces the <strong>Non-Follower Reach</strong> metric per Reel. A high non-follower ratio means
                         the Reel is being distributed beyond your audience — a key signal of{' '}
                         <span style={{ color: '#ec4899', fontWeight: 600 }}>viral potential</span>.
@@ -352,15 +354,15 @@ export default function ReelsPage() {
                     const totalNFR = reelsWithNFR.reduce((s: number, r: any) => s + r.nonFollowerReach, 0);
 
                     const viralityColor = (v: string) => v === 'viral' ? '#ec4899' : v === 'growing' ? '#f59e0b' : '#10b981';
-                    const viralityLabel = (v: string) => v === 'viral' ? 'ðŸ”¥ Viral' : v === 'growing' ? 'ðŸ“ˆ Growing' : 'âœ… Contained';
+                    const viralityLabel = (v: string) => v === 'viral' ? '🔥 Viral' : v === 'growing' ? '📈 Growing' : '✅ Contained';
 
                     return (
                         <div>
                             {/* Summary bar */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
                                 {[
-                                    { label: 'Viral Reels', value: viralReels, color: '#ec4899', icon: Flame, tip: 'Reels where 60%+ of reach is Non-Followers â€” being actively distributed to new audiences.' },
-                                    { label: 'Growing Reels', value: growingReels, color: '#f59e0b', icon: ArrowUpRight, tip: 'Reels where 35â€“59% of reach is Non-Followers â€” showing expansion beyond core audience.' },
+                                    { label: 'Viral Reels', value: viralReels, color: '#ec4899', icon: Flame, tip: 'Reels where 60%+ of reach is Non-Followers — being actively distributed to new audiences.' },
+                                    { label: 'Growing Reels', value: growingReels, color: '#f59e0b', icon: ArrowUpRight, tip: 'Reels where 35–59% of reach is Non-Followers — showing expansion beyond core audience.' },
                                     { label: 'Total Non-Follower Reach', value: totalNFR.toLocaleString(), color: '#6366f1', icon: Users, tip: 'Total unique non-followers reached across all analyzed Reels.' },
                                     { label: 'Follower: Non-Follower Split', value: `${Math.round(reelsWithNFR.reduce((s: number, r: any) => s + r.followerPct, 0) / (reelsWithNFR.length || 1))}:${Math.round(reelsWithNFR.reduce((s: number, r: any) => s + r.nonFollowerPct, 0) / (reelsWithNFR.length || 1))}`, color: '#10b981', icon: Zap, tip: 'Average follower vs non-follower reach ratio across your Reels.' },
                                 ].map((m: any, i: number) => (
@@ -396,7 +398,7 @@ export default function ReelsPage() {
                                                 background: 'linear-gradient(135deg, #ec4899, #f59e0b)',
                                                 color: '#fff', fontSize: 10, fontWeight: 700,
                                                 padding: '3px 10px', borderBottomLeftRadius: 8
-                                            }}>ðŸ”¥ Most Viral</div>
+                                            }}>🔥 Most Viral</div>
                                         )}
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -410,7 +412,10 @@ export default function ReelsPage() {
                                             {/* Caption */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {reel.caption ? reel.caption.slice(0, 60) + (reel.caption.length > 60 ? 'â€¦' : '') : `Reel ${i + 1}`}
+                                                    {(() => {
+                                                        const title = reel.caption || reel.title || reel.name || `Reel (${new Date(reel.timestamp || Date.now()).toLocaleDateString()})`;
+                                                        return title.length > 60 ? title.substring(0, 60) + '…' : title;
+                                                    })()}
                                                 </div>
                                                 <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 12 }}>
                                                     <span><Eye size={10} style={{ display: 'inline', marginRight: 3 }} />{(reel.reach || 0).toLocaleString()} reach</span>
@@ -428,8 +433,8 @@ export default function ReelsPage() {
                                         {/* Stacked reach bar */}
                                         <div style={{ marginTop: 12 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
-                                                <span style={{ color: '#6366f1', fontWeight: 600 }}>ðŸ‘¥ Followers â€” {reel.followerPct}% ({reel.followerReach.toLocaleString()})</span>
-                                                <span style={{ color: '#ec4899', fontWeight: 600 }}>non-followers â€” {reel.nonFollowerPct}% ({reel.nonFollowerReach.toLocaleString()}) âœ¨</span>
+                                                <span style={{ color: '#6366f1', fontWeight: 600 }}>👥 Followers — {reel.followerPct}% ({reel.followerReach.toLocaleString()})</span>
+                                                <span style={{ color: '#ec4899', fontWeight: 600 }}>non-followers — {reel.nonFollowerPct}% ({reel.nonFollowerReach.toLocaleString()}) ✨</span>
                                             </div>
                                             <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 }}>
                                                 <div style={{ width: `${reel.followerPct}%`, background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: '5px 0 0 5px', transition: 'width 0.8s ease' }} />
@@ -441,7 +446,7 @@ export default function ReelsPage() {
                                         {reel.virality === 'viral' && (
                                             <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(236,72,153,0.06)', borderRadius: 6, fontSize: 11, color: '#ec4899', fontWeight: 500 }}>
                                                 <Zap size={11} style={{ display: 'inline', marginRight: 4 }} />
-                                                This Reel is breaking out â€” {reel.nonFollowerPct}% of reach is new audiences. Boost it now to accelerate follower growth.
+                                                This Reel is breaking out — {reel.nonFollowerPct}% of reach is new audiences. Boost it now to accelerate follower growth.
                                             </div>
                                         )}
                                     </div>
@@ -450,7 +455,7 @@ export default function ReelsPage() {
 
                             {/* Legend */}
                             <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(99,102,241,0.05)', borderRadius: 6, fontSize: 12, color: 'var(--muted)', borderLeft: '3px solid #6366f1' }}>
-                                <strong style={{ color: 'var(--foreground)' }}>ðŸ’¡ Strategy:</strong> Reels marked <em>Viral</em> should be boosted immediately as paid promotions â€” they already proved they resonate beyond your audience.
+                                <strong style={{ color: 'var(--foreground)' }}>💡 Strategy:</strong> Reels marked <em>Viral</em> should be boosted immediately as paid promotions — they already proved they resonate beyond your audience.
                                 Reels marked <em>Contained</em> may need stronger hooks or hashtag optimization to break out.
                                 Full breakdown requires <code style={{ background: 'rgba(99,102,241,0.1)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>instagram_manage_insights</code>.
                             </div>
@@ -465,11 +470,11 @@ export default function ReelsPage() {
             </SectionCard>
 
             {/* Reels Grid */}
-            <SectionCard title="Your Reels" subtitle={`${reels.length} video${reels.length !== 1 ? 's' : ''} analyzed`}>
+            <SectionCard title="Your Reels" subtitle={`${Math.min(page * REELS_PER_PAGE, reels.length)} of ${reels.length} video${reels.length !== 1 ? 's' : ''} shown`}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
-                    {reels.map((reel: any) => (
+                    {reels.slice(0, page * REELS_PER_PAGE).map((reel: any, idx: number) => (
                         <div
-                            key={reel.id}
+                            key={reel.id || idx}
                             style={{
                                 borderRadius: 8,
                                 overflow: 'hidden',
@@ -508,6 +513,17 @@ export default function ReelsPage() {
                     ))}
                 </div>
             </SectionCard>
+            {reels.length > page * REELS_PER_PAGE && (
+                <div style={{ textAlign: 'center', marginTop: -10, marginBottom: 20 }}>
+                    <button
+                        onClick={() => setPage((p) => p + 1)}
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 24px', borderRadius: 20 }}
+                    >
+                        Load More
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
