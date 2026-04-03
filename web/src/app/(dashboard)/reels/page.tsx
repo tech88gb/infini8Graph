@@ -310,25 +310,10 @@ export default function ReelsPage() {
 
             {/* ===== VIRAL DISCOVERY — Non-Follower vs Follower Reach (instagram_manage_insights) ===== */}
             <SectionCard
-                title="🔥 Viral Discovery — Non-Follower Reach Breakdown"
-                subtitle="Identifies which Reels are bringing in new audiences vs. only reaching existing followers"
+                title="🔥 Viral Discovery"
+                subtitle="Identifies which Reels are reaching new audiences vs. existing followers"
             >
-                {/* Permission note */}
-                <div style={{
-                    padding: '12px 16px',
-                    background: 'linear-gradient(135deg, rgba(236,72,153,0.08), rgba(99,102,241,0.06))',
-                    borderRadius: 8, border: '1px solid rgba(236,72,153,0.2)',
-                    marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 10
-                }}>
-                    <HelpCircle size={15} style={{ color: '#ec4899', flexShrink: 0, marginTop: 1 }} />
-                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-                        <strong style={{ color: '#ec4899' }}>✓ Insights Active:</strong>{' '}
-                        Using <code style={{ background: 'rgba(236,72,153,0.12)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>instagram_manage_insights</code>
-                        {' — '}Surfaces the <strong>Non-Follower Reach</strong> metric per Reel. A high non-follower ratio means
-                        the Reel is being distributed beyond your audience — a key signal of{' '}
-                        <span style={{ color: '#ec4899', fontWeight: 600 }}>viral potential</span>.
-                    </div>
-                </div>
+
 
                 {reels.length > 0 ? (() => {
                     // Derive non-follower reach from available data
@@ -354,110 +339,90 @@ export default function ReelsPage() {
                     const totalNFR = reelsWithNFR.reduce((s: number, r: any) => s + r.nonFollowerReach, 0);
 
                     const viralityColor = (v: string) => v === 'viral' ? '#ec4899' : v === 'growing' ? '#f59e0b' : '#10b981';
-                    const viralityLabel = (v: string) => v === 'viral' ? '🔥 Viral' : v === 'growing' ? '📈 Growing' : '✅ Contained';
+                    const viralityLabel = (v: string) => v === 'viral' ? 'Viral' : v === 'growing' ? 'Growing' : 'Contained';
 
                     return (
                         <div>
                             {/* Summary bar */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
                                 {[
-                                    { label: 'Viral Reels', value: viralReels, color: '#ec4899', icon: Flame, tip: 'Reels where 60%+ of reach is Non-Followers — being actively distributed to new audiences.' },
-                                    { label: 'Growing Reels', value: growingReels, color: '#f59e0b', icon: ArrowUpRight, tip: 'Reels where 35–59% of reach is Non-Followers — showing expansion beyond core audience.' },
-                                    { label: 'Total Non-Follower Reach', value: totalNFR.toLocaleString(), color: '#6366f1', icon: Users, tip: 'Total unique non-followers reached across all analyzed Reels.' },
-                                    { label: 'Follower: Non-Follower Split', value: `${Math.round(reelsWithNFR.reduce((s: number, r: any) => s + r.followerPct, 0) / (reelsWithNFR.length || 1))}:${Math.round(reelsWithNFR.reduce((s: number, r: any) => s + r.nonFollowerPct, 0) / (reelsWithNFR.length || 1))}`, color: '#10b981', icon: Zap, tip: 'Average follower vs non-follower reach ratio across your Reels.' },
+                                    { label: 'Viral', value: viralReels, color: '#ec4899', icon: Flame, tip: 'Reels reaching 60%+ non-followers.' },
+                                    { label: 'Growing', value: growingReels, color: '#f59e0b', icon: ArrowUpRight, tip: 'Reels reaching 35–59% non-followers.' },
+                                    { label: 'Non-Follower Reach', value: totalNFR.toLocaleString(), color: '#6366f1', icon: Users, tip: 'Unique non-followers reached.' },
+                                    { label: 'Avg Breakdown', value: `${Math.round(reelsWithNFR.reduce((s: number, r: any) => s + (r.nonFollowerPct || 0), 0) / (reelsWithNFR.length || 1))}% NF`, color: '#10b981', icon: Zap, tip: 'Average non-follower percentage.' },
                                 ].map((m: any, i: number) => (
                                     <div key={i} style={{
-                                        padding: 14, background: `${m.color}0d`, borderRadius: 10,
-                                        border: `1px solid ${m.color}25`, textAlign: 'center'
+                                        padding: '12px 16px', background: 'var(--card-raised)', borderRadius: 12,
+                                        border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12
                                     }}>
-                                        <div style={{ width: 32, height: 32, borderRadius: 8, background: `${m.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
+                                        <div style={{ width: 32, height: 32, borderRadius: 8, background: `${m.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             <m.icon size={16} style={{ color: m.color }} />
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
-                                            <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</span>
-                                            <span style={{ fontSize: 13, cursor: 'help' }} title={m.tip}>ℹ️</span>
+                                        <div>
+                                            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{m.label}</div>
+                                            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--foreground)' }}>{m.value}</div>
                                         </div>
-                                        <div style={{ fontSize: 20, fontWeight: 800, color: m.color }}>{m.value}</div>
                                     </div>
                                 ))}
                             </div>
 
                             {/* Per-reel breakdown */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 {reelsWithNFR.map((reel: any, i: number) => (
                                     <div key={reel.id || i} style={{
-                                        padding: '16px 18px', borderRadius: 10,
-                                        background: 'var(--background)',
-                                        border: reel.virality === 'viral' ? '1px solid rgba(236,72,153,0.35)' : '1px solid var(--border)',
-                                        position: 'relative', overflow: 'hidden'
+                                        padding: '14px', borderRadius: 12,
+                                        background: 'var(--card-raised)',
+                                        border: '1px solid var(--border)',
+                                        transition: 'border-color 0.2s',
+                                        position: 'relative'
                                     }}>
-                                        {/* Rank badge */}
-                                        {i === 0 && (
-                                            <div style={{
-                                                position: 'absolute', top: 0, right: 0,
-                                                background: 'linear-gradient(135deg, #ec4899, #f59e0b)',
-                                                color: '#fff', fontSize: 10, fontWeight: 700,
-                                                padding: '3px 10px', borderBottomLeftRadius: 8
-                                            }}>🔥 Most Viral</div>
-                                        )}
-
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                            {/* Thumbnail */}
-                                            <div style={{ width: 44, height: 44, borderRadius: 8, background: '#1e293b', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {reel.thumbnail
-                                                    ? <img src={reel.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    : <Film size={20} style={{ color: '#64748b' }} />}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                                            <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--background)', flexShrink: 0, overflow: 'hidden' }}>
+                                                {reel.thumbnail ? <img src={reel.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Film size={20} style={{ color: 'var(--muted)', margin: 10 }} />}
                                             </div>
 
-                                            {/* Caption */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 2 }}>
                                                     {(() => {
-                                                        const title = reel.caption || reel.title || reel.name || `Reel (${new Date(reel.timestamp || Date.now()).toLocaleDateString()})`;
-                                                        return title.length > 60 ? title.substring(0, 60) + '…' : title;
+                                                        const text = reel.caption || reel.title || reel.name;
+                                                        if (text) return text.length > 60 ? text.substring(0, 60) + '…' : text;
+                                                        return new Date(reel.timestamp || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                                                     })()}
                                                 </div>
-                                                <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 12 }}>
-                                                    <span><Eye size={10} style={{ display: 'inline', marginRight: 3 }} />{(reel.reach || 0).toLocaleString()} reach</span>
-                                                    <span><Heart size={10} style={{ display: 'inline', marginRight: 3 }} />{(reel.likes || 0).toLocaleString()}</span>
+                                                <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 10 }}>
+                                                    <span>{(reel.reach || 0).toLocaleString()} views</span>
+                                                    <span>{(reel.likes || 0).toLocaleString()} likes</span>
                                                 </div>
                                             </div>
 
-                                            {/* Virality badge */}
-                                            <span style={{
-                                                fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, flexShrink: 0,
-                                                background: `${viralityColor(reel.virality)}18`, color: viralityColor(reel.virality)
-                                            }}>{viralityLabel(reel.virality)}</span>
+                                            <div style={{
+                                                fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 6,
+                                                background: `${viralityColor(reel.virality)}15`, color: viralityColor(reel.virality),
+                                                textTransform: 'uppercase', letterSpacing: '0.05em'
+                                            }}>{viralityLabel(reel.virality)}</div>
                                         </div>
 
-                                        {/* Stacked reach bar */}
-                                        <div style={{ marginTop: 12 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
-                                                <span style={{ color: '#6366f1', fontWeight: 600 }}>👥 Followers — {reel.followerPct}% ({reel.followerReach.toLocaleString()})</span>
-                                                <span style={{ color: '#ec4899', fontWeight: 600 }}>non-followers — {reel.nonFollowerPct}% ({reel.nonFollowerReach.toLocaleString()}) ✨</span>
-                                            </div>
-                                            <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 }}>
-                                                <div style={{ width: `${reel.followerPct}%`, background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: '5px 0 0 5px', transition: 'width 0.8s ease' }} />
-                                                <div style={{ width: `${reel.nonFollowerPct}%`, background: 'linear-gradient(90deg, #ec4899, #f59e0b)', borderRadius: '0 5px 5px 0', transition: 'width 0.8s ease' }} />
-                                            </div>
+                                        <div style={{ position: 'relative', height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden', display: 'flex' }}>
+                                            <div style={{ width: `${reel.followerPct}%`, background: '#6366f1', opacity: 0.8 }} />
+                                            <div style={{ width: `${reel.nonFollowerPct}%`, background: '#ec4899' }} />
                                         </div>
-
-                                        {/* Insight */}
-                                        {reel.virality === 'viral' && (
-                                            <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(236,72,153,0.06)', borderRadius: 6, fontSize: 11, color: '#ec4899', fontWeight: 500 }}>
-                                                <Zap size={11} style={{ display: 'inline', marginRight: 4 }} />
-                                                This Reel is breaking out — {reel.nonFollowerPct}% of reach is new audiences. Boost it now to accelerate follower growth.
-                                            </div>
-                                        )}
+                                        
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                <span style={{ color: '#6366f1', opacity: 0.8 }}>●</span> Followers: {reel.followerPct}%
+                                            </span>
+                                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                <span style={{ color: '#ec4899' }}>●</span> Non-Followers: {reel.nonFollowerPct}%
+                                            </span>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Legend */}
-                            <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(99,102,241,0.05)', borderRadius: 6, fontSize: 12, color: 'var(--muted)', borderLeft: '3px solid #6366f1' }}>
-                                <strong style={{ color: 'var(--foreground)' }}>💡 Strategy:</strong> Reels marked <em>Viral</em> should be boosted immediately as paid promotions — they already proved they resonate beyond your audience.
-                                Reels marked <em>Contained</em> may need stronger hooks or hashtag optimization to break out.
-                                Full breakdown requires <code style={{ background: 'rgba(99,102,241,0.1)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>instagram_manage_insights</code>.
+                            <div style={{ marginTop: 20, textAlign: 'center' }}>
+                                <p style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+                                    Insights derived from reel distribution and engagement ratios.
+                                </p>
                             </div>
                         </div>
                     );
