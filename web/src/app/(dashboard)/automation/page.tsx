@@ -5,7 +5,8 @@ import { useAuth } from '@/lib/auth';
 import {
     Card, CardHeader, CardTitle, CardBody,
     Button, Toggle, Checkbox, Chip, Badge,
-    EmptyState, PageHeader, LoadingPage, Toast, Spinner
+    EmptyState, PageHeader, LoadingPage, Toast, Spinner,
+    Tooltip, InfoIcon
 } from '@/components/ui';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
@@ -315,7 +316,12 @@ export default function AutomationPage() {
                             <CardHeader>
                                 <div className="flex items-center gap-3">
                                     <div style={{ width: 10, height: 10, borderRadius: 'var(--radius-full)', background: defaultRule.is_active ? 'var(--success)' : 'var(--color-gray-300)', boxShadow: defaultRule.is_active ? '0 0 8px var(--success)' : 'none' }} />
-                                    <CardTitle subtitle="Applies to all your posts">Default Auto-Reply</CardTitle>
+                                    <div className="flex items-center gap-1">
+                                        <CardTitle subtitle="Applies to all your posts">General Response Rule</CardTitle>
+                                        <Tooltip content="This message will be used for all your posts unless you create a custom rule for a specific post below.">
+                                            <InfoIcon />
+                                        </Tooltip>
+                                    </div>
                                 </div>
                                 <Toggle checked={defaultRule.is_active} onChange={toggleDefault} />
                             </CardHeader>
@@ -325,7 +331,10 @@ export default function AutomationPage() {
                                         <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: showKeywords ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                         </svg>
-                                        Trigger keywords
+                                        Keywords to Watch For
+                                        <Tooltip content="Only reply when comments contain these specific words. Leave empty to reply to every comment.">
+                                            <InfoIcon />
+                                        </Tooltip>
                                         {defaultRule.keywords.length > 0 && <Badge variant="primary" pill>{defaultRule.keywords.length}</Badge>}
                                     </button>
                                     {showKeywords && (
@@ -344,11 +353,21 @@ export default function AutomationPage() {
                                     )}
                                 </div>
                                 <div className="mb-5">
-                                    <label className="form-label">Comment reply</label>
+                                    <label className="form-label flex items-center gap-1">
+                                        Public Comment Message
+                                        <Tooltip content="This is the public message that will be posted as a reply to the user's comment.">
+                                            <InfoIcon />
+                                        </Tooltip>
+                                    </label>
                                     <textarea value={defaultRule.comment_reply} onChange={e => setDefaultRule({ ...defaultRule, comment_reply: e.target.value })} placeholder="Thank you for your comment. Please check your messages for more information." className="input" style={{ minHeight: 100 }} />
                                 </div>
                                 <div className="mb-6">
-                                    <Checkbox checked={defaultRule.send_dm} onChange={(checked) => setDefaultRule({ ...defaultRule, send_dm: checked })} label="Also send a private DM" />
+                                    <div className="flex items-center gap-1 mb-2">
+                                        <Checkbox checked={defaultRule.send_dm} onChange={(checked) => setDefaultRule({ ...defaultRule, send_dm: checked })} label="Send Private DM Too" />
+                                        <Tooltip content="Enable this to automatically send a direct message (DM) as well. Perfect for sharing links or sensitive info.">
+                                            <InfoIcon />
+                                        </Tooltip>
+                                    </div>
                                     {defaultRule.send_dm && (
                                         <div style={{ marginTop: 'var(--space-4)', paddingLeft: 'var(--space-8)' }}>
                                             <textarea value={defaultRule.dm_reply} onChange={e => setDefaultRule({ ...defaultRule, dm_reply: e.target.value })} placeholder="Hey! Thanks for reaching out. Here's more info..." className="input" style={{ minHeight: 90 }} />
@@ -365,7 +384,12 @@ export default function AutomationPage() {
                         {/* Post Overrides */}
                         <Card>
                             <CardHeader>
-                                <CardTitle subtitle="Custom replies for specific posts">Post Overrides</CardTitle>
+                                <div className="flex items-center gap-1">
+                                    <CardTitle subtitle="Custom rules for individual posts">Custom Post Settings</CardTitle>
+                                    <Tooltip content="Create special responses for specific posts (e.g., for a giveaway or a product sale).">
+                                        <InfoIcon />
+                                    </Tooltip>
+                                </div>
                                 <Button variant={showCreateOverride ? 'ghost' : 'secondary'} size="sm" onClick={() => setShowCreateOverride(!showCreateOverride)}>
                                     {showCreateOverride ? (<><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>Cancel</>) : (<><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>Add override</>)}
                                 </Button>
@@ -373,17 +397,28 @@ export default function AutomationPage() {
                             
                             {showCreateOverride && (
                                 <div style={{ padding: 'var(--space-6)', background: 'var(--card-raised)', borderRadius: 'var(--radius-lg)', margin: 'var(--space-4)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid inset rgba(255,255,255,0.05)' }}>
-                                    <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--foreground)', marginBottom: 'var(--space-6)', borderBottom: '1px solid var(--border-light)', paddingBottom: 'var(--space-4)' }}>Create New Override</h3>
+                                    <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--foreground)', marginBottom: 'var(--space-6)', borderBottom: '1px solid var(--border-light)', paddingBottom: 'var(--space-4)' }}>Create Custom Post Rule</h3>
                                     
                                     <div className="mb-6">
-                                        <label className="form-label">Rule Name</label>
-                                        <input type="text" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} placeholder="e.g. Summer Sale Keyword Campaign" className="input" style={{ fontSize: '15px' }} />
+                                        <label className="form-label flex items-center gap-1">
+                                            Rule Label
+                                            <Tooltip content="A name to help you identify this custom rule in your list.">
+                                                <InfoIcon />
+                                            </Tooltip>
+                                        </label>
+                                        <input type="text" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} placeholder="e.g. Giveaway Post Rule" className="input" style={{ fontSize: '15px' }} />
                                     </div>
                                     
                                     <div className="mb-6">
                                         <label className="form-label flex items-center justify-between">
-                                            <span>Select Posts {(newRule.media_ids?.length || 0) > 0 && <span className="text-primary ml-2">({newRule.media_ids?.length} selected)</span>}</span>
-                                            <span className="text-xs text-muted font-normal">Select one or more posts to target</span>
+                                            <span className="flex items-center gap-1">
+                                                Target Posts
+                                                <Tooltip content="Choose the specific posts you want this custom rule to apply to.">
+                                                    <InfoIcon />
+                                                </Tooltip>
+                                                {(newRule.media_ids?.length || 0) > 0 && <span className="text-primary ml-2">({newRule.media_ids?.length} selected)</span>}
+                                            </span>
+                                            <span className="text-xs text-muted font-normal">Select one or more posts</span>
                                         </label>
                                         <div style={{ display: 'flex', gap: 'var(--space-4)', overflowX: 'auto', padding: 'var(--space-2) 0 var(--space-4) 0', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
                                             {media.length === 0 ? <p className="text-muted p-4">No posts available.</p> : media.map(m => {
@@ -428,7 +463,12 @@ export default function AutomationPage() {
 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }} className="mb-6">
                                         <div>
-                                            <label className="form-label">Comment Reply</label>
+                                            <label className="form-label flex items-center gap-1">
+                                                Public Message
+                                                <Tooltip content="The message posted publicly on the comment.">
+                                                    <InfoIcon />
+                                                </Tooltip>
+                                            </label>
                                             <textarea value={newRule.comment_reply} onChange={e => setNewRule({ ...newRule, comment_reply: e.target.value })} placeholder="Thanks! Check your DMs. 📩" className="input" style={{ minHeight: 80 }} />
                                         </div>
                                         <div>
@@ -440,7 +480,7 @@ export default function AutomationPage() {
                                         </div>
                                     </div>
                                     <div className="flex gap-3">
-                                        <Button variant="primary" onClick={createOverride} isLoading={saving} style={{ flex: 1 }}>Save Override</Button>
+                                        <Button variant="primary" onClick={createOverride} isLoading={saving} style={{ flex: 1 }}>Save Custom Rule</Button>
                                         <Button variant="ghost" onClick={() => setShowCreateOverride(false)}>Cancel</Button>
                                     </div>
                                 </div>
@@ -478,7 +518,7 @@ export default function AutomationPage() {
                                                         <div><span className="text-xs text-muted font-semibold uppercase">Reply</span><p className="mt-1">{rule.comment_reply}</p></div>
                                                         {rule.send_dm && <div><span className="text-xs text-muted font-semibold uppercase">DM</span><p className="mt-1">{rule.dm_reply}</p></div>}
                                                     </div>
-                                                    <Button variant="danger" size="sm" onClick={() => deleteRule(rule.id!)}>Delete Override</Button>
+                                                    <Button variant="danger" size="sm" onClick={() => deleteRule(rule.id!)}>Delete Rule</Button>
                                                 </div>
                                             )}
                                         </div>

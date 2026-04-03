@@ -379,3 +379,34 @@ export function LoadingPage({ text = 'Loading...' }: LoadingPageProps) {
         </div>
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOLTIP COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface TooltipProps {
+    children: React.ReactNode;
+    content: string;
+}
+
+export function Tooltip({ children, content }: TooltipProps) {
+    return (
+        <span className="tooltip-container">
+            <span className="tooltip-trigger">
+                {children}
+            </span>
+            <span className="tooltip-content">
+                {content}
+            </span>
+        </span>
+    );
+}
+
+export function InfoIcon() {
+    return (
+        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{ opacity: 0.5 }}>
+            <circle cx="12" cy="12" r="10" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+        </svg>
+    );
+}
