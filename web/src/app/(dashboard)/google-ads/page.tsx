@@ -11,7 +11,8 @@ import {
     Crosshair, UserCheck, ShieldAlert
 } from 'lucide-react';
 import {
-    TrueRoasTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab
+    TrueRoasTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab,
+    LocalSearchDominanceTab, BiddingIntelligenceTab
 } from '@/components/GoogleAdsIntelligentTabs';
 import {
     AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -1191,8 +1192,10 @@ export default function GoogleAdsPage() {
         { key: 'overview', label: 'Overview', icon: BarChart2 },
         { key: 'true-roas', label: 'True ROAS', icon: Activity },
         { key: 'local', label: 'Local Impact', icon: MapPin },
+        { key: 'local-search', label: 'Local Search Dominance', icon: Globe },
+        { key: 'bidding-intel', label: 'Bidding Intelligence', icon: ShieldAlert },
         { key: 'competitors', label: 'Threats', icon: Crosshair },
-        { key: 'search-terms', label: 'Wasted Spend', icon: ShieldAlert },
+        { key: 'search-terms', label: 'Wasted Spend', icon: Zap },
         { key: 'persona', label: 'Customer Persona', icon: UserCheck },
         { key: 'campaigns', label: 'Campaigns', icon: Target },
         { key: 'keywords', label: 'Keywords', icon: Search },
@@ -1215,7 +1218,7 @@ export default function GoogleAdsPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* Date Range Picker */}
-                    {['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo', 'true-roas'].includes(activeTab) && (
+                    {['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo', 'true-roas', 'local-search', 'bidding-intel'].includes(activeTab) && (
                         <div style={{ display: 'flex', gap: 4, background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
                             {PRESETS.map((p) => (
                                 <button
@@ -1273,6 +1276,8 @@ export default function GoogleAdsPage() {
                 {activeTab === 'overview' && <OverviewTab preset={preset} />}
                 {activeTab === 'true-roas' && <TrueRoasTab />}
                 {activeTab === 'local' && <LocalImpactTab />}
+                {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} />}
+                {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} />}
                 {activeTab === 'persona' && <PersonaBuilderTab />}
                 {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
                 {activeTab === 'keywords' && <KeywordsTab preset={preset} />}

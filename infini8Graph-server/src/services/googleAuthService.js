@@ -31,6 +31,8 @@ export function getAuthUrl() {
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/adwords',
+        'https://www.googleapis.com/auth/business.manage',
+        'https://www.googleapis.com/auth/analytics.readonly',
     ];
 
     return oauth2Client.generateAuthUrl({
