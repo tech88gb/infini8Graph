@@ -538,30 +538,43 @@ export default function AutomationPage() {
                                     <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>User Comment</span>
                                     <div className="flex items-start gap-3 mt-2">
                                         <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)' }} />
-                                        <div style={{ flex: 1, padding: '10px', background: 'var(--card-hover)', borderRadius: '12px' }}>
-                                            <p style={{ fontSize: '11px', fontWeight: 600 }}>@user_example</p>
-                                            <p className="mt-1">
-                                                {defaultRule.keywords.length > 0 ? <>How much is the <span style={{ background: 'var(--primary-light)', padding: '0 2px' }}>{defaultRule.keywords[0]}</span>?</> : 'Clean shot!'}
+                                        <div style={{ flex: 1, padding: '12px', background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: '12px' }}>
+                                            <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--foreground)' }}>@user_example</p>
+                                            <p className="mt-1" style={{ color: 'var(--foreground)', fontSize: '13px', lineHeight: '1.4' }}>
+                                                {defaultRule.keywords.length > 0 ? (
+                                                    <>Looking for the <span style={{ background: 'rgba(99, 102, 241, 0.2)', color: 'var(--primary-light)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{defaultRule.keywords[0]}</span>?</>
+                                                ) : (
+                                                    'This is a really cool post! Clean shot! 🔥'
+                                                )}
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="mb-4">
                                     <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Your Reply</span>
-                                    <div className="flex items-start gap-3 mt-2">
-                                        <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'var(--primary)' }} />
-                                        <div style={{ flex: 1, padding: '10px', background: 'var(--primary-light)', borderRadius: '12px' }}>
-                                            <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--primary)' }}>@your_account</p>
-                                            <p className="mt-1">{defaultRule.comment_reply || '...'}</p>
+                                    <div className="flex items-start gap-3 mt-2" style={{ paddingLeft: 'var(--space-4)', borderLeft: '2px solid var(--border)' }}>
+                                        <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+                                        </div>
+                                        <div style={{ flex: 1, padding: '10px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '12px' }}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>@your_account</p>
+                                                <span style={{ fontSize: '9px', color: 'var(--muted)' }}>Reply</span>
+                                            </div>
+                                            <p className="mt-1" style={{ color: 'var(--foreground)', fontSize: '13px', lineHeight: '1.4' }}>{defaultRule.comment_reply || 'Type a message to see preview...'}</p>
                                         </div>
                                     </div>
                                 </div>
                                 {defaultRule.send_dm && (
-                                    <div style={{ padding: '10px', borderRadius: '12px', background: 'var(--card-hover)', border: '1px solid var(--primary-light)' }}>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--primary)' }}>Private DM</span>
+                                    <div className="mt-3">
+                                        <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>DM Preview</span>
+                                        <div style={{ marginTop: 'var(--space-2)', padding: '12px', borderRadius: '12px', background: 'var(--card-raised)', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'var(--primary)' }} />
+                                                <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.5px' }}>OFFICIAL DM</span>
+                                            </div>
+                                            <p style={{ color: 'var(--foreground)', fontSize: '13px', lineHeight: '1.4' }}>{defaultRule.dm_reply || 'Type a DM to see preview...'}</p>
                                         </div>
-                                        <p>{defaultRule.dm_reply || '...'}</p>
                                     </div>
                                 )}
                             </CardBody>
