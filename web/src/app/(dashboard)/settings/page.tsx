@@ -1,10 +1,44 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { User, Shield, Bell, Palette, LogOut } from 'lucide-react';
+import { User, Shield, Bell, Palette, LogOut, RefreshCw } from 'lucide-react';
+import Cookies from 'js-cookie';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+
+function getAuthToken(): string | null {
+    return localStorage.getItem('auth_token') || Cookies.get('auth_token') || null;
+}
 
 export default function SettingsPage() {
     const { user, logout } = useAuth();
+    const [isReconnecting, setIsReconnecting] = useState(false);
+
+    const handleReconnectMeta = async () => {
+        setIsReconnecting(true);
+        try {
+            const token = getAuthToken();
+            const resp = await fetch(`${API_URL}/api/auth/meta/reconnect`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'ngrok-skip-browser-warning': 'true',
+                },
+            });
+            const data = await resp.json();
+            if (data.success && data.loginUrl) {
+                window.location.href = data.loginUrl;
+            } else {
+                throw new Error(data.error || 'Failed to initiate reconnect');
+            }
+        } catch (err: any) {
+            console.error('Reconnect error:', err);
+            alert(err.message || 'Something went wrong. Please try again.');
+            setIsReconnecting(false);
+        }
+    };
 
     return (
         <div className="space-y-8 max-w-4xl">
@@ -32,17 +66,19 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)] transition-all duration-300 hover:bg-white/[0.05]">
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)] transition-all duration-300 hover:bg-white/[0.05]">
                         <div>
                             <div className="font-medium text-white">Instagram Connection</div>
                             <div className="text-sm text-[var(--muted)]">@{user?.username || 'Not connected'}</div>
                         </div>
                         <div className="flex items-center gap-3">
                             <button
-                                onClick={() => window.location.href = '/connect-meta'}
-                                className="px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-sm font-semibold hover:bg-indigo-500 hover:text-white transition-all duration-200"
+                                onClick={handleReconnectMeta}
+                                disabled={isReconnecting}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-sm font-semibold hover:bg-indigo-500 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Change Account
+                                <RefreshCw size={14} className={isReconnecting ? 'animate-spin' : ''} />
+                                {isReconnecting ? 'Redirecting...' : 'Change Account'}
                             </button>
                             <span className="badge badge-success">Connected</span>
                         </div>
