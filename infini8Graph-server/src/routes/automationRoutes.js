@@ -6,6 +6,18 @@ import autoReplyService from '../services/autoReplyService.js';
 const router = express.Router();
 
 /**
+ * Helper: Get all instagram_account IDs this user has access to,
+ * via auth_tokens (multi-user aware) — NOT instagram_accounts.user_id (original owner only).
+ */
+async function getAccountIdsForUser(userId) {
+    const { data: tokens } = await supabase
+        .from('auth_tokens')
+        .select('instagram_account_id')
+        .eq('user_id', userId);
+    return (tokens || []).map(t => t.instagram_account_id);
+}
+
+/**
  * Get all automation rules for the authenticated user
  */
 router.get('/rules', authenticate, async (req, res) => {
@@ -13,6 +25,7 @@ router.get('/rules', authenticate, async (req, res) => {
         const userId = req.user.userId;
         const activeAccountId = req.user.instagramAccountId;
 
+        // Fast path: active account is known from JWT
         if (activeAccountId) {
             const { data: rules, error: rulesError } = await supabase
                 .from('automation_rules')
@@ -24,13 +37,8 @@ router.get('/rules', authenticate, async (req, res) => {
             return res.json({ success: true, rules: rules || [] });
         }
 
-        const { data: accounts, error: accountError } = await supabase
-            .from('instagram_accounts')
-            .select('id')
-            .eq('user_id', userId);
-
-        if (accountError) throw accountError;
-        const accountIds = accounts.map(a => a.id);
+        // Fallback: resolve all accounts for this user via auth_tokens
+        const accountIds = await getAccountIdsForUser(userId);
 
         const { data: rules, error: rulesError } = await supabase
             .from('automation_rules')
@@ -88,6 +96,7 @@ router.post('/rules', authenticate, async (req, res) => {
 
 /**
  * Update an automation rule
+ * FIX: Ownership check via auth_tokens instead of instagram_accounts.user_id
  */
 router.patch('/rules/:id', authenticate, async (req, res) => {
     try {
@@ -95,12 +104,8 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
         const ruleId = req.params.id;
         const updates = req.body;
 
-        const { data: accounts } = await supabase
-            .from('instagram_accounts')
-            .select('id')
-            .eq('user_id', userId);
-
-        const accountIds = accounts?.map(a => a.id) || [];
+        // FIX: Use auth_tokens to resolve accounts this user can access
+        const accountIds = await getAccountIdsForUser(userId);
 
         const { data: existingRule, error: fetchError } = await supabase
             .from('automation_rules')
@@ -129,18 +134,15 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
 
 /**
  * Delete an automation rule
+ * FIX: Ownership check via auth_tokens instead of instagram_accounts.user_id
  */
 router.delete('/rules/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.userId;
         const ruleId = req.params.id;
 
-        const { data: accounts } = await supabase
-            .from('instagram_accounts')
-            .select('id')
-            .eq('user_id', userId);
-
-        const accountIds = accounts?.map(a => a.id) || [];
+        // FIX: Use auth_tokens to resolve accounts this user can access
+        const accountIds = await getAccountIdsForUser(userId);
 
         const { data: existingRule, error: fetchError } = await supabase
             .from('automation_rules')
