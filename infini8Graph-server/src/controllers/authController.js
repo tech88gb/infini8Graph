@@ -54,17 +54,26 @@ export async function googleCallback(req, res) {
         // Find or create user by google_id
         const user = await authService.findOrCreateUserByGoogle(googleUserInfo.id, googleUserInfo.email);
 
-        // Load active Instagram account if Meta is already connected
-        let activeAccount = null;
-        if (user.meta_connected) {
-            activeAccount = await authService.getActiveAccountForUser(user.id);
+        // DEFENSIVE FIX: Always check auth_tokens for an active account,
+        // regardless of the meta_connected flag (which can be stale/false after
+        // a migration or re-login). This ensures users with existing tokens
+        // get their full Instagram context in the JWT.
+        const activeAccount = await authService.getActiveAccountForUser(user.id);
+        const isMetaConnected = user.meta_connected || !!activeAccount;
+
+        // If we found tokens but meta_connected was false, fix the DB flag silently
+        if (activeAccount && !user.meta_connected) {
+            console.log(`\ud83d\udd27 Correcting stale meta_connected=false for user: ${googleUserInfo.email}`);
+            await supabase.from('users')
+                .update({ meta_connected: true, updated_at: new Date().toISOString() })
+                .eq('id', user.id);
         }
 
         // Issue JWT
         const jwtToken = generateToken({
             userId: user.id,
             googleEmail: googleUserInfo.email,
-            metaConnected: user.meta_connected || false,
+            metaConnected: isMetaConnected,
             instagramUserId: activeAccount?.instagram_user_id || null,
             instagramAccountId: activeAccount?.id || null,
             username: activeAccount?.username || null,

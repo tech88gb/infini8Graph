@@ -62,10 +62,14 @@ export async function getGoogleUserInfo(accessToken) {
 
 /**
  * Find existing user by google_id or create a new one.
- * This is the only place a user row is created for Google-login users.
+ *
+ * MULTI-USER FIX: Also checks by google_email as a fallback.
+ * This handles legacy users who were created via the old Meta-login flow
+ * (their rows have google_id = null). Without this, Google login would
+ * create a duplicate orphaned user row for them, losing all their tokens.
  */
 export async function findOrCreateUserByGoogle(googleId, googleEmail) {
-    // Try existing user by google_id
+    // 1. Try by google_id (fast path for returning users)
     let { data: user } = await supabase
         .from('users')
         .select('*')
@@ -77,7 +81,28 @@ export async function findOrCreateUserByGoogle(googleId, googleEmail) {
         return user;
     }
 
-    // Create new user
+    // 2. Fallback: look up by google_email (catches legacy Meta-login users)
+    if (googleEmail) {
+        let { data: existingByEmail } = await supabase
+            .from('users')
+            .select('*')
+            .eq('google_email', googleEmail)
+            .maybeSingle();
+
+        if (existingByEmail) {
+            // Absorb this user — stamp their google_id so future logins are fast
+            const { data: updatedUser } = await supabase
+                .from('users')
+                .update({ google_id: googleId, updated_at: new Date().toISOString() })
+                .eq('id', existingByEmail.id)
+                .select('*')
+                .single();
+            console.log(`🔗 Linked Google ID to existing user: ${googleEmail}`);
+            return updatedUser || existingByEmail;
+        }
+    }
+
+    // 3. Truly new user — create fresh
     const { data: newUser, error } = await supabase
         .from('users')
         .insert({ google_id: googleId, google_email: googleEmail, meta_connected: false })
