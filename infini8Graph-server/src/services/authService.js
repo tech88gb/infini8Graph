@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { google } from 'googleapis';
 import supabase from '../config/database.js';
 import { encrypt, decrypt } from '../utils/encryption.js';
 import { generateToken } from '../utils/jwt.js';
@@ -12,23 +13,132 @@ const META_REDIRECT_URI = process.env.META_REDIRECT_URI;
 const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v18.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_LOGIN_REDIRECT_URL = process.env.GOOGLE_LOGIN_REDIRECT_URL; // e.g. https://server.com/api/auth/google/callback
+
+// ============================================================
+// GOOGLE LOGIN (Primary Identity)
+// ============================================================
+
+function createGoogleLoginClient() {
+    return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_LOGIN_REDIRECT_URL);
+}
+
 /**
- * Generate the Meta OAuth login URL
- * @returns {string} - The OAuth URL
+ * Generate the Google OAuth URL for LOGIN (minimal scopes: email + profile only)
  */
-export function getLoginUrl() {
+export function getGoogleLoginUrl() {
+    const client = createGoogleLoginClient();
+    return client.generateAuthUrl({
+        access_type: 'offline',
+        scope: [
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
+        ],
+        prompt: 'select_account',
+    });
+}
+
+/**
+ * Exchange a Google auth code for tokens (login flow)
+ */
+export async function exchangeGoogleLoginCode(code) {
+    const client = createGoogleLoginClient();
+    const { tokens } = await client.getToken(code);
+    return tokens;
+}
+
+/**
+ * Get Google user profile from access token
+ */
+export async function getGoogleUserInfo(accessToken) {
+    const client = createGoogleLoginClient();
+    client.setCredentials({ access_token: accessToken });
+    const oauth2 = google.oauth2({ version: 'v2', auth: client });
+    const { data } = await oauth2.userinfo.get();
+    return data; // { id, email, name, picture }
+}
+
+/**
+ * Find existing user by google_id or create a new one.
+ * This is the only place a user row is created for Google-login users.
+ */
+export async function findOrCreateUserByGoogle(googleId, googleEmail) {
+    // Try existing user by google_id
+    let { data: user } = await supabase
+        .from('users')
+        .select('*')
+        .eq('google_id', googleId)
+        .maybeSingle();
+
+    if (user) {
+        await supabase.from('users').update({ updated_at: new Date().toISOString() }).eq('id', user.id);
+        return user;
+    }
+
+    // Create new user
+    const { data: newUser, error } = await supabase
+        .from('users')
+        .insert({ google_id: googleId, google_email: googleEmail, meta_connected: false })
+        .select('*')
+        .single();
+
+    if (error) throw new Error('Failed to create user: ' + error.message);
+    console.log(`✅ New user created: ${googleEmail}`);
+    return newUser;
+}
+
+/**
+ * Get the active Instagram account for this user (via auth_tokens.is_active)
+ */
+export async function getActiveAccountForUser(userId) {
+    // Active account first
+    const { data: activeToken } = await supabase
+        .from('auth_tokens')
+        .select('instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (activeToken?.instagram_accounts) return activeToken.instagram_accounts;
+
+    // Fallback: any account for this user
+    const { data: anyToken } = await supabase
+        .from('auth_tokens')
+        .select('instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+    return anyToken?.instagram_accounts || null;
+}
+
+// ============================================================
+// META OAUTH (One-time Setup — not login)
+// ============================================================
+
+function generateState() {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+/**
+ * Generate the Meta OAuth URL for the one-time Meta setup flow.
+ * userId is encoded in state so the callback knows which user to set up.
+ */
+export function getMetaSetupUrl(userId) {
     const scopes = [
         'instagram_basic',
         'instagram_manage_insights',
-        'instagram_manage_comments',   // For comment auto-reply
-        'instagram_manage_messages',   // For DM auto-reply
+        'instagram_manage_comments',
+        'instagram_manage_messages',
         'pages_show_list',
         'pages_read_engagement',
-        'pages_manage_metadata',       // Required for webhooks
+        'pages_manage_metadata',
         'business_management',
-        'ads_read',                    // For ad account insights
-        'read_insights',               // For page/app insights
-        'public_profile'               // Basic profile info
+        'ads_read',
+        'read_insights',
+        'public_profile',
     ].join(',');
 
     const params = new URLSearchParams({
@@ -36,51 +146,29 @@ export function getLoginUrl() {
         redirect_uri: META_REDIRECT_URI,
         scope: scopes,
         response_type: 'code',
-        state: generateState()
+        state: encodeURIComponent(`setup:${userId}`),
     });
 
     return `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth?${params.toString()}`;
 }
 
 /**
- * Generate a random state parameter for OAuth
- */
-function generateState() {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
-
-/**
- * Exchange authorization code for access token
- * @param {string} code - The authorization code
- * @returns {object} - Token data
+ * Exchange Meta authorization code for a long-lived access token
  */
 export async function exchangeCodeForToken(code) {
     try {
-        // Exchange code for short-lived token
         const tokenResponse = await axios.get(`${GRAPH_API_BASE}/oauth/access_token`, {
-            params: {
-                client_id: META_APP_ID,
-                client_secret: META_APP_SECRET,
-                redirect_uri: META_REDIRECT_URI,
-                code: code
-            }
+            params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, redirect_uri: META_REDIRECT_URI, code },
         });
-
         const shortLivedToken = tokenResponse.data.access_token;
 
-        // Exchange for long-lived token
         const longLivedResponse = await axios.get(`${GRAPH_API_BASE}/oauth/access_token`, {
-            params: {
-                grant_type: 'fb_exchange_token',
-                client_id: META_APP_ID,
-                client_secret: META_APP_SECRET,
-                fb_exchange_token: shortLivedToken
-            }
+            params: { grant_type: 'fb_exchange_token', client_id: META_APP_ID, client_secret: META_APP_SECRET, fb_exchange_token: shortLivedToken },
         });
 
         return {
             accessToken: longLivedResponse.data.access_token,
-            expiresIn: longLivedResponse.data.expires_in || 5184000 // 60 days default
+            expiresIn: longLivedResponse.data.expires_in || 5184000,
         };
     } catch (error) {
         console.error('Token exchange error:', error.response?.data || error.message);
@@ -90,188 +178,82 @@ export async function exchangeCodeForToken(code) {
 
 /**
  * Get all Facebook Pages and their linked Instagram Business Accounts
- * @param {string} accessToken - The Facebook access token
- * @returns {Array} - Array of Instagram account data objects
  */
 export async function getInstagramBusinessAccount(accessToken) {
     try {
-        // 1. Get user's Facebook Pages
         const pagesResponse = await axios.get(`${GRAPH_API_BASE}/me/accounts`, {
-            params: {
-                access_token: accessToken,
-                fields: 'id,name,access_token,instagram_business_account'
-            }
+            params: { access_token: accessToken, fields: 'id,name,access_token,instagram_business_account' },
         });
-
         const pages = pagesResponse.data.data;
+        if (!pages || pages.length === 0) throw new Error('No Facebook Pages found.');
 
-        if (!pages || pages.length === 0) {
-            throw new Error('No Facebook Pages found. Please connect a Facebook Page to your account.');
-        }
+        const pagesWithInstagram = pages.filter(p => p.instagram_business_account);
+        if (pagesWithInstagram.length === 0) throw new Error('No Instagram Business account found linked to your Facebook Pages.');
 
-        // 2. Filter pages that have a linked Instagram Business Account
-        const pagesWithInstagram = pages.filter(page => page.instagram_business_account);
-
-        if (pagesWithInstagram.length === 0) {
-            throw new Error('No Instagram Business or Creator account found. Please link an Instagram Business account to your Facebook Page.');
-        }
-
-        console.log(`🔍 Found ${pagesWithInstagram.length} pages with Instagram accounts`);
-
-        // 3. Fetch details for each Instagram account in parallel
         const accountPromises = pagesWithInstagram.map(async (page) => {
             try {
-                const instagramAccountId = page.instagram_business_account.id;
-                const instagramResponse = await axios.get(`${GRAPH_API_BASE}/${instagramAccountId}`, {
+                const igId = page.instagram_business_account.id;
+                const igRes = await axios.get(`${GRAPH_API_BASE}/${igId}`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'id,username,name,profile_picture_url,followers_count,follows_count,media_count,biography,website'
-                    }
+                        fields: 'id,username,name,profile_picture_url,followers_count,follows_count,media_count,biography,website',
+                    },
                 });
-
                 return {
-                    instagramUserId: instagramResponse.data.id,
-                    username: instagramResponse.data.username,
-                    name: instagramResponse.data.name,
-                    profilePictureUrl: instagramResponse.data.profile_picture_url,
-                    followersCount: instagramResponse.data.followers_count,
-                    followsCount: instagramResponse.data.follows_count,
-                    mediaCount: instagramResponse.data.media_count,
-                    biography: instagramResponse.data.biography,
-                    website: instagramResponse.data.website,
+                    instagramUserId: igRes.data.id,
+                    username: igRes.data.username,
+                    name: igRes.data.name,
+                    profilePictureUrl: igRes.data.profile_picture_url,
+                    followersCount: igRes.data.followers_count,
+                    followsCount: igRes.data.follows_count,
+                    mediaCount: igRes.data.media_count,
+                    biography: igRes.data.biography,
+                    website: igRes.data.website,
                     pageId: page.id,
-                    pageToken: page.access_token
+                    pageToken: page.access_token,
                 };
             } catch (err) {
-                console.error(`❌ Error fetching details for IG account ${page.instagram_business_account.id}:`, err.message);
+                console.error(`❌ Error fetching IG account ${page.instagram_business_account.id}:`, err.message);
                 return null;
             }
         });
 
         const accounts = (await Promise.all(accountPromises)).filter(Boolean);
-
-        if (accounts.length === 0) {
-            throw new Error('Failed to fetch details for any Instagram account.');
-        }
-
-        return accounts; // Returns array [ { ...account1 }, { ...account2 } ]
+        if (accounts.length === 0) throw new Error('Failed to fetch details for any Instagram account.');
+        return accounts;
     } catch (error) {
-        console.error('Instagram account fetch error:', error.response?.data || error.message);
         throw new Error(error.message || 'Failed to fetch Instagram Business Accounts');
     }
 }
 
 /**
- * Create or update user in database and store encrypted token
- * @param {object} instagramData - Instagram account data
- * @param {string} accessToken - The access token to store
- * @param {number} expiresIn - Token expiration in seconds
- * @returns {object} - User data with JWT
+ * Set up Meta accounts for an already-authenticated user (Google login user).
+ *
+ * KEY CHANGES vs old createOrUpdateUser:
+ *  1. Takes userId as parameter (from Google JWT) — never derives identity from Facebook
+ *  2. Does NOT overwrite instagram_accounts.user_id if account already exists
+ *  3. auth_tokens upsert uses COMPOSITE key (user_id, instagram_account_id)
+ *  4. is_active stored in auth_tokens (per-user), not instagram_accounts
  */
-/**
- * Create or update user and all their Instagram accounts
- * @param {Array} accountsData - Array of Instagram account data objects
- * @param {string} accessToken - The user access token to store
- * @param {number} expiresIn - Token expiration in seconds
- * @returns {object} - User data with JWT for the primary/first account
- */
-export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
+export async function setupMetaAccounts(userId, accountsData, accessToken, expiresIn) {
     try {
-        // 0. Get Facebook User info to have a stable system-wide ID
-        const meResponse = await axios.get(`${GRAPH_API_BASE}/me`, {
-            params: {
-                access_token: accessToken,
-                fields: 'id,name'
-            }
-        });
-        const facebookUserId = meResponse.data.id;
-
-        // 1. Create or Update User (Unified Identity)
-        // Check if user exists by facebook_user_id (new) or legacy instagram_user_id
-        let { data: existingUsers } = await supabase
-            .from('users')
-            .select('*')
-            .or(`facebook_user_id.eq.${facebookUserId},instagram_user_id.eq.${accountsData[0].instagramUserId}`);
-
-        let existingUser = null;
-        if (existingUsers && existingUsers.length > 0) {
-            existingUser = existingUsers.find(u => u.facebook_user_id === facebookUserId) || existingUsers[0];
-        }
-
-        let userId;
-
-        if (existingUser) {
-            userId = existingUser.id;
-            // Update user details if needed
-            await supabase
-                .from('users')
-                .update({
-                    facebook_user_id: facebookUserId, // Ensure this is set
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', userId);
-        } else {
-            // Create new user
-            const { data: newUser, error: createError } = await supabase
-                .from('users')
-                .insert({
-                    facebook_user_id: facebookUserId,
-                    instagram_user_id: accountsData[0].instagramUserId, // Legacy support
-                    username: accountsData[0].username
-                })
-                .select('id')
-                .single();
-
-            if (createError) throw createError;
-            userId = newUser.id;
-        }
-
-        console.log(`👤 User identified/created: ${userId} (${meResponse.data.name})`);
-
-        // 2. Process each authorized Instagram account
         let primaryAccountId = null;
         let primaryAccountData = accountsData[0];
 
-        // Collect the Instagram user IDs from the current auth session
-        const currentSessionIgIds = accountsData.map(a => a.instagramUserId);
-
-        // Only deactivate accounts NOT in the current auth session
-        // This preserves the active/token state of accounts the user isn't re-authing right now
-        const { data: allExistingAccounts } = await supabase
-            .from('instagram_accounts')
-            .select('id, instagram_user_id')
-            .eq('user_id', userId);
-
-        if (allExistingAccounts) {
-            const accountsNotInSession = allExistingAccounts.filter(
-                a => !currentSessionIgIds.includes(a.instagram_user_id)
-            );
-            // Don't touch accounts not in this session — leave their is_active as-is
-            // Only deactivate the ones IN this session so we can re-activate the primary below
-            const accountsInSession = allExistingAccounts.filter(
-                a => currentSessionIgIds.includes(a.instagram_user_id)
-            );
-            if (accountsInSession.length > 0) {
-                await supabase
-                    .from('instagram_accounts')
-                    .update({ is_active: false })
-                    .in('id', accountsInSession.map(a => a.id));
-            }
-        }
-
         for (const account of accountsData) {
-            let instagramAccountId;
+            const isFirst = account === accountsData[0];
             const encryptedPageToken = account.pageToken ? encrypt(account.pageToken) : null;
 
-            // Check if this specific IG account already exists
+            // Check if this IG account already exists in the system (any user may have registered it)
             const { data: existingAccount } = await supabase
                 .from('instagram_accounts')
                 .select('id')
                 .eq('instagram_user_id', account.instagramUserId)
                 .maybeSingle();
 
-            const accountPayload = {
-                user_id: userId,
+            let instagramAccountId;
+
+            const metadataPayload = {
                 username: account.username,
                 name: account.name,
                 profile_picture_url: account.profilePictureUrl,
@@ -282,52 +264,45 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
                 website: account.website,
                 facebook_page_id: account.pageId,
                 page_access_token: encryptedPageToken,
-                is_active: account === accountsData[0], // Mark the first one as active by default
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
             };
 
             if (existingAccount) {
                 instagramAccountId = existingAccount.id;
-                await supabase
-                    .from('instagram_accounts')
-                    .update(accountPayload)
-                    .eq('id', instagramAccountId);
+                // FIX: Update metadata only — DO NOT touch user_id (preserve original owner)
+                await supabase.from('instagram_accounts').update(metadataPayload).eq('id', instagramAccountId);
+                console.log(`♻️  Reusing existing IG account row: ${account.username}`);
             } else {
-                const { data: newAccount, error: createAccountError } = await supabase
+                // New account — this user is the first to register it
+                const { data: newAccount, error: createErr } = await supabase
                     .from('instagram_accounts')
-                    .insert({
-                        ...accountPayload,
-                        instagram_user_id: account.instagramUserId
-                    })
+                    .insert({ ...metadataPayload, user_id: userId, instagram_user_id: account.instagramUserId })
                     .select('id')
                     .single();
-
-                if (createAccountError) throw createAccountError;
+                if (createErr) throw createErr;
                 instagramAccountId = newAccount.id;
+                console.log(`✅ New IG account created: ${account.username}`);
             }
 
-            if (account === accountsData[0]) {
+            if (isFirst) {
                 primaryAccountId = instagramAccountId;
                 primaryAccountData = account;
             }
 
-            // --- 🌟 NEW: Automatically Subscribe Page to Webhook 🌟 ---
+            // Auto-subscribe page to webhooks
             try {
                 if (account.pageId && account.pageToken) {
                     await axios.post(`${GRAPH_API_BASE}/${account.pageId}/subscribed_apps`, null, {
-                        params: {
-                            access_token: account.pageToken,
-                            subscribed_fields: 'messages,messaging_postbacks,messaging_optins,feed'
-                        }
+                        params: { access_token: account.pageToken, subscribed_fields: 'messages,messaging_postbacks,messaging_optins,feed' },
                     });
-                    console.log(`✅ Automatically subscribed page ${account.pageId} to webhooks!`);
+                    console.log(`✅ Subscribed page ${account.pageId} to webhooks`);
                 }
             } catch (err) {
-                 console.error(`⚠️ Failed to subscribe page ${account.pageId} to webhooks:`, err.response?.data || err.message);
+                console.error(`⚠️ Webhook subscription failed for page ${account.pageId}:`, err.response?.data || err.message);
             }
-            // --------------------------------------------------------
 
-            // 3. Store Auth Token for THIS account
+            // FIX: Store token with COMPOSITE KEY (user_id, instagram_account_id)
+            // This means each user has their own independent token — no more clobbering!
             const expiresAt = new Date();
             expiresAt.setSeconds(expiresAt.getSeconds() + expiresIn);
             const encryptedToken = encrypt(accessToken);
@@ -339,94 +314,61 @@ export async function createOrUpdateUser(accountsData, accessToken, expiresIn) {
                     instagram_account_id: instagramAccountId,
                     access_token: encryptedToken,
                     expires_at: expiresAt.toISOString(),
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'instagram_account_id' });
+                    is_active: isFirst, // First account is active by default
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'user_id,instagram_account_id' }); // COMPOSITE KEY
         }
 
-        // 4. Generate JWT for the session (based on the first account)
-        const jwtToken = generateToken({
-            userId: userId,
-            instagramUserId: primaryAccountData.instagramUserId,
-            instagramAccountId: primaryAccountId,
-            username: primaryAccountData.username
-        });
+        // Mark user as meta_connected
+        await supabase
+            .from('users')
+            .update({ meta_connected: true, meta_connected_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq('id', userId);
 
-        return {
-            userId,
-            instagramAccountId: primaryAccountId,
-            jwt: jwtToken,
-            accountsCount: accountsData.length,
-            user: primaryAccountData
-        };
+        console.log(`✅ Meta setup complete for user ${userId}: ${accountsData.length} account(s)`);
+
+        return { primaryAccountId, primaryAccountData };
     } catch (error) {
-        console.error('User processing error:', error.response?.data || error.message);
-        throw new Error('Failed to process user and accounts: ' + error.message);
+        console.error('Meta setup error:', error.response?.data || error.message);
+        throw new Error('Failed to set up Meta accounts: ' + error.message);
     }
 }
 
+// ============================================================
+// TOKEN MANAGEMENT
+// ============================================================
+
 /**
- * Get decrypted access token for a user
- * @param {string} userId - The user's UUID
- * @param {string} [instagramAccountId] - Optional specific account ID
- * @returns {string|null} - The decrypted access token
+ * Get decrypted access token for a specific user + account combination.
+ * FIX: Always filters by BOTH user_id AND instagram_account_id.
+ * This ensures User A never gets User B's token.
  */
 export async function getAccessToken(userId, instagramAccountId) {
     try {
-        let query = supabase
+        // If no account specified, find the user's active one
+        if (!instagramAccountId) {
+            const activeAccount = await getActiveAccountForUser(userId);
+            if (!activeAccount) {
+                console.error('No active account found for user:', userId);
+                return null;
+            }
+            instagramAccountId = activeAccount.id;
+        }
+
+        const { data, error } = await supabase
             .from('auth_tokens')
-            .select('access_token, expires_at');
+            .select('access_token, expires_at')
+            .eq('user_id', userId)            // ← ALWAYS filter by this user
+            .eq('instagram_account_id', instagramAccountId)
+            .maybeSingle();
 
-        // 1. If a specific account ID is provided, use it
-        let activeAccount = null;
-        if (instagramAccountId) {
-            query = query.eq('instagram_account_id', instagramAccountId);
-        } else {
-            // 2. Otherwise, look for the active account
-            const { data: activeAcct } = await supabase
-                .from('instagram_accounts')
-                .select('id')
-                .eq('user_id', userId)
-                .eq('is_active', true)
-                .maybeSingle();
-
-            activeAccount = activeAcct;
-
-            if (activeAccount) {
-                query = query.eq('instagram_account_id', activeAccount.id);
-            } else {
-                // 3. Last fallback: any token for this user
-                query = query.eq('user_id', userId);
-            }
-        }
-
-        const { data, error } = await query.maybeSingle(); // maybeSingle allows 0 rows without error
-
-        if (error) {
-            console.error('Supabase error fetching token:', error);
+        if (error || !data) {
+            console.error('No token found for user:', userId, 'account:', instagramAccountId);
             return null;
         }
 
-        if (!data) {
-            console.error('No token data found for user:', userId);
-            // Emergency fallback: If we couldn't find a token by active account, try finding ANY token by user_id
-            // This handles cases where data might be slightly inconsistent during migration
-            if (activeAccount) {
-                const { data: fallbackData } = await supabase
-                    .from('auth_tokens')
-                    .select('access_token, expires_at')
-                    .eq('user_id', userId)
-                    .maybeSingle();
-
-                if (fallbackData) {
-                    return decrypt(fallbackData.access_token);
-                }
-            }
-            return null;
-        }
-
-        // Check if token is expired
         if (new Date(data.expires_at) < new Date()) {
-            console.warn('Access token has expired for user:', userId);
+            console.warn('Access token expired for user:', userId);
             return null;
         }
 
@@ -438,59 +380,29 @@ export async function getAccessToken(userId, instagramAccountId) {
 }
 
 /**
- * Log out user - clear session only, PRESERVE API tokens for automations
- * 
- * IMPORTANT: We intentionally do NOT delete auth_tokens here.
- * Automation webhooks (auto-reply, DM replies) run 24/7 in the background
- * and need valid API tokens to function even when the user is not logged in.
- * Deleting tokens would silently kill all automations for that account.
- * 
- * Logout only:
- *   1. Marks the active account as inactive (session-level flag)
- *   2. The JWT cookie is cleared by the controller
- * 
- * @param {string} userId - The user's UUID
- * @param {string} [instagramAccountId] - The specific IG account to log out
- */
-export async function logoutUser(userId, instagramAccountId = null) {
-    try {
-        if (instagramAccountId) {
-            // Deactivate only this account's session — do NOT delete its API token
-            await supabase
-                .from('instagram_accounts')
-                .update({ is_active: false })
-                .eq('id', instagramAccountId);
-        } else {
-            // Fallback: deactivate the currently active account
-            await supabase
-                .from('instagram_accounts')
-                .update({ is_active: false })
-                .eq('user_id', userId)
-                .eq('is_active', true);
-        }
-
-        return true;
-    } catch (error) {
-        console.error('Logout error:', error);
-        return false;
-    }
-}
-
-/**
- * Get all Instagram accounts for a user
- * @param {string} userId - The user's UUID
- * @returns {Array} - Array of accounts
+ * Get all Instagram accounts accessible to a user.
+ * FIX: Queries via auth_tokens (many-to-many) instead of instagram_accounts.user_id
+ * This allows multiple users to see shared IG accounts.
  */
 export async function getUserAccounts(userId) {
     try {
-        const { data: accounts, error } = await supabase
-            .from('instagram_accounts')
-            .select('id, instagram_user_id, username, name, profile_picture_url, followers_count, is_active, created_at')
+        const { data: tokens, error } = await supabase
+            .from('auth_tokens')
+            .select(`
+                is_active,
+                instagram_accounts (
+                    id, instagram_user_id, username, name,
+                    profile_picture_url, followers_count, created_at
+                )
+            `)
             .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+            .order('is_active', { ascending: false });
 
         if (error) throw error;
-        return accounts || [];
+
+        return (tokens || [])
+            .filter(t => t.instagram_accounts)
+            .map(t => ({ ...t.instagram_accounts, is_active: t.is_active }));
     } catch (error) {
         console.error('Error fetching user accounts:', error);
         return [];
@@ -498,70 +410,48 @@ export async function getUserAccounts(userId) {
 }
 
 /**
- * Switch active Instagram account
- * @param {string} userId - The user's UUID
- * @param {string} accountId - The Instagram account ID to switch to
- * @returns {object} - Result with new JWT
+ * Switch the user's active Instagram account.
+ * FIX: Uses auth_tokens.is_active (per-user) instead of instagram_accounts.is_active (global)
  */
 export async function switchActiveAccount(userId, accountId) {
     try {
-        // Verify the account belongs to this user
-        const { data: account, error: accountError } = await supabase
-            .from('instagram_accounts')
-            .select('id, instagram_user_id, username, name, profile_picture_url')
-            .eq('id', accountId)
-            .eq('user_id', userId)
-            .single();
-
-        if (accountError || !account) {
-            return { success: false, error: 'Account not found or access denied' };
-        }
-
-        // Check if there's a valid token for this account
-        const { data: tokenData, error: tokenError } = await supabase
+        // Verify user has a token for this account
+        const { data: token } = await supabase
             .from('auth_tokens')
-            .select('access_token, expires_at')
+            .select('access_token, expires_at, instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
+            .eq('user_id', userId)
             .eq('instagram_account_id', accountId)
-            .single();
+            .maybeSingle();
 
-        if (tokenError || !tokenData) {
-            return { success: false, error: 'No valid token for this account. Please re-authenticate.' };
-        }
+        if (!token) return { success: false, error: 'Account not found or access denied' };
+        if (new Date(token.expires_at) < new Date()) return { success: false, error: 'Token expired. Please reconnect your Meta account.' };
 
-        // Check expiration
-        if (new Date(tokenData.expires_at) < new Date()) {
-            return { success: false, error: 'Token expired for this account. Please re-authenticate.' };
-        }
+        // Deactivate all accounts for this user only
+        await supabase.from('auth_tokens').update({ is_active: false }).eq('user_id', userId);
 
-        // Deactivate all accounts for this user
+        // Activate the selected account for this user only
         await supabase
-            .from('instagram_accounts')
-            .update({ is_active: false })
-            .eq('user_id', userId);
-
-        // Activate the selected account
-        await supabase
-            .from('instagram_accounts')
+            .from('auth_tokens')
             .update({ is_active: true, updated_at: new Date().toISOString() })
-            .eq('id', accountId);
+            .eq('user_id', userId)
+            .eq('instagram_account_id', accountId);
 
-        // Generate new JWT with the switched account
+        const account = token.instagram_accounts;
+        const user = await supabase.from('users').select('google_email, meta_connected').eq('id', userId).maybeSingle();
+
         const jwt = generateToken({
-            userId: userId,
+            userId,
+            googleEmail: user.data?.google_email || null,
+            metaConnected: true,
             instagramUserId: account.instagram_user_id,
             instagramAccountId: account.id,
-            username: account.username
+            username: account.username,
         });
 
         return {
             success: true,
             jwt,
-            account: {
-                id: account.id,
-                username: account.username,
-                name: account.name,
-                profilePictureUrl: account.profile_picture_url
-            }
+            account: { id: account.id, username: account.username, name: account.name, profilePictureUrl: account.profile_picture_url },
         };
     } catch (error) {
         console.error('Error switching account:', error);
@@ -569,13 +459,42 @@ export async function switchActiveAccount(userId, accountId) {
     }
 }
 
+/**
+ * Log out user — clears active flag only; preserves tokens for background automations.
+ * FIX: Targets auth_tokens per-user, not instagram_accounts globally.
+ */
+export async function logoutUser(userId, instagramAccountId = null) {
+    try {
+        let query = supabase.from('auth_tokens').update({ is_active: false }).eq('user_id', userId);
+        if (instagramAccountId) {
+            query = query.eq('instagram_account_id', instagramAccountId);
+        } else {
+            query = query.eq('is_active', true);
+        }
+        await query;
+        return true;
+    } catch (error) {
+        console.error('Logout error:', error);
+        return false;
+    }
+}
+
+// Keep generateToken export for controllers that import it directly
+export { generateToken };
+
 export default {
-    getLoginUrl,
+    getGoogleLoginUrl,
+    exchangeGoogleLoginCode,
+    getGoogleUserInfo,
+    findOrCreateUserByGoogle,
+    getActiveAccountForUser,
+    getMetaSetupUrl,
     exchangeCodeForToken,
     getInstagramBusinessAccount,
-    createOrUpdateUser,
+    setupMetaAccounts,
     getAccessToken,
-    logoutUser,
     getUserAccounts,
-    switchActiveAccount
+    switchActiveAccount,
+    logoutUser,
+    generateToken,
 };

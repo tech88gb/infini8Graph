@@ -5,8 +5,10 @@ import { authApi } from './api';
 
 interface User {
     userId: string;
-    instagramUserId: string;
-    username: string;
+    googleEmail: string | null;
+    metaConnected: boolean;
+    instagramUserId: string | null;
+    username: string | null;
 }
 
 interface Account {
@@ -85,8 +87,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             const response = await authApi.getMe();
 
-            if (response.data.success) {
-                setUser(response.data.user);
+            if (response.data.success && response.data.user) {
+                const apiUser = response.data.user;
+                setUser({
+                    userId: apiUser.userId || apiUser.id,
+                    googleEmail: apiUser.googleEmail || null,
+                    metaConnected: apiUser.metaConnected === true,
+                    instagramUserId: apiUser.instagramUserId || null,
+                    username: apiUser.username || null
+                });
                 // Fetch accounts after successful auth
                 await refreshAccounts();
             } else {
@@ -139,6 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Update user context
                 setUser({
                     userId: user?.userId || '',
+                    googleEmail: user?.googleEmail || null,
+                    metaConnected: true, // If they can switch, they are connected
                     instagramUserId: response.data.account.id,
                     username: response.data.account.username
                 });

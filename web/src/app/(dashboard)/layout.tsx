@@ -12,8 +12,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
-        if (!loading && !user) {
-            router.push('/login');
+        if (!loading) {
+            if (!user) {
+                router.push('/login');
+            } else if (!user.metaConnected) {
+                // Professional redirect: They are logged in but need the one-time Meta setup
+                router.push('/connect-meta');
+            }
         }
     }, [user, loading, router]);
 
@@ -56,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         );
     }
 
-    if (!user) return null;
+    if (!user || !user.metaConnected) return null;
 
     return (
         <div>

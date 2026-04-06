@@ -147,30 +147,32 @@ class AutoReplyService {
         }
 
         try {
+            // FIX: Use .maybeSingle() — won't crash if multiple rows exist for same IG user ID
             const { data: account, error: accountError } = await supabase
                 .from('instagram_accounts')
                 .select('id, user_id, facebook_page_id, page_access_token, username')
                 .eq('instagram_user_id', instagramUserId)
-                .single();
+                .maybeSingle();
 
             if (accountError || !account) {
                 console.log(`   │  ❌ Account not found for IG ID: ${instagramUserId}`);
                 return null;
             }
 
+            // FIX: Webhook context has no user_id — get the most recently updated valid token
+            // for this IG account regardless of which user it belongs to.
+            // With composite key, multiple users may have tokens for this account — pick freshest.
             const { data: tokenData, error: tokenError } = await supabase
                 .from('auth_tokens')
-                .select('access_token, expires_at')
+                .select('access_token, expires_at, user_id')
                 .eq('instagram_account_id', account.id)
-                .single();
+                .gt('expires_at', new Date().toISOString())  // not expired
+                .order('updated_at', { ascending: false })   // most recently refreshed first
+                .limit(1)
+                .maybeSingle();
 
             if (tokenError || !tokenData) {
-                console.log(`   │  ❌ Token not found for account: ${account.id}`);
-                return null;
-            }
-
-            if (new Date(tokenData.expires_at) < new Date()) {
-                console.log(`   │  ⚠️  Token expired`);
+                console.log(`   │  ❌ No valid token found for account: ${account.id}`);
                 return null;
             }
 
@@ -184,7 +186,7 @@ class AutoReplyService {
                 accessToken: decryptedUserToken,
                 pageToken: decryptedPageToken,
                 instagramAccountId: account.id,
-                userId: account.user_id,
+                userId: tokenData.user_id,
                 facebookPageId: account.facebook_page_id,
                 username: account.username
             };

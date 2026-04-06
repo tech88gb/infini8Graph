@@ -17,24 +17,35 @@ export default function SettingsPage() {
             <div className="card">
                 <div className="flex items-center gap-4 mb-6">
                     <User size={24} className="text-[var(--primary)]" />
-                    <h3 className="text-lg font-semibold">Account</h3>
+                    <h3 className="text-lg font-semibold">Account Identity</h3>
                 </div>
 
                 <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)]">
                         <div>
-                            <div className="font-medium">Instagram Account</div>
-                            <div className="text-sm text-[var(--muted)]">@{user?.username}</div>
+                            <div className="font-medium text-white">Google Identity</div>
+                            <div className="text-sm text-[var(--muted)]">{user?.googleEmail}</div>
                         </div>
-                        <span className="badge badge-success">Connected</span>
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Primary
+                        </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)]">
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)] transition-all duration-300 hover:bg-white/[0.05]">
                         <div>
-                            <div className="font-medium">Account Type</div>
-                            <div className="text-sm text-[var(--muted)]">Business / Creator</div>
+                            <div className="font-medium text-white">Instagram Connection</div>
+                            <div className="text-sm text-[var(--muted)]">@{user?.username || 'Not connected'}</div>
                         </div>
-                        <span className="badge badge-success">Active</span>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => window.location.href = '/connect-meta'}
+                                className="px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-sm font-semibold hover:bg-indigo-500 hover:text-white transition-all duration-200"
+                            >
+                                Change Account
+                            </button>
+                            <span className="badge badge-success">Connected</span>
+                        </div>
                     </div>
                 </div>
             </div>

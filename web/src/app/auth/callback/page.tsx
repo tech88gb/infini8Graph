@@ -3,81 +3,132 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Cookies from 'js-cookie';
+import { CheckCircle, AlertCircle } from 'lucide-react';
+
+/** Decode JWT payload without verification (client-side display only) */
+function decodeJwt(token: string): Record<string, any> | null {
+    try {
+        const payload = token.split('.')[1];
+        return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    } catch {
+        return null;
+    }
+}
 
 function AuthCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const [status, setStatus] = useState('Processing login...');
+    const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
+    const [message, setMessage] = useState('Completing sign-in...');
 
     useEffect(() => {
         const token = searchParams.get('token');
         const error = searchParams.get('error');
 
-        console.log('Auth Callback Params:', { token: token ? 'Present' : 'Missing', error });
-
         if (error) {
-            setStatus(`Error: ${error}`);
+            setStatus('error');
+            setMessage(decodeURIComponent(error));
+            setTimeout(() => router.push('/login?error=' + encodeURIComponent(error)), 3000);
+            return;
+        }
+
+        if (!token) {
+            setStatus('error');
+            setMessage('No authentication token received.');
             setTimeout(() => router.push('/login'), 3000);
             return;
         }
 
-        if (token) {
-            console.log('Setting auth cookie...');
-            // Store the token in a cookie (client-side for dev)
-            const isSecure = window.location.protocol === 'https:';
-            Cookies.set('auth_token', token, {
-                expires: 7,
-                secure: isSecure,
-                sameSite: 'Lax',
-                path: '/'
-            });
+        // Save token to cookie + localStorage (dual storage for cross-env compat)
+        const isSecure = window.location.protocol === 'https:';
+        Cookies.set('auth_token', token, {
+            expires: 7,
+            secure: isSecure,
+            sameSite: 'Lax',
+            path: '/',
+        });
+        localStorage.setItem('auth_token', token);
 
-            // Backup: Save to localStorage as well
-            localStorage.setItem('auth_token', token);
+        // Decode JWT to check if Meta is connected
+        const decoded = decodeJwt(token);
+        const metaConnected = decoded?.metaConnected === true;
 
-            setStatus('Login successful! Token received.');
+        setStatus('success');
 
-            // Verify immediate save
-            const saved = localStorage.getItem('auth_token');
-            if (saved) {
-                console.log('Token successfully saved to localStorage');
-            } else {
-                console.error('Failed to save to localStorage');
-            }
-
+        if (!metaConnected) {
+            setMessage('Identity verified. Preparing your workspace.');
+            setTimeout(() => router.push('/connect-meta'), 1500);
         } else {
-            console.warn('No token found in URL params');
-            setStatus('No token received');
+            setMessage('Session restored. Taking you to your dashboard.');
+            setTimeout(() => router.push('/dashboard'), 1200);
         }
     }, [searchParams, router]);
 
-    const handleContinue = () => {
-        router.push('/dashboard');
-    };
-
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--background)' }}>
-            <div className="text-center">
-                <div className="text-2xl font-bold mb-4">{status}</div>
-                <div className="text-[var(--muted)] mb-4 font-mono text-xs max-w-md break-all p-4 bg-black/10 rounded">
-                    {searchParams.get('token') ? 'Token received' : 'No token'}
-                </div>
+        <div
+            className="min-h-screen flex flex-col items-center justify-center gap-8"
+            style={{ 
+                background: 'radial-gradient(circle at top, rgba(92,92,226,0.1), transparent 40%), #03040b',
+            }}
+        >
+            {/* Minimalist Progress Loader */}
+            <div className="relative w-24 h-24 flex items-center justify-center">
+                {/* Outer Ring */}
+                <div 
+                    className="absolute inset-0 rounded-full border-2 border-white/[0.05]"
+                    style={{ borderTopColor: status === 'success' ? '#10b981' : status === 'error' ? '#ef4444' : '#6366f1' }}
+                />
+                
+                {/* Glow */}
+                <div 
+                    className="absolute inset-0 rounded-full blur-xl opacity-20"
+                    style={{ background: status === 'success' ? '#10b981' : status === 'error' ? '#ef4444' : '#6366f1' }}
+                />
 
-                {searchParams.get('token') && (
-                    <button
-                        onClick={handleContinue}
-                        className="btn px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                        Continue to Dashboard
-                    </button>
-                )}
-
-                <div className="mt-4">
-                    <button onClick={() => router.push('/login')} className="text-sm text-[var(--muted)] hover:underline">
-                        Back to Login
-                    </button>
+                {/* Status Icon */}
+                <div className="relative z-10 transition-all duration-500 scale-110">
+                    {status === 'processing' && (
+                        <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                    )}
+                    {status === 'success' && (
+                        <CheckCircle size={32} className="text-emerald-500 animate-in zoom-in-50 duration-300" />
+                    )}
+                    {status === 'error' && (
+                        <AlertCircle size={32} className="text-red-500 animate-in zoom-in-50 duration-300" />
+                    )}
                 </div>
             </div>
+
+            <div className="text-center max-w-sm px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <h2
+                    className="text-2xl font-bold mb-3 tracking-tight"
+                    style={{ color: status === 'success' ? '#10b981' : status === 'error' ? '#ef4444' : 'white' }}
+                >
+                    {status === 'processing' ? 'Syncing...' : status === 'success' ? 'Authorized' : 'Connection Error'}
+                </h2>
+                <div className="flex flex-col gap-2">
+                    <p style={{ color: '#94a3b8', fontSize: 15, fontWeight: 500 }}>{message}</p>
+                    {status === 'success' && (
+                        <div className="flex items-center justify-center gap-2 mt-4">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 animate-bounce [animation-delay:-0.3s]" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 animate-bounce [animation-delay:-0.15s]" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 animate-bounce" />
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {status === 'error' && (
+                <button
+                    onClick={() => router.push('/login')}
+                    className="px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                    style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8' }}
+                >
+                    Back to Login
+                </button>
+            )}
+
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 }
@@ -85,15 +136,11 @@ function AuthCallbackContent() {
 export default function AuthCallbackPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="spinner mb-4"></div>
-                    <p>Processing Authentication...</p>
-                </div>
+            <div className="min-h-screen flex items-center justify-center" style={{ background: '#07070b' }}>
+                <div className="spinner" />
             </div>
         }>
             <AuthCallbackContent />
         </Suspense>
     );
 }
-
