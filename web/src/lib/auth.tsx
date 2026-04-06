@@ -61,7 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const params = new URLSearchParams(window.location.search);
             const tokenFromUrl = params.get('token');
 
-            if (tokenFromUrl) {
+            // Skip consuming the token on /auth/callback — that page handles it itself.
+            // If we strip it here first, the callback page sees no token and errors.
+            const isCallbackPage = window.location.pathname === '/auth/callback';
+
+            if (tokenFromUrl && !isCallbackPage) {
                 console.log('Got token from URL, saving...');
                 const Cookies = (await import('js-cookie')).default;
                 Cookies.set('auth_token', tokenFromUrl, { path: '/', sameSite: 'Lax' });

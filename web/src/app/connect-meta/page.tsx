@@ -8,7 +8,7 @@ import { Instagram, Shield, AlertCircle, ArrowRight, CheckCircle, RefreshCw } fr
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
 function getAuthToken(): string | null {
-    return Cookies.get('auth_token') || localStorage.getItem('auth_token') || null;
+    return localStorage.getItem('auth_token') || Cookies.get('auth_token') || null;
 }
 
 function decodeJwt(token: string): Record<string, any> | null {

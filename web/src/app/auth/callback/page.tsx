@@ -22,8 +22,11 @@ function AuthCallbackContent() {
     const [message, setMessage] = useState('Completing sign-in...');
 
     useEffect(() => {
-        const token = searchParams.get('token');
-        const error = searchParams.get('error');
+        // Read DIRECTLY from window.location.search first — before AuthProvider's
+        // checkAuth() can call window.history.replaceState() and wipe the params.
+        const rawParams = new URLSearchParams(window.location.search);
+        const token = rawParams.get('token') || searchParams.get('token');
+        const error = rawParams.get('error') || searchParams.get('error');
 
         if (error) {
             setStatus('error');
