@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import {
     Card, CardHeader, CardTitle, CardBody,
@@ -52,10 +53,59 @@ interface MediaItem {
     is_collaboration?: boolean;
 }
 
+interface AutomationRulesResponse {
+    success: boolean;
+    rules?: AutomationRule[];
+}
+
+interface AutomationMediaResponse {
+    success: boolean;
+    data?: {
+        all?: Array<{
+            id: string;
+            thumbnail?: string;
+            media_url?: string;
+            caption?: string;
+            is_collaboration?: boolean;
+        }>;
+    };
+}
+
+interface AutomationStatsResponse {
+    success: boolean;
+    stats?: {
+        totalRepliesSent: number;
+        messagingReplies: number;
+        commentReplies: number;
+        errors: number;
+        activeRules: number;
+        recentEvents: number;
+    };
+}
+
+const AUTOMATION_RULES_QUERY_KEY = ['automation', 'rules'];
+const AUTOMATION_MEDIA_QUERY_KEY = ['automation', 'media'];
+const AUTOMATION_STATS_QUERY_KEY = ['automation', 'stats'];
+
+async function fetchJson<T>(url: string, opts: RequestInit = {}): Promise<T> {
+    const res = await authFetch(url, opts);
+    if (!res.ok) {
+        let message = 'Request failed';
+        try {
+            const errorBody = await res.json();
+            message = errorBody?.error || message;
+        } catch {
+            // Keep the fallback message if the error response is not JSON.
+        }
+        throw new Error(message);
+    }
+    return res.json();
+}
+
 export default function AutomationPage() {
     const { user } = useAuth();
+    const queryClient = useQueryClient();
 
-    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -75,69 +125,77 @@ export default function AutomationPage() {
     const [defaultKwInput, setDefaultKwInput] = useState('');
     const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
     const [editKwInput, setEditKwInput] = useState('');
-    const [stats, setStats] = useState<any>({
-        totalRepliesSent: 0,
-        messagingReplies: 0,
-        commentReplies: 0,
-        errors: 0,
-        activeRules: 0,
-        recentEvents: 0
-    });
-    const [loadingStats, setLoadingStats] = useState(false);
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [rulesRes, mediaRes] = await Promise.all([
-                authFetch(`${API_BASE}/api/automation/rules`),
-                authFetch(`${API_BASE}/api/instagram/posts?limit=100&includeCollabs=true`)
-            ]);
-            if (rulesRes.ok) {
-                const data = await rulesRes.json();
-                const allRules: AutomationRule[] = data.rules || [];
-                console.log('📋 Fetched rules from API:', allRules.length, allRules);
-                setRules(allRules);
-                const def = allRules.find(r => !r.media_id && (!r.media_ids || r.media_ids.length === 0));
-                if (def) { setDefaultRule(def); if (def.keywords?.length > 0) setShowKeywords(true); }
-                
-                // Log specific rules
-                const specific = allRules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
-                console.log('🎯 Specific rules (overrides):', specific.length, specific);
-            }
-            if (mediaRes.ok) {
-                const data = await mediaRes.json();
-                console.log('📸 Fetched posts:', data.data?.total, 'posts (', data.data?.owned_count, 'owned,', data.data?.collab_count, 'collabs)');
-                setMedia((data.data?.all || []).map((p: any) => ({ 
-                    id: p.id, 
-                    media_url: p.thumbnail || p.media_url, 
-                    caption: p.caption || '',
-                    is_collaboration: p.is_collaboration || false
-                })));
-            }
-        } catch (err) { console.error(err); } finally { setLoading(false); }
-    }, []);
-
-    const fetchStats = useCallback(async (showLoading = false) => {
-        if (showLoading) setLoadingStats(true);
-        try {
-            const res = await authFetch(`${API_BASE}/api/automation/stats`);
-            if (res.ok) {
-                const data = await res.json();
-                setStats(data.stats);
-            }
-        } catch (err) {
-            console.error('Error fetching stats:', err);
-        } finally {
-            if (showLoading) setLoadingStats(false);
+    const rulesQuery = useQuery({
+        queryKey: AUTOMATION_RULES_QUERY_KEY,
+        enabled: !!user,
+        staleTime: 1000 * 60 * 2,
+        refetchOnWindowFocus: false,
+        queryFn: async () => {
+            const data = await fetchJson<AutomationRulesResponse>(`${API_BASE}/api/automation/rules`);
+            return data.rules || [];
         }
-    }, []);
+    });
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    const mediaQuery = useQuery({
+        queryKey: AUTOMATION_MEDIA_QUERY_KEY,
+        enabled: !!user,
+        staleTime: 1000 * 60 * 10,
+        refetchOnWindowFocus: false,
+        queryFn: async () => {
+            const data = await fetchJson<AutomationMediaResponse>(`${API_BASE}/api/instagram/posts?limit=100&includeCollabs=true`);
+            return (data.data?.all || []).map((p) => ({
+                id: p.id,
+                media_url: p.thumbnail || p.media_url || '',
+                caption: p.caption || '',
+                is_collaboration: p.is_collaboration || false
+            }));
+        }
+    });
+
+    const statsQuery = useQuery({
+        queryKey: AUTOMATION_STATS_QUERY_KEY,
+        enabled: !!user,
+        staleTime: 1000 * 10,
+        refetchInterval: 15000,
+        refetchIntervalInBackground: false,
+        refetchOnWindowFocus: false,
+        queryFn: async () => {
+            const data = await fetchJson<AutomationStatsResponse>(`${API_BASE}/api/automation/stats`);
+            return data.stats || {
+                totalRepliesSent: 0,
+                messagingReplies: 0,
+                commentReplies: 0,
+                errors: 0,
+                activeRules: 0,
+                recentEvents: 0
+            };
+        }
+    });
+
     useEffect(() => {
-        fetchStats(true);
-        const timer = setInterval(() => fetchStats(false), 5000);
-        return () => clearInterval(timer);
-    }, [fetchStats]);
+        if (!rulesQuery.data) return;
+
+        const allRules = rulesQuery.data;
+        console.log('📋 Fetched rules from API:', allRules.length, allRules);
+        setRules(allRules);
+
+        const def = allRules.find(r => !r.media_id && (!r.media_ids || r.media_ids.length === 0));
+        if (def) {
+            setDefaultRule(def);
+            if (def.keywords?.length > 0) setShowKeywords(true);
+        }
+
+        const specific = allRules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
+        console.log('🎯 Specific rules (overrides):', specific.length, specific);
+    }, [rulesQuery.data]);
+
+    useEffect(() => {
+        if (!mediaQuery.data) return;
+
+        console.log('📸 Fetched posts:', mediaQuery.data.length, 'posts');
+        setMedia(mediaQuery.data);
+    }, [mediaQuery.data]);
 
     const specificRules = useMemo(() => {
         const filtered = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
@@ -146,6 +204,11 @@ export default function AutomationPage() {
     }, [rules]);
     
     const notify = (type: 'success' | 'error', message: string) => { setToast({ type, message }); setTimeout(() => setToast(null), 3000); };
+
+    const refreshRules = async () => {
+        await queryClient.invalidateQueries({ queryKey: AUTOMATION_RULES_QUERY_KEY });
+        await queryClient.invalidateQueries({ queryKey: AUTOMATION_STATS_QUERY_KEY });
+    };
 
     const toggleDefault = async (checked: boolean) => {
         // Optimistic update
@@ -159,11 +222,11 @@ export default function AutomationPage() {
                 });
                 if (!res.ok) {
                     notify('error', 'Failed to update');
-                    fetchData(); // Rollback
+                    await rulesQuery.refetch(); // Rollback
                 }
             } catch { 
                 notify('error', 'Network error'); 
-                fetchData(); // Rollback
+                await rulesQuery.refetch(); // Rollback
             }
         }
     };
@@ -175,7 +238,7 @@ export default function AutomationPage() {
             const method = defaultRule.id ? 'PATCH' : 'POST';
             const url = defaultRule.id ? `${API_BASE}/api/automation/rules/${defaultRule.id}` : `${API_BASE}/api/automation/rules`;
             const res = await authFetch(url, { method, body: JSON.stringify({ ...defaultRule, name: 'Default Automation', keywords: defaultRule.keywords || [], media_id: null, media_ids: [] }) });
-            if (res.ok) { const data = await res.json(); setDefaultRule(data.rule); notify('success', 'Saved successfully!'); fetchData(); }
+            if (res.ok) { const data = await res.json(); setDefaultRule(data.rule); notify('success', 'Saved successfully!'); await refreshRules(); }
             else { const err = await res.json(); notify('error', err.error || 'Save failed'); }
         } catch { notify('error', 'Network error'); } finally { setSaving(false); }
     };
@@ -194,16 +257,7 @@ export default function AutomationPage() {
                 notify('success', 'Override created!'); 
                 setShowCreateOverride(false); 
                 setNewRule({ name: '', keywords: [], comment_reply: '', dm_reply: '', send_dm: true, is_active: true, media_id: null, media_ids: [] }); 
-                
-                // Force immediate refresh
-                setLoading(true);
-                const rulesRes = await authFetch(`${API_BASE}/api/automation/rules`);
-                if (rulesRes.ok) {
-                    const rulesData = await rulesRes.json();
-                    console.log('🔄 Refreshed rules:', rulesData.rules?.length, rulesData.rules);
-                    setRules(rulesData.rules || []);
-                }
-                setLoading(false);
+                await refreshRules();
             }
             else {
                 console.error('❌ Create failed:', data);
@@ -217,7 +271,10 @@ export default function AutomationPage() {
 
     const deleteRule = async (id: string) => {
         if (!confirm('Delete this override?')) return;
-        try { await authFetch(`${API_BASE}/api/automation/rules/${id}`, { method: 'DELETE' }); fetchData(); } catch { }
+        try {
+            await authFetch(`${API_BASE}/api/automation/rules/${id}`, { method: 'DELETE' });
+            await refreshRules();
+        } catch { }
     };
 
     const updateRule = async () => {
@@ -235,7 +292,7 @@ export default function AutomationPage() {
             if (res.ok) {
                 notify('success', 'Rule updated!');
                 setEditingRule(null);
-                fetchData();
+                await refreshRules();
             } else {
                 notify('error', data.error || 'Update failed');
             }
@@ -259,11 +316,13 @@ export default function AutomationPage() {
             });
             if (!res.ok) {
                 notify('error', 'Failed to update rule');
-                fetchData(); // Rollback
+                await rulesQuery.refetch(); // Rollback
+            } else {
+                await queryClient.invalidateQueries({ queryKey: AUTOMATION_STATS_QUERY_KEY });
             }
         } catch { 
             notify('error', 'Network error'); 
-            fetchData(); // Rollback
+            await rulesQuery.refetch(); // Rollback
         }
     };
 
@@ -279,7 +338,18 @@ export default function AutomationPage() {
         setInput('');
     };
 
-    if (loading) return <LoadingPage text="Loading automation..." />;
+    const stats = statsQuery.data || {
+        totalRepliesSent: 0,
+        messagingReplies: 0,
+        commentReplies: 0,
+        errors: 0,
+        activeRules: 0,
+        recentEvents: 0
+    };
+
+    if ((rulesQuery.isLoading && !rules.length) || (mediaQuery.isLoading && !media.length)) {
+        return <LoadingPage text="Loading automation..." />;
+    }
 
     const statsRow = [
         {
