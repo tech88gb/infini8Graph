@@ -56,7 +56,13 @@ export const authApi = {
 };
 
 export const instagramApi = {
-    getOverview: () => api.get('/instagram/overview'),
+    getOverview: (startDate?: string, endDate?: string) => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+        const query = params.toString();
+        return api.get(`/instagram/overview${query ? `?${query}` : ''}`);
+    },
     getGrowth: (period = '30d') => api.get(`/instagram/growth?period=${period}`),
     getBestTime: () => api.get('/instagram/best-time'),
     getHashtags: () => api.get('/instagram/hashtags'),

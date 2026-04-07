@@ -534,10 +534,19 @@ function MetaAdsWidget() {
 // ==================== MAIN PAGE ====================
 
 export default function DashboardPage() {
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+
     const { data, isLoading, error, refetch, isFetching } = useQuery({
-        queryKey: ['overview'],
+        queryKey: ['overview', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getOverview();
+            const res = await instagramApi.getOverview(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -577,6 +586,13 @@ export default function DashboardPage() {
         engagement: post.engagement,
         likes: post.likes,
         comments: post.comments
+    }));
+
+    const dailyChartData = (data?.dailyMetrics || []).map((day: any) => ({
+        name: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        followers: day.follower_count || 0,
+        reach: day.reach || 0,
+        impressions: day.impressions || 0,
     }));
 
     const countryData = [...(demographics.countries || [])]
@@ -628,14 +644,32 @@ export default function DashboardPage() {
                     </div>
                     <p className="page-subtitle">Account performance overview</p>
                 </div>
-                <button
-                    onClick={() => refetch()}
-                    disabled={isFetching}
-                    className="btn btn-secondary btn-sm"
-                >
-                    <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-                    Refresh
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--background)', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                        <Clock size={14} style={{ color: 'var(--muted)' }} />
+                        <input 
+                            type="date" 
+                            value={dateRange.startDate} 
+                            onChange={(e) => setDateRange({...dateRange, startDate: e.target.value})}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: 13, outline: 'none' }}
+                        />
+                        <span style={{ color: 'var(--muted)' }}>-</span>
+                        <input 
+                            type="date" 
+                            value={dateRange.endDate} 
+                            onChange={(e) => setDateRange({...dateRange, endDate: e.target.value})}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: 13, outline: 'none' }}
+                        />
+                    </div>
+                    <button
+                        onClick={() => refetch()}
+                        disabled={isFetching}
+                        className="btn btn-secondary btn-sm"
+                    >
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             {/* SOCIAL MEDIA WIDGET (Instagram) */}
@@ -661,11 +695,11 @@ export default function DashboardPage() {
                 {/* Core Metrics */}
                 <div className="grid-metrics" style={{ marginBottom: 24 }}>
                     <MetricCard
-                    label="Followers"
+                    label="Total Followers"
                     value={metrics.followers || 0}
                     icon={Users}
                     color="#6366f1"
-                    tooltip="Total number of accounts following you"
+                    tooltip="Overall number of accounts following you"
                 />
                 <MetricCard
                     label="Engagement Rate"
@@ -734,6 +768,39 @@ export default function DashboardPage() {
                     </div>
                 </div>
             </SectionCard>
+            {/* Daily Metrics Chart */}
+            {dailyChartData.length > 0 && (
+                <div className="chart-container" style={{ marginBottom: 24 }}>
+                    <div className="card-header">
+                        <h3 className="card-title">Daily Audience Metrics</h3>
+                        <p className="text-muted" style={{ fontSize: 12 }}>Follower count, impressions, and reach per day</p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={240}>
+                        <AreaChart data={dailyChartData}>
+                            <defs>
+                                <linearGradient id="followerGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                            <YAxis yAxisId="left" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={60} domain={['auto', 'auto']} />
+                            <YAxis yAxisId="right" orientation="right" stroke="#6366f1" fontSize={11} tickLine={false} axisLine={false} width={60} />
+                            <Tooltip
+                                contentStyle={{
+                                    background: 'var(--card-raised)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 6,
+                                    fontSize: 13
+                                }}
+                            />
+                            <Area yAxisId="left" type="monotone" dataKey="followers" name="Followers" stroke="#10b981" strokeWidth={2} fill="url(#followerGrad)" />
+                            <Area yAxisId="right" type="monotone" dataKey="impressions" name="Impressions" stroke="#6366f1" strokeWidth={2} fill="none" />
+                            <Area yAxisId="right" type="monotone" dataKey="reach" name="Reach" stroke="#0ea5e9" strokeWidth={2} fill="none" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
 
             {/* Engagement Charts */}
             <div className="grid-charts" style={{ marginBottom: 24 }}>

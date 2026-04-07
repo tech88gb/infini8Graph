@@ -52,7 +52,7 @@ class InstagramService {
      * @param {string} period - 'day', 'week', 'days_28', or 'lifetime'
      * @param {Array} metrics - Array of metric names
      */
-    async getAccountInsights(period = 'day', metrics = []) {
+    async getAccountInsights(period = 'day', metrics = [], since = null, until = null) {
         const defaultMetrics = [
             'impressions',
             'reach',
@@ -62,10 +62,15 @@ class InstagramService {
 
         const requestMetrics = metrics.length > 0 ? metrics : defaultMetrics;
 
-        return this.apiRequest(`/${this.instagramUserId}/insights`, {
+        const params = {
             metric: requestMetrics.join(','),
             period: period
-        });
+        };
+
+        if (since) params.since = since;
+        if (until) params.until = until;
+
+        return this.apiRequest(`/${this.instagramUserId}/insights`, params);
     }
 
     /**

@@ -28,8 +28,9 @@ async function getAnalyticsService(req) {
 export async function getOverview(req, res) {
     try {
         console.log('📈 getOverview called for user:', req.user?.username);
+        const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.getOverview();
+        const data = await analytics.getOverview(startDate, endDate);
         console.log('✅ Overview data fetched successfully');
         res.json({ success: true, data });
     } catch (error) {

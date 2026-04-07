@@ -96,9 +96,12 @@ class AnalyticsService {
     /**
      * Get overview analytics (dashboard main metrics)
      */
-    async getOverview() {
+    async getOverview(startDate = null, endDate = null) {
+        // Build a cache key that includes the dates
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        
         // Check cache first
-        const cached = await this.checkCache('overview');
+        const cached = await this.checkCache('overview', dateKey);
         if (cached) return cached;
 
         // Fetch profile first (most basic permission)
@@ -155,6 +158,39 @@ class AnalyticsService {
             thumbnailUrl: post.thumbnailUrl || post.mediaUrl
         }));
 
+        // Get daily metrics using account insights API for the date range
+        let dailyMetrics = [];
+        try {
+            let since = null;
+            let until = null;
+            
+            if (startDate) since = Math.floor(new Date(startDate).getTime() / 1000);
+            if (endDate) until = Math.floor(new Date(endDate).getTime() / 1000);
+            
+            // Meta allows up to 30 days for period='day'
+            const insightsRes = await this.instagram.getAccountInsights('day', ['follower_count', 'impressions', 'reach', 'profile_views'], since, until);
+            
+            if (insightsRes && insightsRes.data) {
+                // process the daily metrics
+                const dailyData = {};
+                insightsRes.data.forEach(metric => {
+                    const metricName = metric.name;
+                    if (metric.values && Array.isArray(metric.values)) {
+                        metric.values.forEach(val => {
+                            const date = (val.end_time || '').split('T')[0];
+                            if (date) {
+                                if (!dailyData[date]) dailyData[date] = { date };
+                                dailyData[date][metricName] = val.value || 0;
+                            }
+                        });
+                    }
+                });
+                dailyMetrics = Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
+            }
+        } catch (e) {
+            console.warn('⚠️ Account insights fetch failed (period=day):', e.message);
+        }
+
         const overview = {
             profile: {
                 username: profile.username,
@@ -176,11 +212,12 @@ class AnalyticsService {
             },
             demographics: demographics || {},
             recentPosts,
+            dailyMetrics, // <-- Exposing daily metrics here
             lastUpdated: new Date().toISOString()
         };
 
-        // Cache the result
-        await this.updateCache('overview', 'current', overview);
+        // Cache the result with the specific date range
+        await this.updateCache('overview', dateKey, overview);
 
         return overview;
     }
