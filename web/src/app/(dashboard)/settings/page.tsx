@@ -66,7 +66,7 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                        <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)] transition-all duration-300 hover:bg-white/[0.05]">
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--card-hover)] transition-all duration-300 hover:bg-white/[0.05]">
                         <div>
                             <div className="font-medium text-white">Instagram Connection</div>
                             <div className="text-sm text-[var(--muted)]">@{user?.username || 'Not connected'}</div>
@@ -78,7 +78,7 @@ export default function SettingsPage() {
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-sm font-semibold hover:bg-indigo-500 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <RefreshCw size={14} className={isReconnecting ? 'animate-spin' : ''} />
-                                {isReconnecting ? 'Redirecting...' : 'Change Account'}
+                                {isReconnecting ? 'Redirecting...' : 'Add or Remove Account'}
                             </button>
                             <span className="badge badge-success">Connected</span>
                         </div>
