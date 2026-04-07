@@ -73,6 +73,8 @@ export default function AutomationPage() {
     });
     const [kwInput, setKwInput] = useState('');
     const [defaultKwInput, setDefaultKwInput] = useState('');
+    const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
+    const [editKwInput, setEditKwInput] = useState('');
     const [stats, setStats] = useState<any>({
         totalRepliesSent: 0,
         messagingReplies: 0,
@@ -216,6 +218,34 @@ export default function AutomationPage() {
     const deleteRule = async (id: string) => {
         if (!confirm('Delete this override?')) return;
         try { await authFetch(`${API_BASE}/api/automation/rules/${id}`, { method: 'DELETE' }); fetchData(); } catch { }
+    };
+
+    const updateRule = async () => {
+        if (!editingRule) return;
+        if (!editingRule.name.trim()) return notify('error', 'Enter a name');
+        if (!editingRule.media_ids?.length) return notify('error', 'Select at least one post');
+        if (!editingRule.comment_reply.trim()) return notify('error', 'Enter a reply');
+        setSaving(true);
+        try {
+            const res = await authFetch(`${API_BASE}/api/automation/rules/${editingRule.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(editingRule)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                notify('success', 'Rule updated!');
+                setEditingRule(null);
+                fetchData();
+            } else {
+                notify('error', data.error || 'Update failed');
+            }
+        } catch { notify('error', 'Network error'); } finally { setSaving(false); }
+    };
+
+    const editTogglePost = (id: string) => {
+        if (!editingRule) return;
+        const curr = editingRule.media_ids || [];
+        setEditingRule({ ...editingRule, media_ids: curr.includes(id) ? curr.filter(x => x !== id) : [...curr, id] });
     };
 
     const toggleRule = async (rule: AutomationRule) => {
@@ -575,25 +605,122 @@ export default function AutomationPage() {
                                                         </div>
                                                     </div>
                                                     {expanded && (
-                                                        <div style={{ padding: '0 24px 24px 74px', animation: 'fadeIn 0.3s ease-out' }}>
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-background/50 rounded-2xl border border-light">
-                                                                <div>
-                                                                    <span className="text-[10px] text-muted font-extrabold uppercase tracking-[0.1em]">Public Reply</span>
-                                                                    <p className="mt-2 text-sm leading-relaxed text-foreground/90">{rule.comment_reply}</p>
-                                                                </div>
-                                                                {rule.send_dm && (
-                                                                    <div>
-                                                                        <span className="text-[10px] text-primary font-extrabold uppercase tracking-[0.1em] flex items-center gap-1.5">
-                                                                            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293A1 1 0 016 6h8a1 1 0 01.707 1.707l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
-                                                                            Direct Message
-                                                                        </span>
-                                                                        <p className="mt-2 text-sm leading-relaxed text-foreground/90">{rule.dm_reply}</p>
+                                                        <div style={{ padding: '0 24px 24px', animation: 'fadeIn 0.3s ease-out' }}>
+                                                          {editingRule?.id === rule.id ? (
+                                                            /* ─── INLINE EDIT FORM ─── */
+                                                            <div style={{ background: 'var(--background-alt)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
+                                                                <p className="text-sm font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Edit Rule</p>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                                    {/* Left column */}
+                                                                    <div className="flex flex-col gap-5">
+                                                                        <div>
+                                                                            <label className="form-label mb-2">Rule Name</label>
+                                                                            <input
+                                                                                className="input"
+                                                                                value={editingRule.name}
+                                                                                onChange={e => setEditingRule({ ...editingRule, name: e.target.value })}
+                                                                                placeholder="e.g. Giveaway Post"
+                                                                            />
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="form-label mb-2">Posts this rule applies to</label>
+                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 8, maxHeight: 220, overflowY: 'auto', padding: 4 }}>
+                                                                                {media.map(m => {
+                                                                                    const selected = editingRule.media_ids?.includes(m.id);
+                                                                                    return (
+                                                                                        <div
+                                                                                            key={m.id}
+                                                                                            onClick={() => editTogglePost(m.id)}
+                                                                                            style={{ position: 'relative', aspectRatio: '1', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: selected ? '2px solid var(--primary)' : '2px solid transparent', opacity: selected ? 1 : 0.5, transition: 'all 0.2s' }}
+                                                                                        >
+                                                                                            <img src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                                                                                            {selected && (
+                                                                                                <div style={{ position: 'absolute', inset: 0, background: 'rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                                                    <svg width="16" height="16" fill="white" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="form-label mb-2">Keywords</label>
+                                                                            <div className="flex gap-2 p-1.5 background-alt border border-light rounded-xl focus-within:border-primary">
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={editKwInput}
+                                                                                    onChange={e => setEditKwInput(e.target.value)}
+                                                                                    onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addKeyword(editKwInput, setEditKwInput, editingRule, setEditingRule as any))}
+                                                                                    placeholder="e.g. discount, promo..."
+                                                                                    className="bg-transparent border-none outline-none px-3 py-1.5 flex-1 text-sm"
+                                                                                />
+                                                                                <Button size="sm" variant="secondary" onClick={() => addKeyword(editKwInput, setEditKwInput, editingRule, setEditingRule as any)}>Add</Button>
+                                                                            </div>
+                                                                            {editingRule.keywords.length > 0 && (
+                                                                                <div className="flex flex-wrap gap-2 mt-3">
+                                                                                    {editingRule.keywords.map(k => <Chip key={k} onRemove={() => setEditingRule({ ...editingRule, keywords: editingRule.keywords.filter(x => x !== k) })}>{k}</Chip>)}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
-                                                                )}
+                                                                    {/* Right column */}
+                                                                    <div className="flex flex-col gap-5">
+                                                                        <div>
+                                                                            <label className="form-label mb-2">Public Reply</label>
+                                                                            <textarea
+                                                                                value={editingRule.comment_reply}
+                                                                                onChange={e => setEditingRule({ ...editingRule, comment_reply: e.target.value })}
+                                                                                className="input"
+                                                                                style={{ minHeight: 90, borderRadius: '12px' }}
+                                                                                placeholder="Hi, check your DMs!"
+                                                                            />
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="flex items-center justify-between mb-2">
+                                                                                <label className="form-label mb-0">Direct Message</label>
+                                                                                <Checkbox checked={editingRule.send_dm} onChange={checked => setEditingRule({ ...editingRule, send_dm: checked })} label="" />
+                                                                            </div>
+                                                                            <textarea
+                                                                                value={editingRule.dm_reply}
+                                                                                onChange={e => setEditingRule({ ...editingRule, dm_reply: e.target.value })}
+                                                                                className="input"
+                                                                                style={{ minHeight: 90, borderRadius: '12px', opacity: editingRule.send_dm ? 1 : 0.4 }}
+                                                                                disabled={!editingRule.send_dm}
+                                                                                placeholder="Here is your link: ..."
+                                                                            />
+                                                                        </div>
+                                                                        <div className="flex gap-3 mt-2">
+                                                                            <Button variant="primary" style={{ flex: 1 }} onClick={updateRule} isLoading={saving}>Save Changes</Button>
+                                                                            <Button variant="ghost" onClick={() => { setEditingRule(null); setEditKwInput(''); }}>Cancel</Button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <div className="mt-6 flex justify-end">
-                                                                <Button variant="danger" size="sm" onClick={() => deleteRule(rule.id!)} style={{ borderRadius: '10px' }}>Remove Rule</Button>
-                                                            </div>
+                                                          ) : (
+                                                            /* ─── READ VIEW ─── */
+                                                            <>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-background/50 rounded-2xl border border-light" style={{ overflow: 'hidden' }}>
+                                                                    <div style={{ minWidth: 0 }}>
+                                                                        <span className="text-[10px] text-muted font-extrabold uppercase tracking-[0.1em]">Public Reply</span>
+                                                                        <p className="mt-2 text-sm leading-relaxed text-foreground/90" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{rule.comment_reply}</p>
+                                                                    </div>
+                                                                    {rule.send_dm && (
+                                                                        <div style={{ minWidth: 0 }}>
+                                                                            <span className="text-[10px] text-primary font-extrabold uppercase tracking-[0.1em] flex items-center gap-1.5">
+                                                                                <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293A1 1 0 016 6h8a1 1 0 01.707 1.707l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                                                                Direct Message
+                                                                            </span>
+                                                                            <p className="mt-2 text-sm leading-relaxed text-foreground/90" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{rule.dm_reply}</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="mt-4 flex justify-end gap-2">
+                                                                    <Button variant="secondary" size="sm" onClick={(e: React.MouseEvent) => { e.stopPropagation(); setEditingRule({ ...rule }); setEditKwInput(''); }} style={{ borderRadius: '10px' }}>Edit Rule</Button>
+                                                                    <Button variant="danger" size="sm" onClick={() => deleteRule(rule.id!)} style={{ borderRadius: '10px' }}>Remove Rule</Button>
+                                                                </div>
+                                                            </>
+                                                          )}
                                                         </div>
                                                     )}
                                                 </div>
