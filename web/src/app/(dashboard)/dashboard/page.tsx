@@ -9,6 +9,7 @@ import {
     Globe, MapPin, HelpCircle, Clock, Zap, MousePointer, DollarSign, BarChart2, ExternalLink
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6'];
 
@@ -645,26 +646,12 @@ export default function DashboardPage() {
                     <p className="page-subtitle">Account performance overview</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--background)', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                        <Clock size={14} style={{ color: 'var(--muted)' }} />
-                        <input 
-                            type="date" 
-                            value={dateRange.startDate} 
-                            onChange={(e) => setDateRange({...dateRange, startDate: e.target.value})}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: 13, outline: 'none' }}
-                        />
-                        <span style={{ color: 'var(--muted)' }}>-</span>
-                        <input 
-                            type="date" 
-                            value={dateRange.endDate} 
-                            onChange={(e) => setDateRange({...dateRange, endDate: e.target.value})}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: 13, outline: 'none' }}
-                        />
-                    </div>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
                     <button
                         onClick={() => refetch()}
                         disabled={isFetching}
                         className="btn btn-secondary btn-sm"
+                        style={{ height: 38, borderRadius: 10 }}
                     >
                         <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
                         Refresh

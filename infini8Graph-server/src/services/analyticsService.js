@@ -119,22 +119,23 @@ class AnalyticsService {
         let demographics = {};
 
         try {
-            media = await this.instagram.getAllMediaWithInsights(100);
-            console.log('✅ Media fetched successfully:', media.length, 'posts');
+            // Fetch more media if a date range is provided to increase coverage
+            const fetchLimit = (startDate || endDate) ? 200 : 100;
+            media = await this.instagram.getAllMediaWithInsights(fetchLimit);
+            console.log(`✅ Media fetched successfully: ${media.length} posts (limit: ${fetchLimit})`);
+
             // Filter media by date range if provided
             if (startDate || endDate) {
-                const start = startDate ? new Date(startDate) : null;
-                // Cap end date at today to avoid future date fetches
-                const today = new Date(); today.setHours(23,59,59,999);
-                const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
-                if (end) end.setHours(23,59,59,999);
+                // Normalize dates to YYYY-MM-DD for comparison
+                const startStr = startDate ? startDate : '0000-00-00';
+                const todayStr = new Date().toISOString().split('T')[0];
+                const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
                 media = media.filter(post => {
-                    const postDate = new Date(post.timestamp);
-                    if (start && postDate < start) return false;
-                    if (end && postDate > end) return false;
-                    return true;
+                    const postDateStr = post.timestamp.split('T')[0];
+                    return postDateStr >= startStr && postDateStr <= endStr;
                 });
-                console.log(`📅 Filtered to ${media.length} posts for range ${startDate} → ${endDate}`);
+                console.log(`📅 Filtered to ${media.length} posts for range ${startStr} → ${endStr}`);
             }
         } catch (mediaError) {
             console.warn('⚠️ Media fetch failed (permission issue?):', mediaError.message);
@@ -179,8 +180,12 @@ class AnalyticsService {
             let since = null;
             let until = null;
             
-            if (startDate) since = Math.floor(new Date(startDate).getTime() / 1000);
-            if (endDate) until = Math.floor(new Date(endDate).getTime() / 1000);
+            if (startDate) since = Math.floor(new Date(startDate + 'T00:00:00Z').getTime() / 1000);
+            if (endDate) {
+                // To get full day of endDate, set it to the end of that day
+                const end = new Date(endDate + 'T23:59:59Z');
+                until = Math.floor(end.getTime() / 1000);
+            }
             
             // Meta allows up to 30 days for period='day'
             const insightsRes = await this.instagram.getAccountInsights('day', ['follower_count', 'impressions', 'reach', 'profile_views'], since, until);
@@ -246,19 +251,19 @@ class AnalyticsService {
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        let media = await this.instagram.getAllMediaWithInsights(100);
+        // Fetch more to ensure we have enough after filtering
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
 
         // Filter by date range
         if (startDate || endDate) {
-            const start = startDate ? new Date(startDate) : null;
-            const today = new Date(); today.setHours(23,59,59,999);
-            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
-            if (end) end.setHours(23,59,59,999);
+            const startStr = startDate ? startDate : '0000-00-00';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
             media = media.filter(post => {
-                const postDate = new Date(post.timestamp);
-                if (start && postDate < start) return false;
-                if (end && postDate > end) return false;
-                return true;
+                const postDateStr = (post.timestamp || "").split('T')[0];
+                return postDateStr >= startStr && postDateStr <= endStr;
             });
         }
 
@@ -339,19 +344,19 @@ class AnalyticsService {
         const cached = await this.checkCache('best_time', dateKey);
         if (cached) return cached;
 
-        let media = await this.instagram.getAllMediaWithInsights(100);
+        // Fetch more to ensure we have enough after filtering
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
 
         // Filter by date range
         if (startDate || endDate) {
-            const start = startDate ? new Date(startDate) : null;
-            const today = new Date(); today.setHours(23,59,59,999);
-            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
-            if (end) end.setHours(23,59,59,999);
+            const startStr = startDate ? startDate : '0000-00-00';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
             media = media.filter(post => {
-                const postDate = new Date(post.timestamp);
-                if (start && postDate < start) return false;
-                if (end && postDate > end) return false;
-                return true;
+                const postDateStr = (post.timestamp || "").split('T')[0];
+                return postDateStr >= startStr && postDateStr <= endStr;
             });
         }
 
@@ -432,19 +437,19 @@ class AnalyticsService {
         const cached = await this.checkCache('hashtags', dateKey);
         if (cached) return cached;
 
-        let media = await this.instagram.getAllMediaWithInsights(100);
+        // Fetch more to ensure we have enough after filtering
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
 
         // Filter by date range
         if (startDate || endDate) {
-            const start = startDate ? new Date(startDate) : null;
-            const today = new Date(); today.setHours(23,59,59,999);
-            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
-            if (end) end.setHours(23,59,59,999);
+            const startStr = startDate ? startDate : '0000-00-00';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
             media = media.filter(post => {
-                const postDate = new Date(post.timestamp);
-                if (start && postDate < start) return false;
-                if (end && postDate > end) return false;
-                return true;
+                const postDateStr = (post.timestamp || "").split('T')[0];
+                return postDateStr >= startStr && postDateStr <= endStr;
             });
         }
 
@@ -526,19 +531,19 @@ class AnalyticsService {
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        let media = await this.instagram.getAllMediaWithInsights(100);
+        // Fetch more to ensure we have enough after filtering
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
 
         // Filter by date range
         if (startDate || endDate) {
-            const start = startDate ? new Date(startDate) : null;
-            const today = new Date(); today.setHours(23,59,59,999);
-            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
-            if (end) end.setHours(23,59,59,999);
+            const startStr = startDate ? startDate : '0000-00-00';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
             media = media.filter(post => {
-                const postDate = new Date(post.timestamp);
-                if (start && postDate < start) return false;
-                if (end && postDate > end) return false;
-                return true;
+                const postDateStr = (post.timestamp || "").split('T')[0];
+                return postDateStr >= startStr && postDateStr <= endStr;
             });
         }
 
@@ -768,19 +773,19 @@ class AnalyticsService {
         const cached = await this.checkCache('reels', dateKey);
         if (cached) return cached;
 
-        let media = await this.instagram.getAllMediaWithInsights(100);
+        // Fetch more to ensure we have enough after filtering
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
 
         // Filter by date range
         if (startDate || endDate) {
-            const start = startDate ? new Date(startDate) : null;
-            const today = new Date(); today.setHours(23,59,59,999);
-            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
-            if (end) end.setHours(23,59,59,999);
+            const startStr = startDate ? startDate : '0000-00-00';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
             media = media.filter(post => {
-                const postDate = new Date(post.timestamp);
-                if (start && postDate < start) return false;
-                if (end && postDate > end) return false;
-                return true;
+                const postDateStr = (post.timestamp || "").split('T')[0];
+                return postDateStr >= startStr && postDateStr <= endStr;
             });
         }
 
@@ -847,11 +852,29 @@ class AnalyticsService {
     /**
      * Get detailed post analytics
      */
-    async getPostsAnalytics(limit = 50) {
-        const cached = await this.checkCache('posts');
+    async getPostsAnalytics(limit = 50, startDate = null, endDate = null) {
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('posts', dateKey);
         if (cached) return cached;
 
-        const media = await this.instagram.getAllMediaWithInsights(limit);
+        // Fetch more to ensure we have enough after filtering
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
+
+        // Filter by date range
+        if (startDate || endDate) {
+            const startStr = startDate ? startDate : '0000-00-00';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
+
+            media = media.filter(post => {
+                const postDateStr = (post.timestamp || "").split('T')[0];
+                return postDateStr >= startStr && postDateStr <= endStr;
+            });
+        }
+
+        // Limit results to the requested amount after filtering
+        media = media.slice(0, limit);
 
         // Sort by different metrics
         const byEngagement = [...media].sort((a, b) => b.engagement - a.engagement);
@@ -892,7 +915,7 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('posts', 'current', posts);
+        await this.updateCache('posts', dateKey, posts);
         return posts;
     }
 

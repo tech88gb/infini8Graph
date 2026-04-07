@@ -121,7 +121,8 @@ export async function getPosts(req, res) {
         }
         
         // Otherwise use the standard analytics method
-        const data = await analytics.getPostsAnalytics(parseInt(limit));
+        const { startDate, endDate } = req.query;
+        const data = await analytics.getPostsAnalytics(parseInt(limit), startDate, endDate);
         res.json({ success: true, data });
     } catch (error) {
         console.error('Posts error:', error);
