@@ -119,8 +119,23 @@ class AnalyticsService {
         let demographics = {};
 
         try {
-            media = await this.instagram.getAllMediaWithInsights(30);
+            media = await this.instagram.getAllMediaWithInsights(100);
             console.log('✅ Media fetched successfully:', media.length, 'posts');
+            // Filter media by date range if provided
+            if (startDate || endDate) {
+                const start = startDate ? new Date(startDate) : null;
+                // Cap end date at today to avoid future date fetches
+                const today = new Date(); today.setHours(23,59,59,999);
+                const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
+                if (end) end.setHours(23,59,59,999);
+                media = media.filter(post => {
+                    const postDate = new Date(post.timestamp);
+                    if (start && postDate < start) return false;
+                    if (end && postDate > end) return false;
+                    return true;
+                });
+                console.log(`📅 Filtered to ${media.length} posts for range ${startDate} → ${endDate}`);
+            }
         } catch (mediaError) {
             console.warn('⚠️ Media fetch failed (permission issue?):', mediaError.message);
             console.warn('⚠️ Continuing with basic profile data only...');
@@ -225,12 +240,27 @@ class AnalyticsService {
     /**
      * Get growth analytics
      */
-    async getGrowth(period = '30d') {
-        const cached = await this.checkCache('growth', period);
+    async getGrowth(startDate = null, endDate = null) {
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('growth', dateKey);
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const media = await this.instagram.getAllMediaWithInsights(100);
+        let media = await this.instagram.getAllMediaWithInsights(100);
+
+        // Filter by date range
+        if (startDate || endDate) {
+            const start = startDate ? new Date(startDate) : null;
+            const today = new Date(); today.setHours(23,59,59,999);
+            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
+            if (end) end.setHours(23,59,59,999);
+            media = media.filter(post => {
+                const postDate = new Date(post.timestamp);
+                if (start && postDate < start) return false;
+                if (end && postDate > end) return false;
+                return true;
+            });
+        }
 
         // Group posts by date for growth analysis
         const postsByDate = {};
@@ -297,18 +327,33 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('growth', period, growth);
+        await this.updateCache('growth', dateKey, growth);
         return growth;
     }
 
     /**
      * Get best time to post analysis
      */
-    async getBestTimeToPost() {
-        const cached = await this.checkCache('best_time');
+    async getBestTimeToPost(startDate = null, endDate = null) {
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('best_time', dateKey);
         if (cached) return cached;
 
-        const media = await this.instagram.getAllMediaWithInsights(100);
+        let media = await this.instagram.getAllMediaWithInsights(100);
+
+        // Filter by date range
+        if (startDate || endDate) {
+            const start = startDate ? new Date(startDate) : null;
+            const today = new Date(); today.setHours(23,59,59,999);
+            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
+            if (end) end.setHours(23,59,59,999);
+            media = media.filter(post => {
+                const postDate = new Date(post.timestamp);
+                if (start && postDate < start) return false;
+                if (end && postDate > end) return false;
+                return true;
+            });
+        }
 
         // Analyze by hour and day of week
         const hourlyEngagement = {};
@@ -375,18 +420,33 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('best_time', 'current', bestTime);
+        await this.updateCache('best_time', dateKey, bestTime);
         return bestTime;
     }
 
     /**
      * Get hashtag performance analysis
      */
-    async getHashtagAnalysis() {
-        const cached = await this.checkCache('hashtags');
+    async getHashtagAnalysis(startDate = null, endDate = null) {
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('hashtags', dateKey);
         if (cached) return cached;
 
-        const media = await this.instagram.getAllMediaWithInsights(100);
+        let media = await this.instagram.getAllMediaWithInsights(100);
+
+        // Filter by date range
+        if (startDate || endDate) {
+            const start = startDate ? new Date(startDate) : null;
+            const today = new Date(); today.setHours(23,59,59,999);
+            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
+            if (end) end.setHours(23,59,59,999);
+            media = media.filter(post => {
+                const postDate = new Date(post.timestamp);
+                if (start && postDate < start) return false;
+                if (end && postDate > end) return false;
+                return true;
+            });
+        }
 
         // Extract hashtags from captions
         const hashtagStats = {};
@@ -452,7 +512,7 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('hashtags', 'current', hashtags);
+        await this.updateCache('hashtags', dateKey, hashtags);
         return hashtags;
     }
 
@@ -460,12 +520,27 @@ class AnalyticsService {
      * Get deep content intelligence metrics
      * Includes: format battle, caption analysis, viral coefficient, save-to-like ratio
      */
-    async getContentIntelligence() {
-        const cached = await this.checkCache('content_intelligence');
+    async getContentIntelligence(startDate = null, endDate = null) {
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('content_intelligence', dateKey);
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const media = await this.instagram.getAllMediaWithInsights(100);
+        let media = await this.instagram.getAllMediaWithInsights(100);
+
+        // Filter by date range
+        if (startDate || endDate) {
+            const start = startDate ? new Date(startDate) : null;
+            const today = new Date(); today.setHours(23,59,59,999);
+            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
+            if (end) end.setHours(23,59,59,999);
+            media = media.filter(post => {
+                const postDate = new Date(post.timestamp);
+                if (start && postDate < start) return false;
+                if (end && postDate > end) return false;
+                return true;
+            });
+        }
 
         // ============ 1. CONTENT FORMAT BATTLE ============
         const formatStats = {};
@@ -681,18 +756,33 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('content_intelligence', 'current', intelligence);
+        await this.updateCache('content_intelligence', dateKey, intelligence);
         return intelligence;
     }
 
     /**
      * Get reels-specific analytics
      */
-    async getReelsAnalytics() {
-        const cached = await this.checkCache('reels');
+    async getReelsAnalytics(startDate = null, endDate = null) {
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('reels', dateKey);
         if (cached) return cached;
 
-        const media = await this.instagram.getAllMediaWithInsights(100);
+        let media = await this.instagram.getAllMediaWithInsights(100);
+
+        // Filter by date range
+        if (startDate || endDate) {
+            const start = startDate ? new Date(startDate) : null;
+            const today = new Date(); today.setHours(23,59,59,999);
+            const end = endDate ? new Date(Math.min(new Date(endDate).getTime(), today.getTime())) : today;
+            if (end) end.setHours(23,59,59,999);
+            media = media.filter(post => {
+                const postDate = new Date(post.timestamp);
+                if (start && postDate < start) return false;
+                if (end && postDate > end) return false;
+                return true;
+            });
+        }
 
         // Filter for reels only
         const reels = media.filter(m => m.mediaType === 'REEL' || m.mediaType === 'VIDEO');
@@ -750,7 +840,7 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('reels', 'current', analytics);
+        await this.updateCache('reels', dateKey, analytics);
         return analytics;
     }
 

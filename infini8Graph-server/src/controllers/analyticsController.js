@@ -42,9 +42,9 @@ export async function getOverview(req, res) {
 
 export async function getGrowth(req, res) {
     try {
-        const { period = '30d' } = req.query;
+        const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.getGrowth(period);
+        const data = await analytics.getGrowth(startDate, endDate);
         res.json({ success: true, data });
     } catch (error) {
         console.error('Growth error:', error);
@@ -54,8 +54,9 @@ export async function getGrowth(req, res) {
 
 export async function getBestTime(req, res) {
     try {
+        const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.getBestTimeToPost();
+        const data = await analytics.getBestTimeToPost(startDate, endDate);
         res.json({ success: true, data });
     } catch (error) {
         console.error('Best time error:', error);
@@ -65,8 +66,9 @@ export async function getBestTime(req, res) {
 
 export async function getHashtags(req, res) {
     try {
+        const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.getHashtagAnalysis();
+        const data = await analytics.getHashtagAnalysis(startDate, endDate);
         res.json({ success: true, data });
     } catch (error) {
         console.error('Hashtags error:', error);
@@ -76,8 +78,9 @@ export async function getHashtags(req, res) {
 
 export async function getReels(req, res) {
     try {
+        const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.getReelsAnalytics();
+        const data = await analytics.getReelsAnalytics(startDate, endDate);
         res.json({ success: true, data });
     } catch (error) {
         console.error('Reels error:', error);
@@ -151,8 +154,9 @@ export async function exportData(req, res) {
 
 export async function getContentIntelligence(req, res) {
     try {
+        const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.getContentIntelligence();
+        const data = await analytics.getContentIntelligence(startDate, endDate);
         res.json({ success: true, data });
     } catch (error) {
         console.error('Content Intel error:', error);
@@ -163,6 +167,7 @@ export async function getContentIntelligence(req, res) {
 export async function getUnifiedOverview(req, res) {
     try {
         console.log('🌐 getUnifiedOverview called for user:', req.user?.userId);
+        const { startDate, endDate } = req.query;
 
         // 1. Get all accounts for this user
         const accounts = await authService.getUserAccounts(req.user.userId);
@@ -175,7 +180,7 @@ export async function getUnifiedOverview(req, res) {
         const results = await Promise.allSettled(accounts.map(async (account) => {
             const service = new AnalyticsService(req.user.userId, account.instagram_user_id, account.id);
             await service.initialize();
-            const overview = await service.getOverview();
+            const overview = await service.getOverview(startDate, endDate);
             return {
                 accountId: account.id,
                 username: account.username,
