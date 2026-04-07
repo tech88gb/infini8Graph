@@ -1216,13 +1216,13 @@ export default function AdsPage() {
                                     </div>
                                 )}
                             </SectionCard>
-                            {/* ===== FEATURE: FULL FUNNEL ANALYSIS â€” Bounce Rate per Campaign (analytics.readonly) ===== */}
+                            {/* ===== FEATURE: FULL FUNNEL ANALYSIS - Bounce Rate per Campaign (analytics.readonly) ===== */}
                             <SectionCard
                                 title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    ðŸ“Š Bounce Rate per Campaign
+                                    Bounce Rate per Campaign
                                     <InfoTooltip text="Bounce Rate = % of ad clicks that didn't result in any downstream action (View Content, Add to Cart, etc.). A high bounce rate means your landing page does not match what the ad promised. Requires: analytics.readonly permission + Meta Pixel ViewContent event." />
                                 </span>}
-                                subtitle="Full Funnel Analysis â€” Identifies which campaigns are sending traffic to poor-performing landing pages"
+                                subtitle="Full Funnel Analysis - Identifies which campaigns are sending traffic to poor-performing landing pages"
                             >
                                 <div style={{
                                     padding: '12px 16px',
@@ -1234,7 +1234,7 @@ export default function AdsPage() {
                                     <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
                                         <strong style={{ color: 'var(--foreground)' }}>Permission Required:</strong>{' '}
                                         <code style={{ background: 'rgba(99,102,241,0.12)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>analytics.readonly</code>
-                                        {' â€” '}Correlates Meta Pixel Landing Page Views vs ViewContent event per campaign.
+                                        {' - '}Correlates Meta Pixel Landing Page Views vs ViewContent event per campaign.
                                         Campaigns above <span style={{ color: '#ef4444', fontWeight: 600 }}>70% bounce</span> have landing pages
                                         that are mismatched with their ad creatives.
                                     </div>
