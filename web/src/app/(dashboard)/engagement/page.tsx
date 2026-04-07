@@ -6,9 +6,10 @@ import { instagramApi } from '@/lib/api';
 import {
     Heart, MessageCircle, Eye, Bookmark, Share2, Image,
     HelpCircle, ChevronRight, ChevronLeft, LogOut,
-    Users, TrendingUp, Film, LayoutGrid, Calendar, Clock
+    Users, TrendingUp, Film, LayoutGrid, Calendar, Clock, RefreshCw
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9'];
 
@@ -227,8 +228,15 @@ function BenchmarkIndicator({ value, benchmark, unit = '%', label }: {
 // ==================== MAIN PAGE ====================
 
 export default function EngagementPage() {
-    const { data, isLoading } = useQuery({
-        queryKey: ['posts'],
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+    const { data, isLoading, refetch, isFetching } = useQuery({
+        queryKey: ['posts', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getPosts(50);
             return res.data.data;
@@ -308,9 +316,17 @@ export default function EngagementPage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header with Time Context */}
-            <div className="page-header" style={{ marginBottom: 16 }}>
-                <h1 className="page-title">Engagement Analytics</h1>
-                <p className="page-subtitle">Detailed performance breakdown of your Instagram content</p>
+            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                    <h1 className="page-title">Engagement Analytics</h1>
+                    <p className="page-subtitle">Detailed performance breakdown of your Instagram content</p>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary btn-sm">
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Time Period Badge */}

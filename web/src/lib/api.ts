@@ -16,8 +16,8 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use((config) => {
     // FALLBACK: Use localStorage directly to avoid any Cookie library issues
-    // We will re-enable cookies later once we verify token passing works
     let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    // We will re-enable cookies later once we verify token passing works
 
     console.log('🔥 API Interceptor Running. URL:', config.url);
     console.log('🔥 API Interceptor Token:', token ? 'FOUND' : 'MISSING');
@@ -55,24 +55,33 @@ export const authApi = {
     switchAccount: (accountId: string) => api.post(`/auth/switch/${accountId}`)
 };
 
-export const instagramApi = {
-    getOverview: (startDate?: string, endDate?: string) => {
+export const instagramApi = (() => {
+    const buildParams = (startDate?: string, endDate?: string) => {
         const params = new URLSearchParams();
         if (startDate) params.append('startDate', startDate);
         if (endDate) params.append('endDate', endDate);
         const query = params.toString();
-        return api.get(`/instagram/overview${query ? `?${query}` : ''}`);
-    },
-    getGrowth: (period = '30d') => api.get(`/instagram/growth?period=${period}`),
-    getBestTime: () => api.get('/instagram/best-time'),
-    getHashtags: () => api.get('/instagram/hashtags'),
-    getReels: () => api.get('/instagram/reels'),
-    getPosts: (limit = 50) => api.get(`/instagram/posts?limit=${limit}`),
-    exportData: (format = 'json', metrics = 'overview,growth,posts') =>
-        api.get(`/instagram/export?format=${format}&metrics=${metrics}`),
-    getContentIntelligence: () => api.get('/instagram/content-intelligence'),
-    getUnifiedOverview: () => api.get('/instagram/unified-overview')
-};
+        return query ? `?${query}` : '';
+    };
+
+    return {
+        getOverview: (startDate?: string, endDate?: string) => api.get(`/instagram/overview${buildParams(startDate, endDate)}`),
+        getGrowth: (startDate?: string, endDate?: string, period = '30d') => {
+            const params = new URLSearchParams({ period });
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            return api.get(`/instagram/growth?${params.toString()}`);
+        },
+        getBestTime: (startDate?: string, endDate?: string) => api.get(`/instagram/best-time${buildParams(startDate, endDate)}`),
+        getHashtags: (startDate?: string, endDate?: string) => api.get(`/instagram/hashtags${buildParams(startDate, endDate)}`),
+        getReels: (startDate?: string, endDate?: string) => api.get(`/instagram/reels${buildParams(startDate, endDate)}`),
+        getPosts: (limit = 50) => api.get(`/instagram/posts?limit=${limit}`),
+        exportData: (format = 'json', metrics = 'overview,growth,posts') =>
+            api.get(`/instagram/export?format=${format}&metrics=${metrics}`),
+        getContentIntelligence: (startDate?: string, endDate?: string) => api.get(`/instagram/content-intelligence${buildParams(startDate, endDate)}`),
+        getUnifiedOverview: (startDate?: string, endDate?: string) => api.get(`/instagram/unified-overview${buildParams(startDate, endDate)}`)
+    };
+})();
 
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),

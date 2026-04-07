@@ -686,7 +686,7 @@ export default function DashboardPage() {
                             display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white'
                         }}><Instagram size={18} /></div>
                         <div>
-                            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Social Media — Last 30 days</h3>
+                            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Social Media Overview</h3>
                             <p className="text-muted" style={{ fontSize: 11 }}>@{profile.username}</p>
                         </div>
                     </div>

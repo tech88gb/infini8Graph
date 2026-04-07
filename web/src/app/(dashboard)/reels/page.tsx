@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
-import { Film, Heart, MessageCircle, Eye, TrendingUp, Bookmark, Share2, HelpCircle, Play, Users, Zap, Flame, ArrowUpRight } from 'lucide-react';
+import { Film, Heart, MessageCircle, Eye, TrendingUp, Bookmark, Share2, HelpCircle, Play, Users, Zap, Flame, ArrowUpRight, RefreshCw } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
     LineChart, Line, AreaChart, Area
 } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -85,10 +86,17 @@ function MetricCard({ label, value, icon: Icon, color, tooltip }: {
 export default function ReelsPage() {
     const [page, setPage] = useState(1);
     const REELS_PER_PAGE = 24;
-    const { data, isLoading } = useQuery({
-        queryKey: ['reels'],
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+    const { data, isLoading, refetch, isFetching } = useQuery({
+        queryKey: ['reels', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getReels();
+            const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -138,9 +146,17 @@ export default function ReelsPage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
-            <div className="page-header" style={{ marginBottom: 24 }}>
-                <h1 className="page-title">Reels Analytics</h1>
-                <p className="page-subtitle">Performance metrics for your video content</p>
+            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div>
+                    <h1 className="page-title">Reels Analytics</h1>
+                    <p className="page-subtitle">Performance metrics for your video content</p>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary btn-sm">
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Summary Metrics */}

@@ -4,12 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
 import {
     Zap, TrendingUp, Bookmark, Clock, Award, ExternalLink,
-    Image, Video, LayoutGrid, Film, HelpCircle, Heart, MessageCircle, Eye
+    Image, Video, LayoutGrid, Film, HelpCircle, Heart, MessageCircle, Eye, RefreshCw
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useState } from 'react';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'];
 const FORMAT_COLORS: Record<string, string> = {
@@ -310,10 +311,17 @@ function TopPostCard({ post, rank }: { post: any; rank: number }) {
 }
 
 export default function ContentIntelligencePage() {
-    const { data, isLoading, error } = useQuery({
-        queryKey: ['contentIntelligence'],
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+    const { data, isLoading, error, refetch, isFetching } = useQuery({
+        queryKey: ['contentIntelligence', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getContentIntelligence();
+            const res = await instagramApi.getContentIntelligence(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -371,9 +379,17 @@ export default function ContentIntelligencePage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
-            <div className="page-header" style={{ marginBottom: 24 }}>
-                <h1 className="page-title">Content Intelligence</h1>
-                <p className="page-subtitle">Deep insights to optimize your content strategy · {intel.postsAnalyzed || 0} posts analyzed</p>
+            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div>
+                    <h1 className="page-title">Content Intelligence</h1>
+                    <p className="page-subtitle">Deep insights to optimize your content strategy · {intel.postsAnalyzed || 0} posts analyzed</p>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary btn-sm">
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Top 5 Best Performing Posts - HERO SECTION */}

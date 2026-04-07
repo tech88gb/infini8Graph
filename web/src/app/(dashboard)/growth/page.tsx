@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
-import { TrendingUp, TrendingDown, Users, Activity, HelpCircle, Eye, UserPlus, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Activity, HelpCircle, Eye, UserPlus, Target, RefreshCw } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
     AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b'];
 
@@ -110,10 +111,18 @@ function MetricCard({ label, value, icon: Icon, color, tooltip, trend, trendLabe
 // ==================== MAIN PAGE ====================
 
 export default function GrowthPage() {
-    const { data, isLoading } = useQuery({
-        queryKey: ['growth'],
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+
+    const { data, isLoading, refetch, isFetching } = useQuery({
+        queryKey: ['growth', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getGrowth();
+            const res = await instagramApi.getGrowth(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -154,9 +163,17 @@ export default function GrowthPage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
-            <div className="page-header" style={{ marginBottom: 24 }}>
-                <h1 className="page-title">Growth Analytics</h1>
-                <p className="page-subtitle">Track your audience growth and engagement trends</p>
+            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div>
+                    <h1 className="page-title">Growth Analytics</h1>
+                    <p className="page-subtitle">Track your audience growth and engagement trends</p>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary btn-sm">
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -304,7 +321,7 @@ export default function GrowthPage() {
             </SectionCard>
 
             {/* Engagement Over Time Chart */}
-            <SectionCard title="Engagement Over Time" subtitle="Daily engagement trend for the last 30 days">
+            <SectionCard title="Engagement Over Time" subtitle={`Engagement trend: ${dateRange.startDate} → ${dateRange.endDate}`}>
                 <ResponsiveContainer width="100%" height={300}>
                     <AreaChart data={growthData.slice(-30)}>
                         <defs>

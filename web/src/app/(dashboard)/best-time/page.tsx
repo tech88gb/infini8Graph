@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
-import { Clock, Zap, Calendar, HelpCircle, Info } from 'lucide-react';
+import { Clock, Zap, Calendar, HelpCircle, Info, RefreshCw } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
     RadarChart, PolarGrid, PolarAngleAxis, Radar
 } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -148,10 +149,17 @@ function HourlyHeatmap({ data }: { data: any[] }) {
 // ==================== MAIN PAGE ====================
 
 export default function BestTimePage() {
-    const { data, isLoading } = useQuery({
-        queryKey: ['best-time'],
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+    const { data, isLoading, refetch, isFetching } = useQuery({
+        queryKey: ['best-time', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getBestTime();
+            const res = await instagramApi.getBestTime(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -179,9 +187,17 @@ export default function BestTimePage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
-            <div className="page-header" style={{ marginBottom: 24 }}>
-                <h1 className="page-title">Best Time to Post</h1>
-                <p className="page-subtitle">Optimize your posting schedule for maximum engagement</p>
+            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div>
+                    <h1 className="page-title">Best Time to Post</h1>
+                    <p className="page-subtitle">Optimize your posting schedule for maximum engagement</p>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary btn-sm">
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Recommendations */}

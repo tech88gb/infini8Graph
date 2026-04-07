@@ -10,6 +10,7 @@ import {
     Globe, HelpCircle, Clock, LayoutDashboard, BarChart3, TrendingUp
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -141,11 +142,17 @@ export default function UnifiedDashboardPage() {
     const { switchAccount, activeAccountId } = useAuth();
     const router = useRouter();
     const [switchingId, setSwitchingId] = useState<string | null>(null);
-
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
     const { data, isLoading, error, refetch, isFetching } = useQuery({
-        queryKey: ['unified-overview'],
+        queryKey: ['unified-overview', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getUnifiedOverview();
+            const res = await instagramApi.getUnifiedOverview(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -203,15 +210,18 @@ export default function UnifiedDashboardPage() {
                     </div>
                     <p className="text-muted" style={{ fontSize: 15 }}>Aggregated performance across all linked Instagram profiles</p>
                 </div>
-                <button
-                    onClick={() => refetch()}
-                    disabled={isFetching}
-                    className="btn btn-secondary"
-                    style={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}
-                >
-                    <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
-                    Refresh All
-                </button>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button
+                        onClick={() => refetch()}
+                        disabled={isFetching}
+                        className="btn btn-secondary"
+                        style={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}
+                    >
+                        <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
+                        Refresh All
+                    </button>
+                </div>
             </div>
 
             {/* Unified Metrics Section */}

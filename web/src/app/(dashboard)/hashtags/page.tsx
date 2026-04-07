@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
-import { Hash, TrendingUp, Heart, BarChart3, HelpCircle, Star, Repeat } from 'lucide-react';
+import { Hash, TrendingUp, Heart, BarChart3, HelpCircle, Star, Repeat, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6'];
 
@@ -109,11 +110,17 @@ function HashtagTag({ tag, engagement, color = 'primary' }: { tag: string; engag
 
 export default function HashtagsPage() {
     const [activeView, setActiveView] = useState<'performance' | 'usage'>('performance');
-
-    const { data, isLoading } = useQuery({
-        queryKey: ['hashtags'],
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    const [dateRange, setDateRange] = useState({
+        startDate: defaultStart.toISOString().split('T')[0],
+        endDate: defaultEnd.toISOString().split('T')[0]
+    });
+    const { data, isLoading, refetch, isFetching } = useQuery({
+        queryKey: ['hashtags', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getHashtags();
+            const res = await instagramApi.getHashtags(dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -150,9 +157,17 @@ export default function HashtagsPage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
-            <div className="page-header" style={{ marginBottom: 24 }}>
-                <h1 className="page-title">Hashtag Analytics</h1>
-                <p className="page-subtitle">Discover which hashtags drive the most engagement</p>
+            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div>
+                    <h1 className="page-title">Hashtag Analytics</h1>
+                    <p className="page-subtitle">Discover which hashtags drive the most engagement</p>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <button onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary btn-sm">
+                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Summary Metrics */}
