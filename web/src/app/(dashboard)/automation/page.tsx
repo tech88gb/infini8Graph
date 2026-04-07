@@ -606,7 +606,7 @@ export default function AutomationPage() {
                                                     </div>
                                                     {expanded && (
                                                         <div style={{ padding: '0 24px 24px', animation: 'fadeIn 0.3s ease-out' }}>
-                                                          {editingRule?.id === rule.id ? (
+                                                          {editingRule && editingRule.id === rule.id ? (
                                                             /* ─── INLINE EDIT FORM ─── */
                                                             <div style={{ background: 'var(--background-alt)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
                                                                 <p className="text-sm font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Edit Rule</p>
@@ -617,8 +617,8 @@ export default function AutomationPage() {
                                                                             <label className="form-label mb-2">Rule Name</label>
                                                                             <input
                                                                                 className="input"
-                                                                                value={editingRule.name}
-                                                                                onChange={e => setEditingRule({ ...editingRule, name: e.target.value })}
+                                                                                value={editingRule!.name}
+                                                                                onChange={e => setEditingRule({ ...editingRule!, name: e.target.value })}
                                                                                 placeholder="e.g. Giveaway Post"
                                                                             />
                                                                         </div>
@@ -626,7 +626,7 @@ export default function AutomationPage() {
                                                                             <label className="form-label mb-2">Posts this rule applies to</label>
                                                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 8, maxHeight: 220, overflowY: 'auto', padding: 4 }}>
                                                                                 {media.map(m => {
-                                                                                    const selected = editingRule.media_ids?.includes(m.id);
+                                                                                    const selected = editingRule!.media_ids?.includes(m.id);
                                                                                     return (
                                                                                         <div
                                                                                             key={m.id}
@@ -651,15 +651,15 @@ export default function AutomationPage() {
                                                                                     type="text"
                                                                                     value={editKwInput}
                                                                                     onChange={e => setEditKwInput(e.target.value)}
-                                                                                    onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addKeyword(editKwInput, setEditKwInput, editingRule, setEditingRule as any))}
+                                                                                    onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addKeyword(editKwInput, setEditKwInput, editingRule!, setEditingRule as any))}
                                                                                     placeholder="e.g. discount, promo..."
                                                                                     className="bg-transparent border-none outline-none px-3 py-1.5 flex-1 text-sm"
                                                                                 />
-                                                                                <Button size="sm" variant="secondary" onClick={() => addKeyword(editKwInput, setEditKwInput, editingRule, setEditingRule as any)}>Add</Button>
+                                                                                <Button size="sm" variant="secondary" onClick={() => addKeyword(editKwInput, setEditKwInput, editingRule!, setEditingRule as any)}>Add</Button>
                                                                             </div>
-                                                                            {editingRule.keywords.length > 0 && (
+                                                                            {editingRule!.keywords.length > 0 && (
                                                                                 <div className="flex flex-wrap gap-2 mt-3">
-                                                                                    {editingRule.keywords.map(k => <Chip key={k} onRemove={() => setEditingRule({ ...editingRule, keywords: editingRule.keywords.filter(x => x !== k) })}>{k}</Chip>)}
+                                                                                    {editingRule!.keywords.map(k => <Chip key={k} onRemove={() => setEditingRule({ ...editingRule!, keywords: editingRule!.keywords.filter(x => x !== k) })}>{k}</Chip>)}
                                                                                 </div>
                                                                             )}
                                                                         </div>
@@ -669,8 +669,8 @@ export default function AutomationPage() {
                                                                         <div>
                                                                             <label className="form-label mb-2">Public Reply</label>
                                                                             <textarea
-                                                                                value={editingRule.comment_reply}
-                                                                                onChange={e => setEditingRule({ ...editingRule, comment_reply: e.target.value })}
+                                                                                value={editingRule!.comment_reply}
+                                                                                onChange={e => setEditingRule({ ...editingRule!, comment_reply: e.target.value })}
                                                                                 className="input"
                                                                                 style={{ minHeight: 90, borderRadius: '12px' }}
                                                                                 placeholder="Hi, check your DMs!"
@@ -679,14 +679,14 @@ export default function AutomationPage() {
                                                                         <div>
                                                                             <div className="flex items-center justify-between mb-2">
                                                                                 <label className="form-label mb-0">Direct Message</label>
-                                                                                <Checkbox checked={editingRule.send_dm} onChange={checked => setEditingRule({ ...editingRule, send_dm: checked })} label="" />
+                                                                                <Checkbox checked={editingRule!.send_dm} onChange={checked => setEditingRule({ ...editingRule!, send_dm: checked })} label="" />
                                                                             </div>
                                                                             <textarea
-                                                                                value={editingRule.dm_reply}
-                                                                                onChange={e => setEditingRule({ ...editingRule, dm_reply: e.target.value })}
+                                                                                value={editingRule!.dm_reply}
+                                                                                onChange={e => setEditingRule({ ...editingRule!, dm_reply: e.target.value })}
                                                                                 className="input"
-                                                                                style={{ minHeight: 90, borderRadius: '12px', opacity: editingRule.send_dm ? 1 : 0.4 }}
-                                                                                disabled={!editingRule.send_dm}
+                                                                                style={{ minHeight: 90, borderRadius: '12px', opacity: editingRule!.send_dm ? 1 : 0.4 }}
+                                                                                disabled={!editingRule!.send_dm}
                                                                                 placeholder="Here is your link: ..."
                                                                             />
                                                                         </div>
