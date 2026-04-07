@@ -26,13 +26,28 @@ function TimePeriodBadge({ posts }: { posts: any[] }) {
         const newest = new Date(Math.max(...dates.map(d => d.getTime())));
 
         const formatDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const daysDiff = Math.ceil((newest.getTime() - oldest.getTime()) / (1000 * 60 * 60 * 24));
+        const diffMs = Math.abs(newest.getTime() - oldest.getTime());
+        const daysDiff = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+        
+        const today = new Date();
+        const isRecent = (today.getTime() - newest.getTime()) < (2 * 24 * 60 * 60 * 1000);
+
+        let label = '';
+        if (isRecent) {
+            if (daysDiff === 1) label = 'Last 24 Hours';
+            else if (daysDiff <= 7) label = `Last ${daysDiff} Days`;
+            else if (daysDiff <= 31) label = 'Last 30 Days';
+            else if (daysDiff <= 92) label = 'Last 3 Months';
+            else label = 'All-Time';
+        } else {
+            label = daysDiff === 1 ? '24h Historical Analysis' : `${daysDiff} Day Custom View`;
+        }
 
         return {
             from: formatDate(oldest),
             to: formatDate(newest),
             days: daysDiff,
-            label: daysDiff <= 7 ? 'Last 7 Days' : daysDiff <= 30 ? 'Last 30 Days' : daysDiff <= 90 ? 'Last 3 Months' : 'All Time'
+            label
         };
     }, [posts]);
 
@@ -53,14 +68,15 @@ function TimePeriodBadge({ posts }: { posts: any[] }) {
                 <strong style={{ color: 'var(--foreground)' }}>{dateRange.label}</strong> • {dateRange.from} — {dateRange.to}
             </span>
             <span style={{
-                padding: '2px 8px',
+                padding: '4px 10px',
                 background: '#6366f1',
                 color: 'white',
                 borderRadius: 20,
-                fontSize: 10,
-                fontWeight: 600
+                fontSize: 11,
+                fontWeight: 700,
+                boxShadow: '0 4px 10px rgba(99, 102, 241, 0.3)'
             }}>
-                {posts.length} posts
+                {posts.length} {posts.length === 1 ? 'post' : 'posts'}
             </span>
         </div>
     );
