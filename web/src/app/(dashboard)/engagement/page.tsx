@@ -238,7 +238,7 @@ export default function EngagementPage() {
     const { data, isLoading, refetch, isFetching } = useQuery({
         queryKey: ['posts', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await instagramApi.getPosts(50);
+            const res = await instagramApi.getPosts(50, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });

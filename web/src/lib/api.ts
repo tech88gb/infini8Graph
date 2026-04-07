@@ -75,7 +75,12 @@ export const instagramApi = (() => {
         getBestTime: (startDate?: string, endDate?: string) => api.get(`/instagram/best-time${buildParams(startDate, endDate)}`),
         getHashtags: (startDate?: string, endDate?: string) => api.get(`/instagram/hashtags${buildParams(startDate, endDate)}`),
         getReels: (startDate?: string, endDate?: string) => api.get(`/instagram/reels${buildParams(startDate, endDate)}`),
-        getPosts: (limit = 50) => api.get(`/instagram/posts?limit=${limit}`),
+        getPosts: (limit = 50, startDate?: string, endDate?: string) => {
+            const p = new URLSearchParams({ limit: String(limit) });
+            if (startDate) p.append('startDate', startDate);
+            if (endDate) p.append('endDate', endDate);
+            return api.get(`/instagram/posts?${p.toString()}`);
+        },
         exportData: (format = 'json', metrics = 'overview,growth,posts') =>
             api.get(`/instagram/export?format=${format}&metrics=${metrics}`),
         getContentIntelligence: (startDate?: string, endDate?: string) => api.get(`/instagram/content-intelligence${buildParams(startDate, endDate)}`),
