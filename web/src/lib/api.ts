@@ -90,9 +90,15 @@ export const instagramApi = (() => {
 
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
-    getAdAccounts: (datePreset = 'last_90d') => api.get(`/ads/accounts?datePreset=${datePreset}`),
+    getAdAccounts: () => api.get('/ads/accounts'),
     getAdInsights: (adAccountId: string, datePreset = 'last_90d') =>
         api.get(`/ads/accounts/${adAccountId}/insights?datePreset=${datePreset}`),
+    getDemographics: (adAccountId: string, datePreset = 'last_90d') =>
+        api.get(`/ads/accounts/${adAccountId}/demographics?datePreset=${datePreset}`),
+    getPlacements: (adAccountId: string, datePreset = 'last_90d') =>
+        api.get(`/ads/accounts/${adAccountId}/placements?datePreset=${datePreset}`),
+    getGeography: (adAccountId: string, datePreset = 'last_90d') =>
+        api.get(`/ads/accounts/${adAccountId}/geography?datePreset=${datePreset}`),
     getCampaigns: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/campaigns`),
     getAdSets: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/adsets`),
     getAds: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/ads`),

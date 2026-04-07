@@ -15,6 +15,9 @@ router.get('/accounts', adsController.getAdAccounts);
 
 // Detailed insights for an account
 router.get('/accounts/:adAccountId/insights', adsController.getAdInsights);
+router.get('/accounts/:adAccountId/demographics', adsController.getDemographics);
+router.get('/accounts/:adAccountId/placements', adsController.getPlacements);
+router.get('/accounts/:adAccountId/geography', adsController.getGeography);
 
 // Campaigns
 router.get('/accounts/:adAccountId/campaigns', adsController.getCampaigns);

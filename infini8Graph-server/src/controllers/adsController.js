@@ -6,59 +6,109 @@ dotenv.config();
 
 const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v18.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
+const META_CACHE = new Map();
+
+const META_CACHE_TTL = {
+    accounts: parseInt(process.env.META_ADS_CACHE_TTL_ACCOUNTS || '300', 10),
+    overview: parseInt(process.env.META_ADS_CACHE_TTL_OVERVIEW || '180', 10),
+    breakdowns: parseInt(process.env.META_ADS_CACHE_TTL_BREAKDOWNS || '300', 10),
+    campaigns: parseInt(process.env.META_ADS_CACHE_TTL_CAMPAIGNS || '300', 10),
+    funnel: parseInt(process.env.META_ADS_CACHE_TTL_FUNNEL || '180', 10),
+    intelligence: parseInt(process.env.META_ADS_CACHE_TTL_INTELLIGENCE || '300', 10),
+    advanced: parseInt(process.env.META_ADS_CACHE_TTL_ADVANCED || '300', 10),
+    deep: parseInt(process.env.META_ADS_CACHE_TTL_DEEP || '300', 10)
+};
+
+function getMetaCacheEntry(key) {
+    const entry = META_CACHE.get(key);
+    if (!entry) return null;
+
+    if (entry.expiresAt <= Date.now()) {
+        META_CACHE.delete(key);
+        return null;
+    }
+
+    return entry.value;
+}
+
+function setMetaCacheEntry(key, value, ttlSeconds) {
+    META_CACHE.set(key, {
+        value,
+        expiresAt: Date.now() + (ttlSeconds * 1000)
+    });
+}
+
+function buildMetaCacheKey(prefix, parts) {
+    return [prefix, ...parts].join(':');
+}
+
+async function withMetaCache(key, ttlSeconds, fetcher) {
+    const cached = getMetaCacheEntry(key);
+    if (cached) return cached;
+
+    const data = await fetcher();
+    setMetaCacheEntry(key, data, ttlSeconds);
+    return data;
+}
+
+function getComparisonDatePreset(datePreset) {
+    if (datePreset === 'last_7d') return 'last_week_mon_sun';
+    if (datePreset === 'last_30d') return 'last_month';
+    return null;
+}
+
+async function fetchInsightsBreakdown(accountId, accessToken, datePreset, breakdowns, fields) {
+    const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+        params: {
+            access_token: accessToken,
+            fields,
+            date_preset: datePreset,
+            breakdowns
+        }
+    });
+
+    return response.data.data || [];
+}
 
 /**
- * Get ad accounts overview with summary metrics
+ * Get lightweight ad account discovery data
  */
 export async function getAdAccounts(req, res) {
     try {
         const accessToken = await authService.getAccessToken(req.user.userId);
-
         if (!accessToken) {
             return res.status(401).json({ success: false, error: 'Access token not found' });
         }
 
-        const response = await axios.get(`${GRAPH_API_BASE}/me/adaccounts`, {
-            params: {
-                access_token: accessToken,
-                fields: 'id,name,account_id,account_status,currency,timezone_name,business_name,amount_spent',
-                limit: 500
+        const cacheKey = buildMetaCacheKey('meta-accounts', [req.user.userId]);
+        const adAccounts = await withMetaCache(
+            cacheKey,
+            META_CACHE_TTL.accounts,
+            async () => {
+                const response = await axios.get(`${GRAPH_API_BASE}/me/adaccounts`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,account_id,account_status,currency,timezone_name,business_name,amount_spent',
+                        limit: 500
+                    }
+                });
+
+                const accounts = response.data.data || [];
+                return accounts.sort((a, b) => {
+                    const aSpent = parseFloat(a.amount_spent || 0);
+                    const bSpent = parseFloat(b.amount_spent || 0);
+                    return bSpent - aSpent;
+                });
             }
-        });
-
-        const adAccounts = response.data.data || [];
-        console.log(`📊 Found ${adAccounts.length} ad accounts`);
-
-        const { datePreset = 'last_90d' } = req.query;
-
-        // Get insights for each account
-        const accountsWithInsights = await Promise.all(
-            adAccounts.map(async (account) => {
-                try {
-                    const insightsRes = await axios.get(`${GRAPH_API_BASE}/${account.id}/insights`, {
-                        params: {
-                            access_token: accessToken,
-                            fields: 'spend,impressions,reach,clicks,cpc,cpm,ctr,frequency',
-                            date_preset: datePreset
-                        }
-                    });
-                    return { ...account, insights: insightsRes.data.data?.[0] || null };
-                } catch {
-                    return { ...account, insights: null };
-                }
-            })
         );
-
-        // Sort by spend (highest first)
-        const sorted = accountsWithInsights.sort((a, b) => {
-            const aSpend = parseFloat(a.insights?.spend || 0);
-            const bSpend = parseFloat(b.insights?.spend || 0);
-            return bSpend - aSpend;
-        });
 
         res.json({
             success: true,
-            data: { adAccounts: sorted, total: adAccounts.length }
+            data: {
+                adAccounts,
+                total: adAccounts.length,
+                defaultAccountId: adAccounts[0]?.account_id || null
+            }
         });
     } catch (error) {
         console.error('Ad accounts error:', error.response?.data || error.message);
@@ -80,245 +130,175 @@ export async function getAdInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-overview', [req.user.userId, accountId, datePreset]);
+        const payload = await withMetaCache(cacheKey, META_CACHE_TTL.overview, async () => {
+            const comparisonDatePreset = getComparisonDatePreset(datePreset);
+            const requests = [
+                axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'name,status,insights.date_preset(' + datePreset + '){quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,spend}',
+                        limit: 500
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,reach,clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas,website_purchase_roas,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,outbound_clicks,unique_outbound_clicks,inline_link_clicks,cost_per_inline_link_click,social_spend',
+                        date_preset: datePreset
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,clicks,reach,ctr',
+                        date_preset: datePreset,
+                        time_increment: 1
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,clicks,reach',
+                        date_preset: datePreset,
+                        breakdowns: 'device_platform'
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,clicks,reach,ctr',
+                        date_preset: datePreset,
+                        breakdowns: 'publisher_platform,platform_position'
+                    }
+                })
+            ];
 
-        // First, get ads with their relevance diagnostics (these are only available at ad level)
-        let adRelevanceData = [];
-        try {
-            const adsResponse = await axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'name,status,insights.date_preset(' + datePreset + '){quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,spend}',
-                    limit: 500
-                }
-            });
-            adRelevanceData = adsResponse.data.data || [];
-        } catch (err) {
-            console.log('Could not fetch ad-level relevance data:', err.response?.data?.error?.message || err.message);
-        }
+            if (comparisonDatePreset) {
+                requests.push(axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,reach,clicks',
+                        date_preset: comparisonDatePreset
+                    }
+                }));
+            }
 
-        // Get comprehensive insights with all new metrics
-        const requests = [
-            // Summary metrics with ROAS
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,reach,clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas,website_purchase_roas,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,outbound_clicks,unique_outbound_clicks,inline_link_clicks,cost_per_inline_link_click,social_spend',
-                    date_preset: datePreset
-                }
-            }),
-            // Daily breakdown
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach,ctr',
-                    date_preset: datePreset,
-                    time_increment: 1
-                }
-            }),
-            // Age and gender breakdown
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach,ctr',
-                    date_preset: datePreset,
-                    breakdowns: 'age,gender'
-                }
-            }),
-            // Publisher platform breakdown (Instagram vs Facebook)
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach',
-                    date_preset: datePreset,
-                    breakdowns: 'publisher_platform'
-                }
-            }),
-            // Device platform breakdown (Mobile vs Desktop)
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach',
-                    date_preset: datePreset,
-                    breakdowns: 'device_platform'
-                }
-            }),
-            // Platform position breakdown (Feed, Stories, Reels, etc.)
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach',
-                    date_preset: datePreset,
-                    breakdowns: 'platform_position'
-                }
-            }),
-            // Country breakdown
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach,ctr',
-                    date_preset: datePreset,
-                    breakdowns: 'country'
-                }
-            }),
-            // Region breakdown
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach',
-                    date_preset: datePreset,
-                    breakdowns: 'region'
-                }
-            })
-        ];
+            const results = await Promise.allSettled(requests);
+            const [relevanceRes, summaryRes, dailyRes, deviceRes, positionRes, comparisonRes] = results;
+            const adRelevanceData = relevanceRes.status === 'fulfilled' ? relevanceRes.value.data.data || [] : [];
+            const summary = summaryRes.status === 'fulfilled' ? summaryRes.value.data.data?.[0] : null;
+            const daily = dailyRes.status === 'fulfilled' ? dailyRes.value.data.data : [];
+            const devices = deviceRes.status === 'fulfilled' ? deviceRes.value.data.data : [];
+            const positions = positionRes.status === 'fulfilled' ? positionRes.value.data.data : [];
 
-        // Add comparison request if possible
-        let comparisonDatePreset = null;
-        if (datePreset === 'last_7d') comparisonDatePreset = 'last_week_mon_sun'; // Close enough for comparison
-        else if (datePreset === 'last_30d') comparisonDatePreset = 'last_month';
+            let videoViews = { views_3s: 0, views_25: 0, views_50: 0, views_75: 0, views_100: 0 };
+            if (summary?.video_p25_watched_actions) {
+                videoViews.views_25 = parseInt(summary.video_p25_watched_actions[0]?.value || 0);
+            }
+            if (summary?.video_p50_watched_actions) {
+                videoViews.views_50 = parseInt(summary.video_p50_watched_actions[0]?.value || 0);
+            }
+            if (summary?.video_p75_watched_actions) {
+                videoViews.views_75 = parseInt(summary.video_p75_watched_actions[0]?.value || 0);
+            }
+            if (summary?.video_p100_watched_actions) {
+                videoViews.views_100 = parseInt(summary.video_p100_watched_actions[0]?.value || 0);
+            }
 
-        // For custom WoW, we usually need specific time_range
-        // But for Meta API, we can use specific presets or date ranges
-        // Let's just try to fetch last_7d if datePreset is last_7d
-        if (comparisonDatePreset) {
-            requests.push(axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,reach,clicks',
-                    date_preset: comparisonDatePreset
-                }
-            }));
-        }
+            let conversions = [];
+            if (summary?.actions) {
+                conversions = summary.actions.filter(a =>
+                    ['purchase', 'lead', 'complete_registration', 'add_to_cart', 'initiate_checkout', 'link_click', 'post_engagement', 'page_engagement'].includes(a.action_type)
+                ).map(a => ({
+                    type: a.action_type,
+                    value: parseInt(a.value)
+                }));
+            }
 
-        const results = await Promise.allSettled(requests);
-        const [summaryRes, dailyRes, demographicsRes, placementsRes, deviceRes, positionRes, countryRes, regionRes, comparisonRes] = results;
+            let actionValues = [];
+            if (summary?.action_values) {
+                actionValues = summary.action_values.map(a => ({
+                    type: a.action_type,
+                    value: parseFloat(a.value)
+                }));
+            }
 
-        // Process results
-        const summary = summaryRes.status === 'fulfilled' ? summaryRes.value.data.data?.[0] : null;
-        const daily = dailyRes.status === 'fulfilled' ? dailyRes.value.data.data : [];
-        const demographics = demographicsRes.status === 'fulfilled' ? demographicsRes.value.data.data : [];
-        const placements = placementsRes.status === 'fulfilled' ? placementsRes.value.data.data : [];
-        const devices = deviceRes.status === 'fulfilled' ? deviceRes.value.data.data : [];
-        const positions = positionRes.status === 'fulfilled' ? positionRes.value.data.data : [];
-        const countries = countryRes.status === 'fulfilled' ? countryRes.value.data.data : [];
-        const regions = regionRes.status === 'fulfilled' ? regionRes.value.data.data : [];
+            let costPerAction = [];
+            if (summary?.cost_per_action_type) {
+                costPerAction = summary.cost_per_action_type.map(a => ({
+                    type: a.action_type,
+                    value: parseFloat(a.value)
+                }));
+            }
 
-        // Extract video views from actions
-        let videoViews = { views_3s: 0, views_25: 0, views_50: 0, views_75: 0, views_100: 0 };
-        if (summary?.video_p25_watched_actions) {
-            videoViews.views_25 = parseInt(summary.video_p25_watched_actions[0]?.value || 0);
-        }
-        if (summary?.video_p50_watched_actions) {
-            videoViews.views_50 = parseInt(summary.video_p50_watched_actions[0]?.value || 0);
-        }
-        if (summary?.video_p75_watched_actions) {
-            videoViews.views_75 = parseInt(summary.video_p75_watched_actions[0]?.value || 0);
-        }
-        if (summary?.video_p100_watched_actions) {
-            videoViews.views_100 = parseInt(summary.video_p100_watched_actions[0]?.value || 0);
-        }
+            let qualityRankings = [];
+            let engagementRankings = [];
+            let conversionRankings = [];
 
-        // Extract conversions from actions
-        let conversions = [];
-        if (summary?.actions) {
-            conversions = summary.actions.filter(a =>
-                ['purchase', 'lead', 'complete_registration', 'add_to_cart', 'initiate_checkout', 'link_click', 'post_engagement', 'page_engagement'].includes(a.action_type)
-            ).map(a => ({
-                type: a.action_type,
-                value: parseInt(a.value)
-            }));
-        }
-
-        // Extract action values (monetary)
-        let actionValues = [];
-        if (summary?.action_values) {
-            actionValues = summary.action_values.map(a => ({
-                type: a.action_type,
-                value: parseFloat(a.value)
-            }));
-        }
-
-        // Extract cost per action type
-        let costPerAction = [];
-        if (summary?.cost_per_action_type) {
-            costPerAction = summary.cost_per_action_type.map(a => ({
-                type: a.action_type,
-                value: parseFloat(a.value)
-            }));
-        }
-
-        // Ad Relevance Diagnostics - aggregate from individual ads
-        let qualityRankings = [];
-        let engagementRankings = [];
-        let conversionRankings = [];
-
-        for (const ad of adRelevanceData) {
-            const insights = ad.insights?.data?.[0];
-            if (insights) {
-                if (insights.quality_ranking && insights.quality_ranking !== 'UNKNOWN') {
-                    qualityRankings.push(insights.quality_ranking);
-                }
-                if (insights.engagement_rate_ranking && insights.engagement_rate_ranking !== 'UNKNOWN') {
-                    engagementRankings.push(insights.engagement_rate_ranking);
-                }
-                if (insights.conversion_rate_ranking && insights.conversion_rate_ranking !== 'UNKNOWN') {
-                    conversionRankings.push(insights.conversion_rate_ranking);
+            for (const ad of adRelevanceData) {
+                const insights = ad.insights?.data?.[0];
+                if (insights) {
+                    if (insights.quality_ranking && insights.quality_ranking !== 'UNKNOWN') {
+                        qualityRankings.push(insights.quality_ranking);
+                    }
+                    if (insights.engagement_rate_ranking && insights.engagement_rate_ranking !== 'UNKNOWN') {
+                        engagementRankings.push(insights.engagement_rate_ranking);
+                    }
+                    if (insights.conversion_rate_ranking && insights.conversion_rate_ranking !== 'UNKNOWN') {
+                        conversionRankings.push(insights.conversion_rate_ranking);
+                    }
                 }
             }
-        }
 
-        const getMostCommon = (arr) => {
-            if (arr.length === 0) return 'UNKNOWN';
-            const counts = arr.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {});
-            return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-        };
-
-        const relevanceDiagnostics = {
-            qualityRanking: getMostCommon(qualityRankings),
-            engagementRateRanking: getMostCommon(engagementRankings),
-            conversionRateRanking: getMostCommon(conversionRankings),
-            adsAnalyzed: adRelevanceData.length,
-            adsWithData: qualityRankings.length
-        };
-
-        // ROAS metrics
-        const roas = {
-            purchaseRoas: summary?.purchase_roas?.[0]?.value || 0,
-            websitePurchaseRoas: summary?.website_purchase_roas?.[0]?.value || 0
-        };
-
-        // Advanced click metrics
-        const clickMetrics = {
-            outboundClicks: summary?.outbound_clicks?.[0]?.value || 0,
-            uniqueOutboundClicks: summary?.unique_outbound_clicks?.[0]?.value || 0,
-            inlineLinkClicks: summary?.inline_link_clicks || 0,
-            costPerInlineLinkClick: summary?.cost_per_inline_link_click || 0,
-            socialSpend: summary?.social_spend || 0
-        };
-
-        // Process comparison data
-        const comparisonSummary = comparisonRes?.status === 'fulfilled' ? comparisonRes.value.data.data?.[0] : null;
-        let comparisonTrend = null;
-
-        if (comparisonSummary) {
-            const calculateTrend = (curr, prev) => {
-                const c = parseFloat(curr || 0);
-                const p = parseFloat(prev || 0);
-                if (p === 0) return 0;
-                return Math.round(((c - p) / p) * 100);
+            const getMostCommon = (arr) => {
+                if (arr.length === 0) return 'UNKNOWN';
+                const counts = arr.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {});
+                return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
             };
 
-            comparisonTrend = {
-                spendTrend: calculateTrend(summary?.spend, comparisonSummary.spend),
-                impressionsTrend: calculateTrend(summary?.impressions, comparisonSummary.impressions),
-                reachTrend: calculateTrend(summary?.reach, comparisonSummary.reach),
-                clicksTrend: calculateTrend(summary?.clicks, comparisonSummary.clicks),
-                label: datePreset === 'last_7d' ? 'vs last week' : datePreset === 'last_30d' ? 'vs last month' : 'vs previous'
+            const relevanceDiagnostics = {
+                qualityRanking: getMostCommon(qualityRankings),
+                engagementRateRanking: getMostCommon(engagementRankings),
+                conversionRateRanking: getMostCommon(conversionRankings),
+                adsAnalyzed: adRelevanceData.length,
+                adsWithData: qualityRankings.length
             };
-        }
 
-        res.json({
-            success: true,
-            data: {
+            const roas = {
+                purchaseRoas: summary?.purchase_roas?.[0]?.value || 0,
+                websitePurchaseRoas: summary?.website_purchase_roas?.[0]?.value || 0
+            };
+
+            const clickMetrics = {
+                outboundClicks: summary?.outbound_clicks?.[0]?.value || 0,
+                uniqueOutboundClicks: summary?.unique_outbound_clicks?.[0]?.value || 0,
+                inlineLinkClicks: summary?.inline_link_clicks || 0,
+                costPerInlineLinkClick: summary?.cost_per_inline_link_click || 0,
+                socialSpend: summary?.social_spend || 0
+            };
+
+            const comparisonSummary = comparisonRes?.status === 'fulfilled' ? comparisonRes.value.data.data?.[0] : null;
+            let comparisonTrend = null;
+
+            if (comparisonSummary) {
+                const calculateTrend = (curr, prev) => {
+                    const c = parseFloat(curr || 0);
+                    const p = parseFloat(prev || 0);
+                    if (p === 0) return 0;
+                    return Math.round(((c - p) / p) * 100);
+                };
+
+                comparisonTrend = {
+                    spendTrend: calculateTrend(summary?.spend, comparisonSummary.spend),
+                    impressionsTrend: calculateTrend(summary?.impressions, comparisonSummary.impressions),
+                    reachTrend: calculateTrend(summary?.reach, comparisonSummary.reach),
+                    clicksTrend: calculateTrend(summary?.clicks, comparisonSummary.clicks),
+                    label: datePreset === 'last_7d' ? 'vs last week' : datePreset === 'last_30d' ? 'vs last month' : 'vs previous'
+                };
+            }
+
+            return {
                 summary: {
                     spend: summary?.spend || '0',
                     impressions: summary?.impressions || '0',
@@ -338,17 +318,94 @@ export async function getAdInsights(req, res) {
                 videoViews,
                 conversions,
                 daily,
-                demographics,
-                placements,
                 devices,
-                positions,
-                countries,
-                regions
-            }
+                positions
+            };
         });
+
+        res.json({ success: true, data: payload });
     } catch (error) {
         console.error('Ad insights error:', error.response?.data || error.message);
         res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch ad insights' });
+    }
+}
+
+export async function getDemographics(req, res) {
+    try {
+        const { adAccountId } = req.params;
+        const { datePreset = 'last_90d' } = req.query;
+        const accessToken = await authService.getAccessToken(req.user.userId);
+
+        if (!accessToken) {
+            return res.status(401).json({ success: false, error: 'Access token not found' });
+        }
+
+        const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-demographics', [req.user.userId, accountId, datePreset]);
+        const demographics = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () =>
+            fetchInsightsBreakdown(accountId, accessToken, datePreset, 'age,gender', 'spend,impressions,clicks,reach,ctr')
+        );
+
+        res.json({ success: true, data: { demographics } });
+    } catch (error) {
+        console.error('Demographics error:', error.response?.data || error.message);
+        res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch demographics' });
+    }
+}
+
+export async function getPlacements(req, res) {
+    try {
+        const { adAccountId } = req.params;
+        const { datePreset = 'last_90d' } = req.query;
+        const accessToken = await authService.getAccessToken(req.user.userId);
+
+        if (!accessToken) {
+            return res.status(401).json({ success: false, error: 'Access token not found' });
+        }
+
+        const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-placements', [req.user.userId, accountId, datePreset]);
+        const [placements, positions] = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
+            const [platforms, platformPositions] = await Promise.all([
+                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'publisher_platform', 'spend,impressions,clicks,reach'),
+                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'publisher_platform,platform_position', 'spend,impressions,clicks,reach,ctr')
+            ]);
+
+            return [platforms, platformPositions];
+        });
+
+        res.json({ success: true, data: { placements, positions } });
+    } catch (error) {
+        console.error('Placements error:', error.response?.data || error.message);
+        res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch placements' });
+    }
+}
+
+export async function getGeography(req, res) {
+    try {
+        const { adAccountId } = req.params;
+        const { datePreset = 'last_90d' } = req.query;
+        const accessToken = await authService.getAccessToken(req.user.userId);
+
+        if (!accessToken) {
+            return res.status(401).json({ success: false, error: 'Access token not found' });
+        }
+
+        const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-geography', [req.user.userId, accountId, datePreset]);
+        const [countries, regions] = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
+            const [countryData, regionData] = await Promise.all([
+                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'country', 'spend,impressions,clicks,reach,ctr'),
+                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'region', 'spend,impressions,clicks,reach')
+            ]);
+
+            return [countryData, regionData];
+        });
+
+        res.json({ success: true, data: { countries, regions } });
+    } catch (error) {
+        console.error('Geography error:', error.response?.data || error.message);
+        res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch geography' });
     }
 }
 
@@ -365,16 +422,21 @@ export async function getCampaigns(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const campaigns = await withMetaCache(
+            buildMetaCacheKey('meta-campaigns', [req.user.userId, accountId]),
+            META_CACHE_TTL.campaigns,
+            async () => {
+                const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,status,objective,created_time,updated_time,daily_budget,lifetime_budget,insights{spend,impressions,reach,clicks,cpc,cpm,ctr}',
+                        limit: 500
+                    }
+                });
 
-        const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
-            params: {
-                access_token: accessToken,
-                fields: 'id,name,status,objective,created_time,updated_time,daily_budget,lifetime_budget,insights{spend,impressions,reach,clicks,cpc,cpm,ctr}',
-                limit: 500
+                return response.data.data || [];
             }
-        });
-
-        const campaigns = response.data.data || [];
+        );
 
         res.json({
             success: true,
@@ -509,84 +571,76 @@ export async function getConversionFunnel(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const payload = await withMetaCache(
+            buildMetaCacheKey('meta-funnel', [req.user.userId, accountId, datePreset]),
+            META_CACHE_TTL.funnel,
+            async () => {
+                const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'actions,action_values,cost_per_action_type,spend',
+                        date_preset: datePreset
+                    }
+                });
 
-        // Fetch funnel metrics
-        const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-            params: {
-                access_token: accessToken,
-                fields: 'actions,action_values,cost_per_action_type,spend',
-                date_preset: datePreset
-            }
-        });
+                const data = response.data.data?.[0] || {};
+                const actions = data.actions || [];
+                const actionValues = data.action_values || [];
+                const costPerAction = data.cost_per_action_type || [];
+                const totalSpend = parseFloat(data.spend || 0);
+                const funnelStages = [
+                    'landing_page_view',
+                    'view_content',
+                    'add_to_cart',
+                    'initiate_checkout',
+                    'add_payment_info',
+                    'purchase'
+                ];
 
-        const data = response.data.data?.[0] || {};
-        const actions = data.actions || [];
-        const actionValues = data.action_values || [];
-        const costPerAction = data.cost_per_action_type || [];
-        const totalSpend = parseFloat(data.spend || 0);
+                const getActionValue = (type) => {
+                    const action = actions.find(a => a.action_type === type);
+                    return action ? parseInt(action.value) : 0;
+                };
 
-        // Extract funnel stages
-        const funnelStages = [
-            'landing_page_view',
-            'view_content',
-            'add_to_cart',
-            'initiate_checkout',
-            'add_payment_info',
-            'purchase'
-        ];
+                const getActionRevenue = (type) => {
+                    const action = actionValues.find(a => a.action_type === type);
+                    return action ? parseFloat(action.value) : 0;
+                };
 
-        const getActionValue = (type) => {
-            const action = actions.find(a => a.action_type === type);
-            return action ? parseInt(action.value) : 0;
-        };
+                const getCPA = (type) => {
+                    const action = costPerAction.find(a => a.action_type === type);
+                    return action ? parseFloat(action.value) : 0;
+                };
 
-        const getActionRevenue = (type) => {
-            const action = actionValues.find(a => a.action_type === type);
-            return action ? parseFloat(action.value) : 0;
-        };
+                const funnel = funnelStages.map((stage, index) => {
+                    const count = getActionValue(stage);
+                    const prevCount = index > 0 ? getActionValue(funnelStages[index - 1]) : count;
+                    const dropoff = prevCount > 0 ? ((prevCount - count) / prevCount * 100).toFixed(1) : 0;
+                    const conversionRate = index > 0 && prevCount > 0 ? ((count / prevCount) * 100).toFixed(1) : 100;
 
-        const getCPA = (type) => {
-            const action = costPerAction.find(a => a.action_type === type);
-            return action ? parseFloat(action.value) : 0;
-        };
+                    return {
+                        stage,
+                        label: stage.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                        count,
+                        costPerAction: getCPA(stage),
+                        revenue: getActionRevenue(stage),
+                        dropoffRate: parseFloat(dropoff),
+                        conversionRate: parseFloat(conversionRate)
+                    };
+                });
 
-        // Build funnel data
-        const funnel = funnelStages.map((stage, index) => {
-            const count = getActionValue(stage);
-            const prevCount = index > 0 ? getActionValue(funnelStages[index - 1]) : count;
-            const dropoff = prevCount > 0 ? ((prevCount - count) / prevCount * 100).toFixed(1) : 0;
-            const conversionRate = index > 0 && prevCount > 0 ? ((count / prevCount) * 100).toFixed(1) : 100;
+                const landingPageViews = getActionValue('landing_page_view') || getActionValue('link_click');
+                const purchases = getActionValue('purchase');
+                const purchaseValue = getActionRevenue('purchase');
+                const overallConversionRate = landingPageViews > 0
+                    ? ((purchases / landingPageViews) * 100).toFixed(2)
+                    : 0;
+                const roas = totalSpend > 0 ? (purchaseValue / totalSpend).toFixed(2) : 0;
+                const bottleneck = funnel
+                    .filter(s => s.count > 0)
+                    .reduce((max, stage) => stage.dropoffRate > (max?.dropoffRate || 0) ? stage : max, null);
 
-            return {
-                stage,
-                label: stage.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                count,
-                costPerAction: getCPA(stage),
-                revenue: getActionRevenue(stage),
-                dropoffRate: parseFloat(dropoff),
-                conversionRate: parseFloat(conversionRate)
-            };
-        });
-
-        // Calculate overall funnel metrics
-        const landingPageViews = getActionValue('landing_page_view') || getActionValue('link_click');
-        const purchases = getActionValue('purchase');
-        const purchaseValue = getActionRevenue('purchase');
-
-        const overallConversionRate = landingPageViews > 0
-            ? ((purchases / landingPageViews) * 100).toFixed(2)
-            : 0;
-
-        const roas = totalSpend > 0 ? (purchaseValue / totalSpend).toFixed(2) : 0;
-
-        // Identify bottleneck (stage with highest dropoff)
-        const bottleneck = funnel
-            .filter(s => s.count > 0)
-            .reduce((max, stage) => stage.dropoffRate > (max?.dropoffRate || 0) ? stage : max, null);
-
-        res.json({
-            success: true,
-            data: {
+                return {
                 funnel,
                 summary: {
                     totalSpend,
@@ -603,8 +657,11 @@ export async function getConversionFunnel(req, res) {
                     insight: `${bottleneck.dropoffRate}% of users drop off at ${bottleneck.label}`
                 } : null,
                 datePreset
+                };
             }
-        });
+        );
+
+        res.json({ success: true, data: payload });
     } catch (error) {
         console.error('Conversion funnel error:', error.response?.data || error.message);
         res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch conversion funnel' });
@@ -625,6 +682,11 @@ export async function getCampaignIntelligence(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-intelligence', [req.user.userId, accountId, datePreset]);
+        const cached = getMetaCacheEntry(cacheKey);
+        if (cached) {
+            return res.json({ success: true, data: cached });
+        }
 
         // Fetch multiple breakdowns in parallel
         const [campaignsRes, hourlyRes, weekdayRes, placementMatrixRes] = await Promise.allSettled([
@@ -790,9 +852,7 @@ export async function getCampaignIntelligence(req, res) {
             : null;
         const bestPlacement = placementMatrix.length > 0 ? placementMatrix[0] : null;
 
-        res.json({
-            success: true,
-            data: {
+        const payload = {
                 campaigns: campaigns.slice(0, 150),
                 topCampaign: campaigns.length > 0 ? campaigns[0] : null,
                 hourlyPerformance,
@@ -804,8 +864,10 @@ export async function getCampaignIntelligence(req, res) {
                     bestPlacement: bestPlacement ? `${bestPlacement.platform} ${bestPlacement.position} has ${bestPlacement.roas}x ROAS` : null
                 },
                 datePreset
-            }
-        });
+        };
+
+        setMetaCacheEntry(cacheKey, payload, META_CACHE_TTL.intelligence);
+        res.json({ success: true, data: payload });
     } catch (error) {
         console.error('Campaign intelligence error:', error.response?.data || error.message);
         res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch campaign intelligence' });
@@ -826,6 +888,11 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-advanced', [req.user.userId, accountId, datePreset]);
+        const cached = getMetaCacheEntry(cacheKey);
+        if (cached) {
+            return res.json({ success: true, data: cached });
+        }
 
         // Placement intent weights
         const PLACEMENT_INTENT = {
@@ -1344,9 +1411,7 @@ export async function getAdvancedAnalytics(req, res) {
             };
         }
 
-        res.json({
-            success: true,
-            data: {
+        const payload = {
                 fatigueAnalysis,
                 placementIntent: placementIntent.slice(0, 15),
                 creativeForensics: creativeForensics.slice(0, 20),
@@ -1361,8 +1426,10 @@ export async function getAdvancedAnalytics(req, res) {
                     hasRetargetingData: retargetingLift !== null
                 },
                 datePreset
-            }
-        });
+        };
+
+        setMetaCacheEntry(cacheKey, payload, META_CACHE_TTL.advanced);
+        res.json({ success: true, data: payload });
     } catch (error) {
         console.error('Advanced analytics error:', error.response?.data || error.message);
         res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch advanced analytics' });
@@ -1384,6 +1451,11 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-deep', [req.user.userId, accountId, datePreset, campaignId || 'all']);
+        const cached = getMetaCacheEntry(cacheKey);
+        if (cached) {
+            return res.json({ success: true, data: cached });
+        }
 
         // Fetch all necessary data in parallel
         const [
@@ -1823,9 +1895,7 @@ export async function getDeepInsights(req, res) {
         }
 
         // ==================== COMPILE RESPONSE ====================
-        res.json({
-            success: true,
-            data: {
+        const payload = {
                 campaignFunnels: campaignFunnels.slice(0, 20),
                 compareFunnels: campaignFunnels.length >= 2 ? {
                     best: campaignFunnels[0],
@@ -1848,8 +1918,10 @@ export async function getDeepInsights(req, res) {
                 placementArbitrage: placementArbitrage.slice(0, 20),
                 arbitrageSummary,
                 datePreset
-            }
-        });
+        };
+
+        setMetaCacheEntry(cacheKey, payload, META_CACHE_TTL.deep);
+        res.json({ success: true, data: payload });
     } catch (error) {
         console.error('Deep insights error:', error.response?.data || error.message);
         res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch deep insights' });

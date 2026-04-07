@@ -245,15 +245,16 @@ export default function AdsPage() {
 
     // Fetch accounts
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
-        queryKey: ['ad-accounts', datePreset],
+        queryKey: ['ad-accounts'],
         queryFn: async () => {
-            const res = await adsApi.getAdAccounts(datePreset);
+            const res = await adsApi.getAdAccounts();
             return res.data;
-        }
+        },
+        refetchOnWindowFocus: false
     });
 
     const adAccounts = accountsData?.data?.adAccounts || [];
-    const effectiveAccount = selectedAccount || adAccounts.find((a: any) => a.insights?.spend)?.account_id;
+    const effectiveAccount = selectedAccount || accountsData?.data?.defaultAccountId || adAccounts[0]?.account_id;
 
     // Fetch detailed insights
     const { data: insightsData, isLoading: insightsLoading } = useQuery({
@@ -263,7 +264,41 @@ export default function AdsPage() {
             const res = await adsApi.getAdInsights(effectiveAccount, datePreset);
             return res.data;
         },
-        enabled: !!effectiveAccount
+        enabled: !!effectiveAccount,
+        refetchOnWindowFocus: false
+    });
+
+    const { data: demographicsData, isLoading: demographicsLoading } = useQuery({
+        queryKey: ['ad-demographics', effectiveAccount, datePreset],
+        queryFn: async () => {
+            if (!effectiveAccount) return null;
+            const res = await adsApi.getDemographics(effectiveAccount, datePreset);
+            return res.data;
+        },
+        enabled: !!effectiveAccount && activeTab === 'demographics',
+        refetchOnWindowFocus: false
+    });
+
+    const { data: placementsData, isLoading: placementsLoading } = useQuery({
+        queryKey: ['ad-placements', effectiveAccount, datePreset],
+        queryFn: async () => {
+            if (!effectiveAccount) return null;
+            const res = await adsApi.getPlacements(effectiveAccount, datePreset);
+            return res.data;
+        },
+        enabled: !!effectiveAccount && activeTab === 'placements',
+        refetchOnWindowFocus: false
+    });
+
+    const { data: geographyData, isLoading: geographyLoading } = useQuery({
+        queryKey: ['ad-geography', effectiveAccount, datePreset],
+        queryFn: async () => {
+            if (!effectiveAccount) return null;
+            const res = await adsApi.getGeography(effectiveAccount, datePreset);
+            return res.data;
+        },
+        enabled: !!effectiveAccount && activeTab === 'geo',
+        refetchOnWindowFocus: false
     });
 
     // Fetch campaigns
@@ -338,12 +373,14 @@ export default function AdsPage() {
     const roas = insightsData?.data?.roas || {};
     const clickMetrics = insightsData?.data?.clickMetrics || {};
     const daily = insightsData?.data?.daily || [];
-    const demographics = insightsData?.data?.demographics || [];
-    const placements = insightsData?.data?.placements || [];
+    const demographics = demographicsData?.data?.demographics || [];
+    const placements = placementsData?.data?.placements || [];
     const devices = insightsData?.data?.devices || [];
-    const positions = insightsData?.data?.positions || [];
-    const countries = insightsData?.data?.countries || [];
-    const regions = insightsData?.data?.regions || [];
+    const positions = activeTab === 'placements'
+        ? (placementsData?.data?.positions || [])
+        : (insightsData?.data?.positions || []);
+    const countries = geographyData?.data?.countries || [];
+    const regions = geographyData?.data?.regions || [];
     const videoViews = insightsData?.data?.videoViews || {};
     const conversions = insightsData?.data?.conversions || [];
     const actionValues = insightsData?.data?.actionValues || [];
@@ -371,17 +408,6 @@ export default function AdsPage() {
         impressions: parseInt(p.impressions || 0),
         ctr: parseFloat(p.ctr || 0)
     }));
-
-    // Totals across accounts
-    const totals = adAccounts.reduce((acc: any, account: any) => {
-        if (account.insights) {
-            acc.spend += parseFloat(account.insights.spend || 0);
-            acc.impressions += parseInt(account.insights.impressions || 0);
-            acc.reach += parseInt(account.insights.reach || 0);
-            acc.clicks += parseInt(account.insights.clicks || 0);
-        }
-        return acc;
-    }, { spend: 0, impressions: 0, reach: 0, clicks: 0 });
 
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -822,7 +848,12 @@ export default function AdsPage() {
             {/* ==================== DEMOGRAPHICS TAB ==================== */}
             {activeTab === 'demographics' && (
                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Demographics <InfoTooltip text="Age and gender breakdown of who is interacting with your ads." /></span>} subtitle="Breakdown by age and gender">
-                    {demographics.length > 0 ? (
+                    {demographicsLoading ? (
+                        <div style={{ textAlign: 'center', padding: 40 }}>
+                            <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                            <p className="text-muted">Loading demographics...</p>
+                        </div>
+                    ) : demographics.length > 0 ? (
                         <div style={{ overflowX: 'auto' }}>
                             <table className="table">
                                 <thead>
@@ -858,156 +889,174 @@ export default function AdsPage() {
             {/* ==================== PLACEMENTS TAB ==================== */}
             {activeTab === 'placements' && (
                 <div style={{ display: 'grid', gap: 20 }}>
-                    {/* Platform Breakdown */}
-                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Platform Breakdown <InfoTooltip text="Compares ad performance on Facebook vs Instagram networks." /></span>} subtitle="Performance on Facebook vs Instagram">
-                        {placements.length > 0 ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-                                {placements.map((p: any, i: number) => (
-                                    <div key={i} style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                                        <div style={{ fontWeight: 600, textTransform: 'capitalize', marginBottom: 8 }}>{p.publisher_platform}</div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
-                                            <div>
-                                                <div className="text-muted" style={{ fontSize: 11 }}>Spend</div>
-                                                <div style={{ fontWeight: 500 }}>{formatCurrency(p.spend)}</div>
+                    {placementsLoading ? (
+                        <div style={{ textAlign: 'center', padding: 40 }}>
+                            <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                            <p className="text-muted">Loading placements...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Platform Breakdown */}
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Platform Breakdown <InfoTooltip text="Compares ad performance on Facebook vs Instagram networks." /></span>} subtitle="Performance on Facebook vs Instagram">
+                                {placements.length > 0 ? (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+                                        {placements.map((p: any, i: number) => (
+                                            <div key={i} style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                                                <div style={{ fontWeight: 600, textTransform: 'capitalize', marginBottom: 8 }}>{p.publisher_platform}</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
+                                                    <div>
+                                                        <div className="text-muted" style={{ fontSize: 11 }}>Spend</div>
+                                                        <div style={{ fontWeight: 500 }}>{formatCurrency(p.spend)}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-muted" style={{ fontSize: 11 }}>Impressions</div>
+                                                        <div style={{ fontWeight: 500 }}>{formatNumber(p.impressions)}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-muted" style={{ fontSize: 11 }}>Clicks</div>
+                                                        <div style={{ fontWeight: 500 }}>{formatNumber(p.clicks)}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-muted" style={{ fontSize: 11 }}>CTR</div>
+                                                        <div style={{ fontWeight: 500 }}>{formatPercent(p.ctr)}</div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <div className="text-muted" style={{ fontSize: 11 }}>Impressions</div>
-                                                <div style={{ fontWeight: 500 }}>{formatNumber(p.impressions)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-muted" style={{ fontSize: 11 }}>Clicks</div>
-                                                <div style={{ fontWeight: 500 }}>{formatNumber(p.clicks)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-muted" style={{ fontSize: 11 }}>CTR</div>
-                                                <div style={{ fontWeight: 500 }}>{formatPercent(p.ctr)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-muted">No platform data available</p>
-                        )}
-                    </SectionCard>
-
-                    {/* Position Breakdown */}
-                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Position Breakdown <InfoTooltip text="Breaks down where your ads appear (Feed, Stories, Reels, etc.) allowing you to see which placement drives the most efficiency." /></span>} subtitle="Performance by placement (Feed, Stories, Reels, etc.)">
-                        {positions.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table className="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Position</th>
-                                            <th>Spend</th>
-                                            <th>Impressions</th>
-                                            <th>Clicks</th>
-                                            <th>CTR</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {positions.slice(0, 10).map((p: any, i: number) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500, textTransform: 'capitalize' }}>
-                                                    {`${p.publisher_platform || ''} ${p.platform_position || ''}`.replace(/_/g, ' ')}
-                                                </td>
-                                                <td>{formatCurrency(p.spend)}</td>
-                                                <td>{formatNumber(p.impressions)}</td>
-                                                <td>{formatNumber(p.clicks)}</td>
-                                                <td>{formatPercent(p.ctr)}</td>
-                                            </tr>
                                         ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <p className="text-muted">No position data available</p>
-                        )}
-                    </SectionCard>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted">No platform data available</p>
+                                )}
+                            </SectionCard>
+
+                            {/* Position Breakdown */}
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Position Breakdown <InfoTooltip text="Breaks down where your ads appear (Feed, Stories, Reels, etc.) allowing you to see which placement drives the most efficiency." /></span>} subtitle="Performance by placement (Feed, Stories, Reels, etc.)">
+                                {positions.length > 0 ? (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Position</th>
+                                                    <th>Spend</th>
+                                                    <th>Impressions</th>
+                                                    <th>Clicks</th>
+                                                    <th>CTR</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {positions.slice(0, 10).map((p: any, i: number) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500, textTransform: 'capitalize' }}>
+                                                            {`${p.publisher_platform || ''} ${p.platform_position || ''}`.replace(/_/g, ' ')}
+                                                        </td>
+                                                        <td>{formatCurrency(p.spend)}</td>
+                                                        <td>{formatNumber(p.impressions)}</td>
+                                                        <td>{formatNumber(p.clicks)}</td>
+                                                        <td>{formatPercent(p.ctr)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted">No position data available</p>
+                                )}
+                            </SectionCard>
+                        </>
+                    )}
                 </div>
             )}
 
             {/* ==================== GEOGRAPHY TAB ==================== */}
             {activeTab === 'geo' && (
                 <div style={{ display: 'grid', gap: 20 }}>
-                    {/* Country Breakdown */}
-                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text="Geographical breakdown of your ad reach and performance at the country level." /></span>} subtitle="How your ads perform in different countries">
-                        {countries.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table className="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Country</th>
-                                            <th>Spend</th>
-                                            <th>Impressions</th>
-                                            <th>Reach</th>
-                                            <th>Clicks</th>
-                                            <th>CTR</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {countries.slice(0, 15).map((c: any, i: number) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500 }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <Globe size={14} />
-                                                        {c.country}
-                                                    </div>
-                                                </td>
-                                                <td>{formatCurrency(c.spend)}</td>
-                                                <td>{formatNumber(c.impressions)}</td>
-                                                <td>{formatNumber(c.reach)}</td>
-                                                <td>{formatNumber(c.clicks)}</td>
-                                                <td>{formatPercent(c.ctr)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <p className="text-muted">No country data available</p>
-                        )}
-                    </SectionCard>
+                    {geographyLoading ? (
+                        <div style={{ textAlign: 'center', padding: 40 }}>
+                            <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                            <p className="text-muted">Loading geography...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Country Breakdown */}
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text="Geographical breakdown of your ad reach and performance at the country level." /></span>} subtitle="How your ads perform in different countries">
+                                {countries.length > 0 ? (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Country</th>
+                                                    <th>Spend</th>
+                                                    <th>Impressions</th>
+                                                    <th>Reach</th>
+                                                    <th>Clicks</th>
+                                                    <th>CTR</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {countries.slice(0, 15).map((c: any, i: number) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500 }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                <Globe size={14} />
+                                                                {c.country}
+                                                            </div>
+                                                        </td>
+                                                        <td>{formatCurrency(c.spend)}</td>
+                                                        <td>{formatNumber(c.impressions)}</td>
+                                                        <td>{formatNumber(c.reach)}</td>
+                                                        <td>{formatNumber(c.clicks)}</td>
+                                                        <td>{formatPercent(c.ctr)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted">No country data available</p>
+                                )}
+                            </SectionCard>
 
-                    {/* Region Breakdown */}
-                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="More granular geographical breakdown showing states or regions." /></span>} subtitle="Performance by state/region">
-                        {regions.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table className="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Region</th>
-                                            <th>Spend</th>
-                                            <th>Impressions</th>
-                                            <th>Reach</th>
-                                            <th>Clicks</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {regions.slice(0, 15).map((r: any, i: number) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500 }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <MapPin size={14} />
-                                                        {r.region}
-                                                    </div>
-                                                </td>
-                                                <td>{formatCurrency(r.spend)}</td>
-                                                <td>{formatNumber(r.impressions)}</td>
-                                                <td>{formatNumber(r.reach)}</td>
-                                                <td>{formatNumber(r.clicks)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                <div style={{ marginTop: 12, padding: '10px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
-                                    Showing top 15 regions sorted by highest spend. Total {regions.length} regions tracked.
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="text-muted">No region data available</p>
-                        )}
-                    </SectionCard>
+                            {/* Region Breakdown */}
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="More granular geographical breakdown showing states or regions." /></span>} subtitle="Performance by state/region">
+                                {regions.length > 0 ? (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Region</th>
+                                                    <th>Spend</th>
+                                                    <th>Impressions</th>
+                                                    <th>Reach</th>
+                                                    <th>Clicks</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {regions.slice(0, 15).map((r: any, i: number) => (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500 }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                <MapPin size={14} />
+                                                                {r.region}
+                                                            </div>
+                                                        </td>
+                                                        <td>{formatCurrency(r.spend)}</td>
+                                                        <td>{formatNumber(r.impressions)}</td>
+                                                        <td>{formatNumber(r.reach)}</td>
+                                                        <td>{formatNumber(r.clicks)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ marginTop: 12, padding: '10px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
+                                            Showing top 15 regions sorted by highest spend. Total {regions.length} regions tracked.
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted">No region data available</p>
+                                )}
+                            </SectionCard>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -2360,10 +2409,10 @@ export default function AdsPage() {
                             </div>
                             <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: 600 }}>
-                                    {account.insights?.spend ? formatCurrency(account.insights.spend, account.currency) : '—'}
+                                    {account.amount_spent ? formatCurrency(account.amount_spent, account.currency) : '—'}
                                 </div>
                                 <div style={{ fontSize: 12, opacity: 0.7 }}>
-                                    {account.insights?.impressions ? formatNumber(account.insights.impressions) + ' imp' : 'No data'}
+                                    {account.business_name || account.timezone_name || 'Account connected'}
                                 </div>
                             </div>
                         </div>

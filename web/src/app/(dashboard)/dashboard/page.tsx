@@ -401,7 +401,7 @@ function MetaAdsWidget() {
     });
 
     const adAccounts = accountsData?.data?.adAccounts || [];
-    const effectiveAccount = adAccounts.find((a: any) => a.insights?.spend)?.account_id || adAccounts[0]?.account_id;
+    const effectiveAccount = accountsData?.data?.defaultAccountId || adAccounts[0]?.account_id;
 
     const { data: insightsData, isLoading: insightsLoading } = useQuery({
         queryKey: ['ad-insights', effectiveAccount],
