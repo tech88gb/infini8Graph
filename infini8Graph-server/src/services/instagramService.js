@@ -404,6 +404,62 @@ class InstagramService {
             return null;
         }
     }
+
+    /**
+     * Get all media with normalised insight fields.
+     * Used by AnalyticsService.getPostsAnalytics() and anywhere that needs
+     * a consistent camelCase shape with computed engagement.
+     *
+     * Raw API field → normalised field:
+     *   media_type       → mediaType
+     *   media_url        → mediaUrl
+     *   thumbnail_url    → thumbnailUrl
+     *   like_count       → likeCount
+     *   comments_count   → commentsCount
+     *   insights.data[]  → impressions, reach, saved (extracted)
+     *   computed         → engagement = likes + comments + saved
+     */
+    async getAllMediaWithInsights(limit = 50) {
+        const response = await this.getMedia(limit);
+        const rawPosts = response?.data || [];
+
+        return rawPosts.map(p => {
+            let impressions = 0, reach = 0, saved = 0;
+
+            // Insights come back as nested { data: [{ name, values: [{value}] }] }
+            if (Array.isArray(p.insights?.data)) {
+                for (const insight of p.insights.data) {
+                    const val =
+                        insight?.values?.[0]?.value ??    // period-based
+                        insight?.total_value?.value ??    // total_value style
+                        0;
+                    if (insight.name === 'impressions') impressions = val;
+                    else if (insight.name === 'reach')  reach = val;
+                    else if (insight.name === 'saved')  saved = val;
+                }
+            }
+
+            const likeCount     = p.like_count     || 0;
+            const commentsCount = p.comments_count || 0;
+            const engagement    = likeCount + commentsCount + saved;
+
+            return {
+                id:            p.id,
+                mediaType:     p.media_type,
+                caption:       p.caption || '',
+                mediaUrl:      p.media_url,
+                thumbnailUrl:  p.thumbnail_url || p.media_url,
+                permalink:     p.permalink,
+                timestamp:     p.timestamp,
+                likeCount,
+                commentsCount,
+                impressions,
+                reach,
+                saved,
+                engagement,
+            };
+        });
+    }
 }
 
 export default InstagramService;

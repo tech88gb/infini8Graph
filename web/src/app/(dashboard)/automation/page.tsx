@@ -11,6 +11,27 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
+/**
+ * Authenticated fetch — mirrors the axios interceptor in api.ts.
+ * Reads the JWT from localStorage and adds it as an Authorization header
+ * so requests work even when third-party / cross-site cookies are blocked
+ * (Safari ITP, Firefox strict mode, Chrome incognito, etc.).
+ * @param url  Full URL to fetch
+ * @param opts Standard RequestInit options
+ */
+async function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...((opts.headers as Record<string, string>) || {}),
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        headers['X-Auth-Token'] = token;
+    }
+    return fetch(url, { ...opts, headers, credentials: 'include' });
+}
+
 interface AutomationRule {
     id?: string;
     instagram_account_id?: string;
@@ -66,8 +87,8 @@ export default function AutomationPage() {
         setLoading(true);
         try {
             const [rulesRes, mediaRes] = await Promise.all([
-                fetch(`${API_BASE}/api/automation/rules`, { credentials: 'include' }),
-                fetch(`${API_BASE}/api/instagram/posts?limit=100&includeCollabs=true`, { credentials: 'include' })
+                authFetch(`${API_BASE}/api/automation/rules`),
+                authFetch(`${API_BASE}/api/instagram/posts?limit=100&includeCollabs=true`)
             ]);
             if (rulesRes.ok) {
                 const data = await rulesRes.json();
@@ -97,7 +118,7 @@ export default function AutomationPage() {
     const fetchStats = useCallback(async (showLoading = false) => {
         if (showLoading) setLoadingStats(true);
         try {
-            const res = await fetch(`${API_BASE}/api/automation/stats`, { credentials: 'include' });
+            const res = await authFetch(`${API_BASE}/api/automation/stats`);
             if (res.ok) {
                 const data = await res.json();
                 setStats(data.stats);
@@ -130,11 +151,9 @@ export default function AutomationPage() {
         
         if (defaultRule.id) {
             try {
-                const res = await fetch(`${API_BASE}/api/automation/rules/${defaultRule.id}`, { 
-                    method: 'PATCH', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    credentials: 'include', 
-                    body: JSON.stringify({ is_active: checked }) 
+                const res = await authFetch(`${API_BASE}/api/automation/rules/${defaultRule.id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ is_active: checked })
                 });
                 if (!res.ok) {
                     notify('error', 'Failed to update');
@@ -153,7 +172,7 @@ export default function AutomationPage() {
         try {
             const method = defaultRule.id ? 'PATCH' : 'POST';
             const url = defaultRule.id ? `${API_BASE}/api/automation/rules/${defaultRule.id}` : `${API_BASE}/api/automation/rules`;
-            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ...defaultRule, name: 'Default Automation', keywords: defaultRule.keywords || [], media_id: null, media_ids: [] }) });
+            const res = await authFetch(url, { method, body: JSON.stringify({ ...defaultRule, name: 'Default Automation', keywords: defaultRule.keywords || [], media_id: null, media_ids: [] }) });
             if (res.ok) { const data = await res.json(); setDefaultRule(data.rule); notify('success', 'Saved successfully!'); fetchData(); }
             else { const err = await res.json(); notify('error', err.error || 'Save failed'); }
         } catch { notify('error', 'Network error'); } finally { setSaving(false); }
@@ -166,7 +185,7 @@ export default function AutomationPage() {
         setSaving(true);
         try {
             console.log('🔧 Creating override:', newRule);
-            const res = await fetch(`${API_BASE}/api/automation/rules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(newRule) });
+            const res = await authFetch(`${API_BASE}/api/automation/rules`, { method: 'POST', body: JSON.stringify(newRule) });
             const data = await res.json();
             console.log('📥 Create response:', data);
             if (res.ok) { 
@@ -176,7 +195,7 @@ export default function AutomationPage() {
                 
                 // Force immediate refresh
                 setLoading(true);
-                const rulesRes = await fetch(`${API_BASE}/api/automation/rules`, { credentials: 'include' });
+                const rulesRes = await authFetch(`${API_BASE}/api/automation/rules`);
                 if (rulesRes.ok) {
                     const rulesData = await rulesRes.json();
                     console.log('🔄 Refreshed rules:', rulesData.rules?.length, rulesData.rules);
@@ -196,7 +215,7 @@ export default function AutomationPage() {
 
     const deleteRule = async (id: string) => {
         if (!confirm('Delete this override?')) return;
-        try { await fetch(`${API_BASE}/api/automation/rules/${id}`, { method: 'DELETE', credentials: 'include' }); fetchData(); } catch { }
+        try { await authFetch(`${API_BASE}/api/automation/rules/${id}`, { method: 'DELETE' }); fetchData(); } catch { }
     };
 
     const toggleRule = async (rule: AutomationRule) => {
@@ -204,11 +223,9 @@ export default function AutomationPage() {
             // Optimistic update
             setRules(rules.map(r => r.id === rule.id ? { ...r, is_active: !r.is_active } : r));
             
-            const res = await fetch(`${API_BASE}/api/automation/rules/${rule.id}`, { 
-                method: 'PATCH', 
-                headers: { 'Content-Type': 'application/json' }, 
-                credentials: 'include', 
-                body: JSON.stringify({ is_active: !rule.is_active }) 
+            const res = await authFetch(`${API_BASE}/api/automation/rules/${rule.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ is_active: !rule.is_active })
             });
             if (!res.ok) {
                 notify('error', 'Failed to update rule');
