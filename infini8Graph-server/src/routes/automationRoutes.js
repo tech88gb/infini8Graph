@@ -13,7 +13,8 @@ async function getAccountIdsForUser(userId) {
     const { data: tokens } = await supabase
         .from('auth_tokens')
         .select('instagram_account_id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('is_enabled', true);
     return (tokens || []).map(t => t.instagram_account_id);
 }
 
@@ -30,6 +31,7 @@ router.get('/rules', authenticate, async (req, res) => {
             const { data: rules, error: rulesError } = await supabase
                 .from('automation_rules')
                 .select('*')
+                .eq('user_id', userId)
                 .eq('instagram_account_id', activeAccountId)
                 .order('created_at', { ascending: false });
 
@@ -43,6 +45,7 @@ router.get('/rules', authenticate, async (req, res) => {
         const { data: rules, error: rulesError } = await supabase
             .from('automation_rules')
             .select('*')
+            .eq('user_id', userId)
             .in('instagram_account_id', accountIds)
             .order('created_at', { ascending: false });
 
@@ -73,6 +76,7 @@ router.post('/rules', authenticate, async (req, res) => {
         const { data: rule, error: createError } = await supabase
             .from('automation_rules')
             .insert({
+                user_id: req.user.userId,
                 instagram_account_id: activeAccountId,
                 name,
                 keywords,
@@ -109,11 +113,16 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
 
         const { data: existingRule, error: fetchError } = await supabase
             .from('automation_rules')
-            .select('instagram_account_id')
+            .select('instagram_account_id, user_id')
             .eq('id', ruleId)
             .single();
 
-        if (fetchError || !existingRule || !accountIds.includes(existingRule.instagram_account_id)) {
+        if (
+            fetchError ||
+            !existingRule ||
+            existingRule.user_id !== userId ||
+            !accountIds.includes(existingRule.instagram_account_id)
+        ) {
             return res.status(404).json({ success: false, error: 'Rule not found' });
         }
 
@@ -146,11 +155,16 @@ router.delete('/rules/:id', authenticate, async (req, res) => {
 
         const { data: existingRule, error: fetchError } = await supabase
             .from('automation_rules')
-            .select('instagram_account_id')
+            .select('instagram_account_id, user_id')
             .eq('id', ruleId)
             .single();
 
-        if (fetchError || !existingRule || !accountIds.includes(existingRule.instagram_account_id)) {
+        if (
+            fetchError ||
+            !existingRule ||
+            existingRule.user_id !== userId ||
+            !accountIds.includes(existingRule.instagram_account_id)
+        ) {
             return res.status(404).json({ success: false, error: 'Rule not found' });
         }
 
@@ -189,12 +203,13 @@ router.get('/activity', authenticate, async (req, res) => {
  */
 router.get('/stats', authenticate, async (req, res) => {
     try {
+        const userId = req.user.userId;
         const activeAccountId = req.user.instagramAccountId;
         if (!activeAccountId) {
             return res.status(400).json({ success: false, error: 'No active account selected' });
         }
 
-        const stats = await autoReplyService.getStats(activeAccountId);
+        const stats = await autoReplyService.getStats(activeAccountId, userId);
         res.json({ success: true, stats });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

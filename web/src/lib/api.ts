@@ -47,11 +47,16 @@ api.interceptors.response.use(
 
 export const authApi = {
     getLoginUrl: () => api.get('/auth/login'),
+    connectMeta: () => api.get('/auth/meta/connect'),
+    reconnectMeta: () => api.post('/auth/meta/reconnect'),
     getMe: () => api.get('/auth/me'),
     logout: () => api.post('/auth/logout'),
     refresh: () => api.post('/auth/refresh'),
     // Multi-account support
-    getAccounts: () => api.get('/auth/accounts'),
+    getAccounts: (includeDisabled = false) =>
+        api.get(`/auth/accounts${includeDisabled ? '?includeDisabled=true' : ''}`),
+    updateAccountEnabled: (accountId: string, isEnabled: boolean) =>
+        api.patch(`/auth/accounts/${accountId}/enabled`, { is_enabled: isEnabled }),
     switchAccount: (accountId: string) => api.post(`/auth/switch/${accountId}`)
 };
 

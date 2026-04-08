@@ -153,25 +153,16 @@ export async function callback(req, res) {
         console.log(`✅ Meta authorized ${authorizedAccounts.length} Instagram account(s)`);
 
         // Set up accounts in DB (composite key, no user_id overwrite)
-        const { primaryAccountId, primaryAccountData } = await authService.setupMetaAccounts(
+        await authService.setupMetaAccounts(
             userId,
             authorizedAccounts,
             tokenData.accessToken,
             tokenData.expiresIn
         );
 
-        // Get user info for JWT
-        const { data: user } = await supabase.from('users').select('google_email').eq('id', userId).maybeSingle();
-
-        // Issue a new JWT with full IG account context
-        const jwtToken = generateToken({
-            userId,
-            googleEmail: user?.google_email || null,
-            metaConnected: true,
-            instagramUserId: primaryAccountData.instagramUserId,
-            instagramAccountId: primaryAccountId,
-            username: primaryAccountData.username,
-        });
+        const session = await authService.buildUserSession(userId);
+        const activeAccount = session.account || authorizedAccounts[0] || null;
+        const jwtToken = session.jwt;
 
         res.cookie('auth_token', jwtToken, {
             httpOnly: true,
@@ -180,7 +171,7 @@ export async function callback(req, res) {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        console.log(`✅ Meta setup complete for @${primaryAccountData.username}`);
+        console.log(`✅ Meta setup complete for @${activeAccount?.username || 'unknown'}`);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/dashboard?token=${jwtToken}`);
     } catch (error) {
         console.error('❌ Meta callback error:', error);
@@ -236,10 +227,44 @@ export async function refreshToken(req, res) {
 
 export async function getAccounts(req, res) {
     try {
-        const accounts = await authService.getUserAccounts(req.user.userId);
-        res.json({ success: true, accounts, activeAccountId: req.user.instagramAccountId });
+        const includeDisabled = req.query.includeDisabled === 'true';
+        const accounts = await authService.getUserAccounts(req.user.userId, { includeDisabled });
+        const activeAccount = await authService.getActiveAccountForUser(req.user.userId);
+        res.json({ success: true, accounts, activeAccountId: activeAccount?.id || null });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to get accounts' });
+    }
+}
+
+export async function updateAccountEnabled(req, res) {
+    try {
+        const { accountId } = req.params;
+        const { is_enabled } = req.body;
+
+        if (typeof is_enabled !== 'boolean') {
+            return res.status(400).json({ success: false, error: 'is_enabled must be a boolean' });
+        }
+
+        const result = await authService.setAccountEnabled(req.user.userId, accountId, is_enabled);
+        if (!result.success) {
+            return res.status(400).json({ success: false, error: result.error || 'Failed to update account selection' });
+        }
+
+        res.cookie('auth_token', result.jwt, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        res.json({
+            success: true,
+            enabled: result.enabled,
+            jwt: result.jwt,
+            activeAccountId: result.activeAccount?.id || null,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Failed to update account selection' });
     }
 }
 
@@ -290,5 +315,6 @@ export default {
     logout,
     refreshToken,
     getAccounts,
+    updateAccountEnabled,
     switchAccount,
 };

@@ -25,6 +25,7 @@ router.post('/refresh', authenticate, authController.refreshToken);
 
 // ── Multi-account management ──────────────────────────────────
 router.get('/accounts', authenticate, authController.getAccounts);
+router.patch('/accounts/:accountId/enabled', authenticate, authController.updateAccountEnabled);
 router.post('/switch/:accountId', authenticate, authController.switchAccount);
 
 export default router;

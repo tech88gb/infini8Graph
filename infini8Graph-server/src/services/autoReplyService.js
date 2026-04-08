@@ -136,18 +136,13 @@ class AutoReplyService {
         ];
     }
 
-    /**
-     * Get access token for a user by Instagram account ID
-     * Returns both User Token (for ads) and Page Token (for DMs)
-     */
-    async getAccessTokenByInstagramId(instagramUserId) {
+    async getAccountTokenContexts(instagramUserId) {
         if (instagramUserId === '0') {
             console.log('   │  ⚠️  Test event from Meta Dashboard (ID: 0) — skipping');
-            return null;
+            return { account: null, contexts: [] };
         }
 
         try {
-            // FIX: Use .maybeSingle() — won't crash if multiple rows exist for same IG user ID
             const { data: account, error: accountError } = await supabase
                 .from('instagram_accounts')
                 .select('id, user_id, facebook_page_id, page_access_token, username')
@@ -156,69 +151,110 @@ class AutoReplyService {
 
             if (accountError || !account) {
                 console.log(`   │  ❌ Account not found for IG ID: ${instagramUserId}`);
-                return null;
+                return { account: null, contexts: [] };
             }
 
-            // FIX: Webhook context has no user_id — get the most recently updated valid token
-            // for this IG account regardless of which user it belongs to.
-            // With composite key, multiple users may have tokens for this account — pick freshest.
             const { data: tokenData, error: tokenError } = await supabase
                 .from('auth_tokens')
-                .select('access_token, expires_at, user_id')
+                .select('access_token, expires_at, user_id, is_active, is_enabled, updated_at')
                 .eq('instagram_account_id', account.id)
-                .gt('expires_at', new Date().toISOString())  // not expired
-                .order('updated_at', { ascending: false })   // most recently refreshed first
-                .limit(1)
-                .maybeSingle();
+                .eq('is_enabled', true)
+                .gt('expires_at', new Date().toISOString())
+                .order('is_active', { ascending: false })
+                .order('updated_at', { ascending: false });
 
-            if (tokenError || !tokenData) {
+            if (tokenError || !tokenData || tokenData.length === 0) {
                 console.log(`   │  ❌ No valid token found for account: ${account.id}`);
-                return null;
+                return { account, contexts: [] };
             }
 
-            const decryptedUserToken = decrypt(tokenData.access_token);
             let decryptedPageToken = null;
             if (account.page_access_token) {
                 decryptedPageToken = decrypt(account.page_access_token);
             }
 
             return {
-                accessToken: decryptedUserToken,
-                pageToken: decryptedPageToken,
-                instagramAccountId: account.id,
-                userId: tokenData.user_id,
-                facebookPageId: account.facebook_page_id,
-                username: account.username
+                account,
+                contexts: tokenData.map((tokenRow) => ({
+                    accessToken: decrypt(tokenRow.access_token),
+                    pageToken: decryptedPageToken,
+                    instagramAccountId: account.id,
+                    userId: tokenRow.user_id,
+                    isActive: tokenRow.is_active === true,
+                    facebookPageId: account.facebook_page_id,
+                    username: account.username,
+                    updatedAt: tokenRow.updated_at || null,
+                })),
             };
         } catch (error) {
             console.error(`   │  ❌ Token lookup error: ${error.message}`);
-            return null;
+            return { account: null, contexts: [] };
         }
     }
 
     /**
-     * Fetch automation rules from database
-     * @param {string} instagramAccountId - The internal DB ID of the Instagram account
-     * @param {string|null} mediaId - Optional media ID for post-specific rules
+     * Get access token for a user by Instagram account ID
+     * Returns the best active enabled token context for this account.
      */
-    /**
-     * Fetch automation rules from database
-     * @param {string} instagramAccountId - The internal DB ID of the Instagram account
-     * @param {string|null} currentMediaId - The media ID of the current post being commented on
-     */
-    async getAutomationRules(instagramAccountId, currentMediaId = null) {
+    async getAccessTokenByInstagramId(instagramUserId) {
+        const { contexts } = await this.getAccountTokenContexts(instagramUserId);
+        return contexts[0] || null;
+    }
+
+    mapAutomationRules(rules, priority) {
+        return rules.map((rule) => ({
+            keywords: rule.keywords,
+            reply: rule.comment_reply,
+            dmReply: rule.dm_reply,
+            sendDM: rule.send_dm,
+            priority,
+            name: rule.name,
+            updatedAt: rule.updated_at || rule.created_at || null,
+            userId: rule.user_id || null,
+        }));
+    }
+
+    getApplicableRules(rules, currentMediaId = null) {
+        const specificRules = rules.filter((rule) =>
+            rule.is_active &&
+            currentMediaId &&
+            (rule.media_id === currentMediaId ||
+                (rule.media_ids && Array.isArray(rule.media_ids) && rule.media_ids.includes(currentMediaId)))
+        );
+
+        if (specificRules.length > 0) {
+            return this.mapAutomationRules(specificRules, 1);
+        }
+
+        const generalRules = rules.filter((rule) =>
+            rule.is_active &&
+            !rule.media_id &&
+            (!rule.media_ids || rule.media_ids.length === 0)
+        );
+
+        if (generalRules.length === 0) {
+            return null;
+        }
+
+        return this.mapAutomationRules(generalRules, 2);
+    }
+
+    async resolveAutomationContext(instagramUserId, currentMediaId = null) {
         try {
             console.log(`   │  🔍 FETCHING AUTOMATION RULES`);
-            console.log(`   │     Account ID : ${instagramAccountId}`);
+            console.log(`   │     IG User ID : ${instagramUserId}`);
             console.log(`   │     Media ID   : ${currentMediaId || '(none)'}`);
-            
-            // Fetch ALL rules for this account (both active general + active specific)
-            // We intentionally do NOT filter by is_active at the top level
-            // because general and specific rules are independent entities.
+
+            const { account, contexts } = await this.getAccountTokenContexts(instagramUserId);
+            if (!account || contexts.length === 0) {
+                return null;
+            }
+
             const { data: allRules, error } = await supabase
                 .from('automation_rules')
                 .select('*')
-                .eq('instagram_account_id', instagramAccountId);
+                .eq('instagram_account_id', account.id)
+                .order('updated_at', { ascending: false });
 
             if (error) {
                 console.log(`   │     ❌ Database error: ${error.message}`);
@@ -231,66 +267,49 @@ class AutoReplyService {
             }
 
             console.log(`   │     ✅ Found ${allRules.length} total rule(s) in database`);
-
-            // Log all rules for debugging
             allRules.forEach((rule, idx) => {
-                console.log(`   │     Rule ${idx + 1}: "${rule.name}" | Active: ${rule.is_active} | media_ids: ${JSON.stringify(rule.media_ids)} | media_id: ${rule.media_id || 'null'}`);
+                console.log(`   │     Rule ${idx + 1}: "${rule.name}" | User: ${rule.user_id || 'legacy'} | Active: ${rule.is_active} | media_ids: ${JSON.stringify(rule.media_ids)} | media_id: ${rule.media_id || 'null'}`);
             });
 
-            // Separate rules into specific (post override) and general
-            const specificRules = allRules.filter(rule =>
-                rule.is_active &&
-                (rule.media_id === currentMediaId ||
-                    (rule.media_ids && Array.isArray(rule.media_ids) && rule.media_ids.includes(currentMediaId)))
-            );
+            const userContextMap = new Map(contexts.map((context) => [context.userId, context]));
+            const scopedCandidates = [];
 
-            console.log(`   │     🔎 Checking for post-specific overrides matching media: ${currentMediaId}`);
-            console.log(`   │     Found ${specificRules.length} matching active override(s)`);
+            for (const [userId, context] of userContextMap.entries()) {
+                const userRules = allRules.filter((rule) => rule.user_id === userId);
+                const applicableRules = this.getApplicableRules(userRules, currentMediaId);
+                if (!applicableRules || applicableRules.length === 0) {
+                    continue;
+                }
 
-            // If there are active specific rules for this post, use ONLY those.
-            // The general rule is completely excluded for posts with overrides.
-            if (specificRules.length > 0) {
-                console.log(`   │  📋 ${specificRules.length} post-specific override(s) found for media ${currentMediaId}. General rule excluded.`);
-                specificRules.forEach(r => {
-                    console.log(`   │     ✅ Using override: "${r.name}"`);
+                scopedCandidates.push({
+                    tokenData: context,
+                    rules: applicableRules,
+                    sortKey: applicableRules[0]?.updatedAt || context.updatedAt || '',
                 });
-                return specificRules.map(r => ({
-                    keywords: r.keywords,
-                    reply: r.comment_reply,
-                    dmReply: r.dm_reply,
-                    sendDM: r.send_dm,
-                    priority: 1,
-                    name: r.name
-                }));
             }
 
-            // No specific overrides for this post — fall back to the general rule (if active)
-            const generalRules = allRules.filter(rule =>
-                rule.is_active &&
-                !rule.media_id &&
-                (!rule.media_ids || rule.media_ids.length === 0)
-            );
+            if (scopedCandidates.length > 1) {
+                scopedCandidates.sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
+                console.warn(`   │  ⚠️  Multiple user-owned automation configs found for account ${account.id}. Using the most recently updated owner: ${scopedCandidates[0].tokenData.userId}`);
+            }
 
-            console.log(`   │     🔎 No post overrides found, checking for general rule`);
-            console.log(`   │     Found ${generalRules.length} active general rule(s)`);
+            if (scopedCandidates.length > 0) {
+                return scopedCandidates[0];
+            }
 
-            if (generalRules.length === 0) {
-                console.log(`   │  📭 No active general rule and no post overrides for media ${currentMediaId}. Skipping.`);
+            const legacyRules = allRules.filter((rule) => !rule.user_id);
+            const applicableLegacyRules = this.getApplicableRules(legacyRules, currentMediaId);
+            if (!applicableLegacyRules || applicableLegacyRules.length === 0) {
+                console.log(`   │  📭 No active user-scoped or legacy rules for media ${currentMediaId}. Skipping.`);
                 return null;
             }
 
-            console.log(`   │  📋 Using general rule for media ${currentMediaId} (no post-specific override found).`);
-            generalRules.forEach(r => {
-                console.log(`   │     ✅ Using general: "${r.name}"`);
-            });
-            return generalRules.map(r => ({
-                keywords: r.keywords,
-                reply: r.comment_reply,
-                dmReply: r.dm_reply,
-                sendDM: r.send_dm,
-                priority: 2,
-                name: r.name
-            }));
+            console.warn(`   │  ⚠️  Falling back to legacy account-wide automation rules for account ${account.id}.`);
+            return {
+                tokenData: contexts[0],
+                rules: applicableLegacyRules,
+                sortKey: applicableLegacyRules[0]?.updatedAt || contexts[0]?.updatedAt || '',
+            };
 
         } catch (error) {
             console.error('❌ Error fetching automation rules:', error);
@@ -510,7 +529,8 @@ class AutoReplyService {
                 const { value } = change;
                 const { from, id: commentId, text, media } = value;
 
-                const tokenData = await this.getAccessTokenByInstagramId(instagramAccountId);
+                const resolvedContext = await this.resolveAutomationContext(instagramAccountId, media?.id);
+                const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(instagramAccountId);
                 const activeId = tokenData ? tokenData.instagramAccountId : instagramAccountId;
 
                 this.addActivityLog(activeId, 'WEBHOOK RECEIVED', `Received comment from @${from?.username}`, {
@@ -545,7 +565,7 @@ class AutoReplyService {
                 }
 
                 const mediaId = media?.id;
-                let rules = await this.getAutomationRules(tokenData.instagramAccountId, mediaId);
+                const rules = resolvedContext?.rules || null;
 
                 if (!rules || rules.length === 0) {
                     console.log(`   │  📭 No active rules for this post/account. Skipping.`);
@@ -606,7 +626,8 @@ class AutoReplyService {
                     type: 'comment', senderId: from?.id, senderUsername: from?.username,
                     commentId, mediaId: media?.id, originalText: text,
                     replyText: rule.reply, dmSent: rule.sendDM ? true : false,
-                    instagramAccountId: tokenData.instagramAccountId
+                    instagramAccountId: tokenData.instagramAccountId,
+                    userId: tokenData.userId
                 });
             }
         } catch (error) {
@@ -648,7 +669,7 @@ class AutoReplyService {
     /**
      * Get auto-reply statistics
      */
-    async getStats(instagramAccountId) {
+    async getStats(instagramAccountId, userId = null) {
         const defaultStats = {
             totalRepliesSent: 0,
             messagingReplies: 0,
@@ -666,10 +687,17 @@ class AutoReplyService {
         // Try to get rules count from DB if possible
         let rulesCount = defaultStats.activeRules;
         try {
-            const { count } = await supabase
+            let query = supabase
                 .from('automation_rules')
                 .select('*', { count: 'exact', head: true })
-                .eq('instagram_account_id', instagramAccountId);
+                .eq('instagram_account_id', instagramAccountId)
+                .eq('is_active', true);
+
+            if (userId) {
+                query = query.eq('user_id', userId);
+            }
+
+            const { count } = await query;
             if (count !== null) rulesCount = count;
         } catch (e) { /* ignore */ }
 

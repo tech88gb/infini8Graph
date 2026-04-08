@@ -16,6 +16,7 @@ const GRAPH_API_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_LOGIN_REDIRECT_URL = process.env.GOOGLE_LOGIN_REDIRECT_URL; // e.g. https://server.com/api/auth/google/callback
+const ACCOUNT_SELECT_FIELDS = 'id, instagram_user_id, username, name, profile_picture_url, followers_count, created_at';
 
 // ============================================================
 // GOOGLE LOGIN (Primary Identity)
@@ -114,29 +115,85 @@ export async function findOrCreateUserByGoogle(googleId, googleEmail) {
     return newUser;
 }
 
+async function ensureActiveEnabledAccount(userId) {
+    const { data: enabledTokens } = await supabase
+        .from('auth_tokens')
+        .select('instagram_account_id, is_active, updated_at')
+        .eq('user_id', userId)
+        .eq('is_enabled', true)
+        .order('is_active', { ascending: false })
+        .order('updated_at', { ascending: false });
+
+    if (!enabledTokens || enabledTokens.length === 0) {
+        await supabase
+            .from('auth_tokens')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq('user_id', userId);
+        return null;
+    }
+
+    const preferredToken = enabledTokens.find((token) => token.is_active) || enabledTokens[0];
+
+    await supabase
+        .from('auth_tokens')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .neq('instagram_account_id', preferredToken.instagram_account_id);
+
+    await supabase
+        .from('auth_tokens')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('instagram_account_id', preferredToken.instagram_account_id);
+
+    return preferredToken.instagram_account_id;
+}
+
+async function getUserIdentity(userId) {
+    const { data: user } = await supabase
+        .from('users')
+        .select('google_email, meta_connected')
+        .eq('id', userId)
+        .maybeSingle();
+
+    return user || null;
+}
+
+export async function buildUserSession(userId) {
+    const activeAccount = await getActiveAccountForUser(userId);
+    const user = await getUserIdentity(userId);
+
+    const payload = {
+        userId,
+        googleEmail: user?.google_email || null,
+        metaConnected: user?.meta_connected === true || !!activeAccount,
+        instagramUserId: activeAccount?.instagram_user_id || null,
+        instagramAccountId: activeAccount?.id || null,
+        username: activeAccount?.username || null,
+    };
+
+    return {
+        jwt: generateToken(payload),
+        payload,
+        account: activeAccount,
+    };
+}
+
 /**
  * Get the active Instagram account for this user (via auth_tokens.is_active)
  */
 export async function getActiveAccountForUser(userId) {
-    // Active account first
+    await ensureActiveEnabledAccount(userId);
+
     const { data: activeToken } = await supabase
         .from('auth_tokens')
-        .select('instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
+        .select(`instagram_accounts(${ACCOUNT_SELECT_FIELDS})`)
         .eq('user_id', userId)
+        .eq('is_enabled', true)
         .eq('is_active', true)
         .maybeSingle();
 
-    if (activeToken?.instagram_accounts) return activeToken.instagram_accounts;
-
-    // Fallback: any account for this user
-    const { data: anyToken } = await supabase
-        .from('auth_tokens')
-        .select('instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-
-    return anyToken?.instagram_accounts || null;
+    return activeToken?.instagram_accounts || null;
 }
 
 // ============================================================
@@ -332,6 +389,15 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
             expiresAt.setSeconds(expiresAt.getSeconds() + expiresIn);
             const encryptedToken = encrypt(accessToken);
 
+            const { data: existingUserToken } = await supabase
+                .from('auth_tokens')
+                .select('is_enabled')
+                .eq('user_id', userId)
+                .eq('instagram_account_id', instagramAccountId)
+                .maybeSingle();
+
+            const isEnabled = existingUserToken?.is_enabled ?? true;
+
             await supabase
                 .from('auth_tokens')
                 .upsert({
@@ -339,10 +405,13 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
                     instagram_account_id: instagramAccountId,
                     access_token: encryptedToken,
                     expires_at: expiresAt.toISOString(),
-                    is_active: isFirst, // First account is active by default
+                    is_active: isFirst && isEnabled,
+                    is_enabled: isEnabled,
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'user_id,instagram_account_id' }); // COMPOSITE KEY
         }
+
+        await ensureActiveEnabledAccount(userId);
 
         // Mark user as meta_connected
         await supabase
@@ -404,33 +473,83 @@ export async function getAccessToken(userId, instagramAccountId) {
     }
 }
 
-/**
- * Get all Instagram accounts accessible to a user.
- * FIX: Queries via auth_tokens (many-to-many) instead of instagram_accounts.user_id
- * This allows multiple users to see shared IG accounts.
- */
-export async function getUserAccounts(userId) {
+export async function getUserAccounts(userId, options = {}) {
     try {
-        const { data: tokens, error } = await supabase
+        const { includeDisabled = false } = options;
+        let query = supabase
             .from('auth_tokens')
             .select(`
                 is_active,
+                is_enabled,
                 instagram_accounts (
-                    id, instagram_user_id, username, name,
-                    profile_picture_url, followers_count, created_at
+                    ${ACCOUNT_SELECT_FIELDS}
                 )
             `)
             .eq('user_id', userId)
             .order('is_active', { ascending: false });
 
+        if (!includeDisabled) {
+            query = query.eq('is_enabled', true);
+        }
+
+        const { data: tokens, error } = await query;
+
         if (error) throw error;
 
         return (tokens || [])
             .filter(t => t.instagram_accounts)
-            .map(t => ({ ...t.instagram_accounts, is_active: t.is_active }));
+            .map(t => ({
+                ...t.instagram_accounts,
+                is_active: t.is_active,
+                is_enabled: t.is_enabled !== false,
+            }));
     } catch (error) {
         console.error('Error fetching user accounts:', error);
         return [];
+    }
+}
+
+export async function setAccountEnabled(userId, accountId, isEnabled) {
+    try {
+        const { data: token } = await supabase
+            .from('auth_tokens')
+            .select(`
+                is_active,
+                is_enabled,
+                instagram_accounts (
+                    ${ACCOUNT_SELECT_FIELDS}
+                )
+            `)
+            .eq('user_id', userId)
+            .eq('instagram_account_id', accountId)
+            .maybeSingle();
+
+        if (!token?.instagram_accounts) {
+            return { success: false, error: 'Account not found or access denied' };
+        }
+
+        await supabase
+            .from('auth_tokens')
+            .update({
+                is_enabled: isEnabled,
+                is_active: isEnabled ? token.is_active : false,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', userId)
+            .eq('instagram_account_id', accountId);
+
+        await ensureActiveEnabledAccount(userId);
+
+        const session = await buildUserSession(userId);
+        return {
+            success: true,
+            enabled: isEnabled,
+            jwt: session.jwt,
+            activeAccount: session.account,
+        };
+    } catch (error) {
+        console.error('Error updating account enablement:', error);
+        return { success: false, error: 'Failed to update account selection' };
     }
 }
 
@@ -443,12 +562,13 @@ export async function switchActiveAccount(userId, accountId) {
         // Verify user has a token for this account
         const { data: token } = await supabase
             .from('auth_tokens')
-            .select('access_token, expires_at, instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
+            .select('access_token, expires_at, is_enabled, instagram_accounts(id, instagram_user_id, username, name, profile_picture_url)')
             .eq('user_id', userId)
             .eq('instagram_account_id', accountId)
             .maybeSingle();
 
         if (!token) return { success: false, error: 'Account not found or access denied' };
+        if (token.is_enabled === false) return { success: false, error: 'Account is disabled for this Google login' };
         if (new Date(token.expires_at) < new Date()) return { success: false, error: 'Token expired. Please reconnect your Meta account.' };
 
         // Deactivate all accounts for this user only
@@ -462,21 +582,18 @@ export async function switchActiveAccount(userId, accountId) {
             .eq('instagram_account_id', accountId);
 
         const account = token.instagram_accounts;
-        const user = await supabase.from('users').select('google_email, meta_connected').eq('id', userId).maybeSingle();
-
-        const jwt = generateToken({
-            userId,
-            googleEmail: user.data?.google_email || null,
-            metaConnected: true,
-            instagramUserId: account.instagram_user_id,
-            instagramAccountId: account.id,
-            username: account.username,
-        });
+        const session = await buildUserSession(userId);
 
         return {
             success: true,
-            jwt,
-            account: { id: account.id, username: account.username, name: account.name, profilePictureUrl: account.profile_picture_url },
+            jwt: session.jwt,
+            account: {
+                id: account.id,
+                instagramUserId: account.instagram_user_id,
+                username: account.username,
+                name: account.name,
+                profilePictureUrl: account.profile_picture_url,
+            },
         };
     } catch (error) {
         console.error('Error switching account:', error);
@@ -517,8 +634,10 @@ export default {
     exchangeCodeForToken,
     getInstagramBusinessAccount,
     setupMetaAccounts,
+    buildUserSession,
     getAccessToken,
     getUserAccounts,
+    setAccountEnabled,
     switchActiveAccount,
     logoutUser,
     generateToken,
