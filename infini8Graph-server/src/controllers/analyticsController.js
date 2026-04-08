@@ -2,8 +2,6 @@ import AnalyticsService from '../services/analyticsService.js';
 import * as authService from '../services/authService.js';
 
 async function getAnalyticsService(req) {
-    console.log('📊 Creating AnalyticsService for user:', req.user?.userId, 'instagram:', req.user?.instagramUserId, 'accountId:', req.user?.instagramAccountId);
-
     if (!req.user?.userId || !req.user?.instagramUserId) {
         throw new Error('Missing user credentials in request. userId=' + req.user?.userId + ', instagramUserId=' + req.user?.instagramUserId);
     }
@@ -16,9 +14,8 @@ async function getAnalyticsService(req) {
 
     try {
         await service.initialize();
-        console.log('✅ AnalyticsService initialized successfully');
     } catch (initError) {
-        console.error('❌ AnalyticsService initialization failed:', initError.message);
+        console.error('AnalyticsService initialization failed:', initError.message);
         throw initError;
     }
 
@@ -27,15 +24,12 @@ async function getAnalyticsService(req) {
 
 export async function getOverview(req, res) {
     try {
-        console.log('📈 getOverview called for user:', req.user?.username);
         const { startDate, endDate } = req.query;
         const analytics = await getAnalyticsService(req);
         const data = await analytics.getOverview(startDate, endDate);
-        console.log('✅ Overview data fetched successfully');
         res.json({ success: true, data });
     } catch (error) {
-        console.error('❌ Overview error:', error.message);
-        console.error('❌ Full error:', error);
+        console.error('Overview error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }
@@ -181,7 +175,6 @@ export async function getContentIntelligence(req, res) {
 
 export async function getUnifiedOverview(req, res) {
     try {
-        console.log('🌐 getUnifiedOverview called for user:', req.user?.userId);
         const { startDate, endDate } = req.query;
 
         // 1. Get all accounts for this user
@@ -257,7 +250,7 @@ export async function getUnifiedOverview(req, res) {
             }
         });
     } catch (error) {
-        console.error('❌ Unified overview error:', error.message);
+        console.error('Unified overview error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }

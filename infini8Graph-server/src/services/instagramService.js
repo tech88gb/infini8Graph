@@ -85,60 +85,69 @@ class InstagramService {
             onlineFollowers: []
         };
 
-        try {
-            // Get audience city breakdown
-            const cityRes = await this.apiRequest(`/${this.instagramUserId}/insights`, {
-                metric: 'follower_demographics',
-                period: 'lifetime',
-                metric_type: 'total_value',
-                breakdown: 'city'
-            });
-            if (cityRes?.data?.[0]?.total_value?.breakdowns?.[0]?.results) {
-                const sorted = [...cityRes.data[0].total_value.breakdowns[0].results]
-                    .sort((a, b) => (b.value || 0) - (a.value || 0));
+        const calls = [
+            {
+                key: 'city',
+                request: this.apiRequest(`/${this.instagramUserId}/insights`, {
+                    metric: 'follower_demographics',
+                    period: 'lifetime',
+                    metric_type: 'total_value',
+                    breakdown: 'city'
+                })
+            },
+            {
+                key: 'country',
+                request: this.apiRequest(`/${this.instagramUserId}/insights`, {
+                    metric: 'follower_demographics',
+                    period: 'lifetime',
+                    metric_type: 'total_value',
+                    breakdown: 'country'
+                })
+            },
+            {
+                key: 'ageGender',
+                request: this.apiRequest(`/${this.instagramUserId}/insights`, {
+                    metric: 'follower_demographics',
+                    period: 'lifetime',
+                    metric_type: 'total_value',
+                    breakdown: 'age,gender'
+                })
+            },
+            {
+                key: 'onlineFollowers',
+                request: this.apiRequest(`/${this.instagramUserId}/insights`, {
+                    metric: 'online_followers',
+                    period: 'lifetime'
+                })
+            }
+        ];
+
+        const settled = await Promise.allSettled(calls.map((call) => call.request));
+
+        settled.forEach((outcome, index) => {
+            if (outcome.status !== 'fulfilled') return;
+            const key = calls[index].key;
+            const payload = outcome.value;
+
+            if (key === 'onlineFollowers') {
+                if (payload?.data?.[0]?.values) {
+                    results.onlineFollowers = payload.data[0].values;
+                }
+                return;
+            }
+
+            const rows = payload?.data?.[0]?.total_value?.breakdowns?.[0]?.results;
+            if (!rows || !Array.isArray(rows)) return;
+            const sorted = [...rows].sort((a, b) => (b.value || 0) - (a.value || 0));
+
+            if (key === 'city') {
                 results.cities = sorted.slice(0, 10);
-            }
-        } catch (e) { console.warn('City demographics not available'); }
-
-        try {
-            // Get audience country breakdown
-            const countryRes = await this.apiRequest(`/${this.instagramUserId}/insights`, {
-                metric: 'follower_demographics',
-                period: 'lifetime',
-                metric_type: 'total_value',
-                breakdown: 'country'
-            });
-            if (countryRes?.data?.[0]?.total_value?.breakdowns?.[0]?.results) {
-                const sorted = [...countryRes.data[0].total_value.breakdowns[0].results]
-                    .sort((a, b) => (b.value || 0) - (a.value || 0));
+            } else if (key === 'country') {
                 results.countries = sorted.slice(0, 10);
+            } else if (key === 'ageGender') {
+                results.genderAge = sorted;
             }
-        } catch (e) { console.warn('Country demographics not available'); }
-
-        try {
-            // Get audience gender/age breakdown
-            const genderAgeRes = await this.apiRequest(`/${this.instagramUserId}/insights`, {
-                metric: 'follower_demographics',
-                period: 'lifetime',
-                metric_type: 'total_value',
-                breakdown: 'age,gender'
-            });
-            if (genderAgeRes?.data?.[0]?.total_value?.breakdowns?.[0]?.results) {
-                results.genderAge = [...genderAgeRes.data[0].total_value.breakdowns[0].results]
-                    .sort((a, b) => (b.value || 0) - (a.value || 0));
-            }
-        } catch (e) { console.warn('Gender/age demographics not available'); }
-
-        try {
-            // Get online followers (when followers are active)
-            const onlineRes = await this.apiRequest(`/${this.instagramUserId}/insights`, {
-                metric: 'online_followers',
-                period: 'lifetime'
-            });
-            if (onlineRes?.data?.[0]?.values) {
-                results.onlineFollowers = onlineRes.data[0].values;
-            }
-        } catch (e) { console.warn('Online followers data not available'); }
+        });
 
         return results;
     }
@@ -171,7 +180,6 @@ class InstagramService {
                 errorMsg.includes('Unsupported get request');
 
             if (isInsightsError) {
-                console.log('ℹ️ Some posts lack insights (pre-business account) - using basic media data instead.');
                 // Retry without insights
                 const fallbackParams = {
                     fields: basicFields,
@@ -193,12 +201,10 @@ class InstagramService {
         const basicFields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
         
         try {
-            console.log(`🔍 Fetching tagged media for user ${this.instagramUserId}...`);
             const result = await this.apiRequest(`/${this.instagramUserId}/tags`, {
                 fields: basicFields,
                 limit: limit
             });
-            console.log(`✅ Tagged media fetched: ${result.data?.length || 0} posts`);
             return result;
         } catch (error) {
             console.warn('⚠️ Tagged media fetch failed:', error.message);
@@ -213,17 +219,13 @@ class InstagramService {
      */
     async getAllMediaIncludingCollabs(limit = 100) {
         try {
-            console.log(`📸 Fetching all media including collabs (limit: ${limit})...`);
-            
             // Fetch owned posts
             const ownedResponse = await this.getMedia(limit);
             const ownedPosts = ownedResponse.data || [];
-            console.log(`   ✅ Owned posts: ${ownedPosts.length}`);
 
             // Fetch tagged posts (includes collabs)
             const taggedResponse = await this.getTaggedMedia(limit);
             const taggedPosts = taggedResponse.data || [];
-            console.log(`   ✅ Tagged posts: ${taggedPosts.length}`);
 
             // Combine and deduplicate by ID
             const allPosts = [...ownedPosts];
@@ -242,12 +244,8 @@ class InstagramService {
                 }
             }
 
-            console.log(`   🤝 Collaboration posts found: ${collabCount}`);
-
             // Sort by timestamp (newest first)
             allPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-            console.log(`   ✅ Total posts after merge: ${allPosts.length}`);
 
             return {
                 data: allPosts.slice(0, limit),

@@ -8,7 +8,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v18.0';
-const INSTAGRAM_GRAPH_API = `https://graph.instagram.com/${META_GRAPH_API_VERSION}`;
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 
 // Rate limiting: max 1 reply per user per 30 seconds
@@ -71,7 +70,6 @@ class AutoReplyService {
             }
         }
 
-        console.log(`[ACTIVITY] ${action}: ${detail}`);
         return entry;
     }
 
@@ -170,7 +168,6 @@ class AutoReplyService {
 
     async getAccountTokenContexts(instagramUserId) {
         if (instagramUserId === '0') {
-            console.log('   │  ⚠️  Test event from Meta Dashboard (ID: 0) — skipping');
             return { account: null, contexts: [] };
         }
 
@@ -182,7 +179,6 @@ class AutoReplyService {
                 .maybeSingle();
 
             if (accountError || !account) {
-                console.log(`   │  ❌ Account not found for IG ID: ${instagramUserId}`);
                 return { account: null, contexts: [] };
             }
 
@@ -196,7 +192,6 @@ class AutoReplyService {
                 .order('updated_at', { ascending: false });
 
             if (tokenError || !tokenData || tokenData.length === 0) {
-                console.log(`   │  ❌ No valid token found for account: ${account.id}`);
                 return { account, contexts: [] };
             }
 
@@ -273,10 +268,6 @@ class AutoReplyService {
 
     async resolveAutomationContext(instagramUserId, currentMediaId = null) {
         try {
-            console.log(`   │  🔍 FETCHING AUTOMATION RULES`);
-            console.log(`   │     IG User ID : ${instagramUserId}`);
-            console.log(`   │     Media ID   : ${currentMediaId || '(none)'}`);
-
             const { account, contexts } = await this.getAccountTokenContexts(instagramUserId);
             if (!account || contexts.length === 0) {
                 return null;
@@ -289,27 +280,19 @@ class AutoReplyService {
                 .order('updated_at', { ascending: false });
 
             if (error) {
-                console.log(`   │     ❌ Database error: ${error.message}`);
+                console.error('Error loading automation rules:', error.message);
                 return null;
             }
 
             if (!allRules || allRules.length === 0) {
-                console.log(`   │     📭 No rules found in database`);
                 return null;
             }
-
-            console.log(`   │     ✅ Found ${allRules.length} total rule(s) in database`);
-            allRules.forEach((rule, idx) => {
-                console.log(`   │     Rule ${idx + 1}: "${rule.name}" | User: ${rule.user_id || 'legacy'} | Active: ${rule.is_active} | media_ids: ${JSON.stringify(rule.media_ids)} | media_id: ${rule.media_id || 'null'}`);
-            });
 
             const applicableRules = this.getApplicableRules(allRules, currentMediaId);
             if (!applicableRules || applicableRules.length === 0) {
-                console.log(`   │  📭 No active shared rules for media ${currentMediaId}. Skipping.`);
                 return null;
             }
 
-            console.log(`   │     ✅ Using shared automation rules for account ${account.id}`);
             return {
                 tokenData: contexts[0],
                 rules: applicableRules,
@@ -330,7 +313,6 @@ class AutoReplyService {
         const lastReply = await getRuntimeCache(key);
 
         if (lastReply?.blockedUntil && new Date(lastReply.blockedUntil).getTime() > Date.now()) {
-            console.log(`⏳ Cooldown active for ${senderId}, skipping reply`);
             return false;
         }
 
@@ -397,7 +379,6 @@ class AutoReplyService {
 
             const senderId = sender?.id;
             const recipientId = recipient?.id;
-            const messageId = message?.mid || 'N/A';
 
             const tokenData = await this.getAccessTokenByInstagramId(recipientId);
             const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
@@ -406,50 +387,30 @@ class AutoReplyService {
                 senderId, recipientId, text: message.text
             });
 
-            console.log(`\n   ┌─ DM PROCESSING`);
-            console.log(`   │  Sender ID    : ${senderId}`);
-            console.log(`   │  Recipient ID : ${recipientId}`);
-            console.log(`   │  Message ID   : ${messageId}`);
-            console.log(`   │  Text         : "${message.text}"`);
-
             if (!tokenData) {
-                console.log(`   │  ❌ No valid token for account ${recipientId}`);
                 await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
-                console.log(`   └─ END`);
                 return;
             }
-
-            console.log(`   │  Account      : @${tokenData.username}`);
-            console.log(`   │  Page ID      : ${tokenData.facebookPageId}`);
 
             await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
                 pageId: tokenData.facebookPageId, username: tokenData.username
             });
 
             if (senderId === recipientId) {
-                console.log(`   │  ⏭️  Skipping own message (echo)`);
-                console.log(`   └─ END`);
                 return;
             }
 
             const messageTime = timestamp ? new Date(timestamp * 1000) : new Date();
             const windowEnd = new Date(messageTime.getTime() + MESSAGING_WINDOW_MS);
             if (new Date() > windowEnd) {
-                console.log(`   │  ⏰ Outside 24-hour messaging window`);
-                console.log(`   └─ END`);
                 return;
             }
 
             const rule = this.findMatchingRule(message.text, this.messageRules);
             if (!rule) {
-                console.log(`   │  📭 No matching rule found`);
                 await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
-                console.log(`   └─ END`);
                 return;
             }
-
-            console.log(`   │  ✅ Rule matched: "${rule.name || 'default'}"`);
-            console.log(`   │  Reply text   : "${rule.reply.substring(0, 60)}..."`);
 
             await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
                 replyText: rule.reply, ruleName: rule.name
@@ -458,9 +419,6 @@ class AutoReplyService {
             await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.accessToken, null, activeId);
             await this.markReplied(senderId, 'message');
 
-            console.log(`   │  ✅ DM reply sent successfully`);
-            console.log(`   └─ END`);
-
             await this.logReply({
                 type: 'message', senderId, recipientId,
                 originalText: message.text, replyText: rule.reply,
@@ -468,8 +426,7 @@ class AutoReplyService {
             });
 
         } catch (error) {
-            console.error(`   │  ❌ Error: ${error.message}`);
-            console.log(`   └─ END`);
+            console.error('Auto-reply DM processing failed:', error.message);
         }
     }
 
@@ -488,11 +445,6 @@ class AutoReplyService {
                 payload: { recipient, message: { text } }
             });
 
-            console.log(`   │  📤 SENDING DM`);
-            console.log(`   │     Endpoint    : POST /${facebookPageId}/messages`);
-            console.log(`   │     Recipient   : ${commentId ? `comment_id: ${commentId}` : `IGSID: ${recipientIGSID}`}`);
-            console.log(`   │     Message     : "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
-
             if (!facebookPageId) {
                 throw new Error('Facebook Page ID is required for Instagram messaging.');
             }
@@ -506,10 +458,6 @@ class AutoReplyService {
                 }
             );
 
-            console.log(`   │     ✅ Success`);
-            console.log(`   │     Recipient ID : ${response.data?.recipient_id || 'N/A'}`);
-            console.log(`   │     Message ID   : ${response.data?.message_id || 'N/A'}`);
-
             await this.addActivityLog(instagramAccountId, 'API RESPONSE', 'DM sent successfully via Instagram API', {
                 recipientIGSID, response: response.data, httpStatus: 200, type: 'dm'
             });
@@ -517,9 +465,7 @@ class AutoReplyService {
             return response.data;
         } catch (error) {
             const metaError = error.response?.data?.error;
-            console.error(`   │     ❌ DM FAILED: ${metaError?.message || error.message}`);
-            console.error(`   │     Error Code  : ${metaError?.code || 'N/A'}`);
-            console.error(`   │     HTTP Status : ${error.response?.status || 'N/A'}`);
+            console.error(`DM failed: ${metaError?.message || error.message}`);
 
             await this.addActivityLog(instagramAccountId, 'API ERROR', metaError?.message || error.message, {
                 recipientIGSID, httpStatus: error.response?.status,
@@ -551,90 +497,56 @@ class AutoReplyService {
                     commentId, text, mediaId: media?.id, username: from?.username
                 });
 
-                console.log(`\n   ┌─ COMMENT PROCESSING`);
-                console.log(`   │  Comment ID   : ${commentId}`);
-                console.log(`   │  From         : @${from?.username} (User ID: ${from?.id})`);
-                console.log(`   │  Text         : "${text}"`);
-                console.log(`   │  Media ID     : ${media?.id || 'N/A'}`);
-                console.log(`   │  IG Account   : ${instagramAccountId}`);
-
                 if (!tokenData) {
-                    console.log(`   │  ❌ No valid token for account`);
                     await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
-                    console.log(`   └─ END`);
                     continue;
                 }
-
-                console.log(`   │  Account      : @${tokenData.username}`);
-                console.log(`   │  Page ID      : ${tokenData.facebookPageId}`);
 
                 await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
                     pageId: tokenData.facebookPageId, username: tokenData.username
                 });
 
                 if (from?.id === instagramAccountId) {
-                    console.log(`   │  ⏭️  Skipping own comment`);
-                    console.log(`   └─ END`);
                     continue;
                 }
 
-                const mediaId = media?.id;
                 const rules = resolvedContext?.rules || null;
 
                 if (!rules || rules.length === 0) {
-                    console.log(`   │  📭 No active rules for this post/account. Skipping.`);
-                    console.log(`   └─ END`);
                     continue;
                 }
-
-                console.log(`   │  Using ${rules.length} custom rule(s)`);
 
                 const rule = this.findMatchingRule(text, rules);
                 if (!rule) {
-                    console.log(`   │  📭 No matching rule found`);
                     await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${text}"`);
-                    console.log(`   └─ END`);
                     continue;
                 }
-
-                console.log(`   │  ✅ Rule matched: "${rule.name || 'default'}"`);
 
                 await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
                     commentReply: rule.reply, dmReply: rule.dmReply, sendDM: rule.sendDM
                 });
 
                 // Send comment reply
-                console.log(`   │  📨 REPLYING TO COMMENT`);
-                console.log(`   │     Comment ID : ${commentId}`);
-                console.log(`   │     Reply      : "${rule.reply.substring(0, 80)}${rule.reply.length > 80 ? '...' : ''}"`);
                 await this.sendCommentReply(commentId, rule.reply, tokenData.accessToken);
                 await this.markReplied(from?.id, 'comment');
-                console.log(`   │     ✅ Comment reply sent`);
 
                 // Send DM if configured
                 if (rule.sendDM && rule.dmReply && from?.id) {
-                    console.log(`   │  📩 SENDING DM TO COMMENTER`);
-                    console.log(`   │     To         : @${from?.username} (ID: ${from?.id})`);
                     try {
                         if (tokenData.facebookPageId && tokenData.pageToken) {
                             await this.sendMessageReply(
                                 tokenData.facebookPageId, from.id, rule.dmReply,
                                 tokenData.pageToken, commentId, activeId
                             );
-                            console.log(`   │     ✅ DM sent to @${from?.username}`);
                         } else if (!tokenData.pageToken) {
-                            console.log(`   │     ⚠️  No Page Token — user needs to re-login`);
                             await this.addActivityLog(activeId, 'API ERROR', 'Missing Page Token for DM reply');
                         } else {
-                            console.log(`   │     ⚠️  No Facebook Page ID — user needs to re-login`);
                             await this.addActivityLog(activeId, 'API ERROR', 'Missing Facebook Page ID for DM reply');
                         }
                     } catch (dmError) {
                         console.warn(`   │     ⚠️  DM failed: ${dmError.response?.data?.error?.message || dmError.message}`);
                     }
                 }
-
-                console.log(`   └─ END`);
 
                 await this.logReply({
                     type: 'comment', senderId: from?.id, senderUsername: from?.username,
@@ -645,8 +557,7 @@ class AutoReplyService {
                 });
             }
         } catch (error) {
-            console.error(`   │  ❌ Error: ${error.message}`);
-            console.log(`   └─ END`);
+            console.error('Auto-reply comment processing failed:', error.message);
         }
     }
 
@@ -661,10 +572,9 @@ class AutoReplyService {
                 { params: { message: text, access_token: accessToken } }
             );
 
-            console.log(`   │     Reply ID   : ${response.data?.id || 'N/A'}`);
             return response.data;
         } catch (error) {
-            console.error(`   │     ❌ Comment reply failed: ${error.response?.data?.error?.message || error.message}`);
+            console.error(`Comment reply failed: ${error.response?.data?.error?.message || error.message}`);
             throw error;
         }
     }
@@ -673,11 +583,7 @@ class AutoReplyService {
      * Log reply to database for analytics
      */
     async logReply(data) {
-        try {
-            console.log(`   │  📊 Logged: ${data.type} | from: ${data.senderUsername || data.senderId} | reply: "${data.replyText?.substring(0, 40)}..."`);
-        } catch (error) {
-            // silent
-        }
+        void data;
     }
 
     /**

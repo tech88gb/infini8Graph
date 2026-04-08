@@ -14,6 +14,25 @@ const CACHE_TTL = {
     hashtags: 600
 };
 
+async function runWithConcurrency(tasks, limit = 2) {
+    const outcomes = new Array(tasks.length);
+    let cursor = 0;
+
+    const worker = async () => {
+        while (cursor < tasks.length) {
+            const index = cursor++;
+            try {
+                outcomes[index] = { status: 'fulfilled', value: await tasks[index]() };
+            } catch (error) {
+                outcomes[index] = { status: 'rejected', reason: error };
+            }
+        }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+    return outcomes;
+}
+
 /**
  * Analytics Service
  * Handles KPI calculations, caching, and data aggregation
@@ -108,45 +127,82 @@ class AnalyticsService {
         let profile;
         try {
             profile = await this.instagram.getProfile();
-            console.log('✅ Profile fetched successfully for:', profile.username);
         } catch (profileError) {
-            console.error('❌ Failed to fetch profile:', profileError.message);
             throw new Error('Cannot fetch Instagram profile. Please re-authenticate with the required permissions.');
         }
 
         // Fetch media and demographics with graceful fallback
         let media = [];
         let demographics = {};
+        let dailyMetrics = [];
+        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        const todayStr = new Date().toISOString().split('T')[0];
+        const startStr = startDate || '0000-00-00';
+        const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
 
-        try {
-            // Fetch more media if a date range is provided to increase coverage
-            const fetchLimit = (startDate || endDate) ? 200 : 100;
-            media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-            console.log(`✅ Media fetched successfully: ${media.length} posts (limit: ${fetchLimit})`);
-
-            // Filter media by date range if provided
-            if (startDate || endDate) {
-                // Normalize dates to YYYY-MM-DD for comparison
-                const startStr = startDate ? startDate : '0000-00-00';
-                const todayStr = new Date().toISOString().split('T')[0];
-                const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-                media = media.filter(post => {
-                    const postDateStr = post.timestamp.split('T')[0];
+        const overviewTasks = [
+            async () => {
+                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit);
+                if (!startDate && !endDate) return fetchedMedia;
+                return fetchedMedia.filter((post) => {
+                    const postDateStr = (post.timestamp || '').split('T')[0];
                     return postDateStr >= startStr && postDateStr <= endStr;
                 });
-                console.log(`📅 Filtered to ${media.length} posts for range ${startStr} → ${endStr}`);
+            },
+            async () => this.instagram.getFollowerDemographics(),
+            async () => {
+                let since = null;
+                let until = null;
+
+                if (startDate) since = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
+                if (endDate) {
+                    const end = new Date(`${endDate}T23:59:59Z`);
+                    until = Math.floor(end.getTime() / 1000);
+                }
+
+                const insightsRes = await this.instagram.getAccountInsights(
+                    'day',
+                    ['follower_count', 'impressions', 'reach', 'profile_views'],
+                    since,
+                    until
+                );
+
+                if (!insightsRes?.data) return [];
+
+                const dailyData = {};
+                insightsRes.data.forEach((metric) => {
+                    const metricName = metric.name;
+                    if (!Array.isArray(metric.values)) return;
+                    metric.values.forEach((val) => {
+                        const date = (val.end_time || '').split('T')[0];
+                        if (!date) return;
+                        if (!dailyData[date]) dailyData[date] = { date };
+                        dailyData[date][metricName] = val.value || 0;
+                    });
+                });
+
+                return Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
             }
-        } catch (mediaError) {
-            console.warn('⚠️ Media fetch failed (permission issue?):', mediaError.message);
-            console.warn('⚠️ Continuing with basic profile data only...');
+        ];
+
+        const [mediaResult, demographicsResult, dailyMetricsResult] = await runWithConcurrency(overviewTasks, 2);
+
+        if (mediaResult.status === 'fulfilled') {
+            media = mediaResult.value;
+        } else {
+            console.warn('Overview media fetch failed:', mediaResult.reason?.message || mediaResult.reason);
         }
 
-        try {
-            demographics = await this.instagram.getFollowerDemographics();
-            console.log('✅ Demographics fetched successfully');
-        } catch (demoError) {
-            console.warn('⚠️ Demographics fetch failed (permission issue?):', demoError.message);
+        if (demographicsResult.status === 'fulfilled') {
+            demographics = demographicsResult.value || {};
+        } else {
+            console.warn('Overview demographics fetch failed:', demographicsResult.reason?.message || demographicsResult.reason);
+        }
+
+        if (dailyMetricsResult.status === 'fulfilled') {
+            dailyMetrics = dailyMetricsResult.value || [];
+        } else {
+            console.warn('Overview account insights fetch failed:', dailyMetricsResult.reason?.message || dailyMetricsResult.reason);
         }
 
         // Calculate engagement rate
@@ -173,43 +229,6 @@ class AnalyticsService {
             timestamp: post.timestamp,
             thumbnailUrl: post.thumbnailUrl || post.mediaUrl
         }));
-
-        // Get daily metrics using account insights API for the date range
-        let dailyMetrics = [];
-        try {
-            let since = null;
-            let until = null;
-            
-            if (startDate) since = Math.floor(new Date(startDate + 'T00:00:00Z').getTime() / 1000);
-            if (endDate) {
-                // To get full day of endDate, set it to the end of that day
-                const end = new Date(endDate + 'T23:59:59Z');
-                until = Math.floor(end.getTime() / 1000);
-            }
-            
-            // Meta allows up to 30 days for period='day'
-            const insightsRes = await this.instagram.getAccountInsights('day', ['follower_count', 'impressions', 'reach', 'profile_views'], since, until);
-            
-            if (insightsRes && insightsRes.data) {
-                // process the daily metrics
-                const dailyData = {};
-                insightsRes.data.forEach(metric => {
-                    const metricName = metric.name;
-                    if (metric.values && Array.isArray(metric.values)) {
-                        metric.values.forEach(val => {
-                            const date = (val.end_time || '').split('T')[0];
-                            if (date) {
-                                if (!dailyData[date]) dailyData[date] = { date };
-                                dailyData[date][metricName] = val.value || 0;
-                            }
-                        });
-                    }
-                });
-                dailyMetrics = Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
-            }
-        } catch (e) {
-            console.warn('⚠️ Account insights fetch failed (period=day):', e.message);
-        }
 
         const overview = {
             profile: {

@@ -1,5 +1,4 @@
 import axios from 'axios';
-import Cookies from 'js-cookie';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
@@ -17,10 +16,6 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
     // FALLBACK: Use localStorage directly to avoid any Cookie library issues
     let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    // We will re-enable cookies later once we verify token passing works
-
-    console.log('🔥 API Interceptor Running. URL:', config.url);
-    console.log('🔥 API Interceptor Token:', token ? 'FOUND' : 'MISSING');
 
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -28,7 +23,6 @@ api.interceptors.request.use((config) => {
     }
     return config;
 }, (error) => {
-    console.error('🔥 Interceptor Error:', error);
     return Promise.reject(error);
 });
 

@@ -21,15 +21,15 @@ const PORT = process.env.PORT || 3005;
 app.set('trust proxy', 1);
 
 
-// Global Request Logger - only log non-polling routes to keep terminal clean
-app.use((req, res, next) => {
-    // Skip noisy polling endpoints
-    const skipPaths = ['/api/automation/activity', '/api/automation/rules', '/health'];
-    if (!skipPaths.some(p => req.originalUrl.startsWith(p))) {
-        console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
-    }
-    next();
-});
+if (process.env.NODE_ENV === 'development') {
+    app.use((req, res, next) => {
+        const skipPaths = ['/api/automation/activity', '/api/automation/rules', '/health'];
+        if (!skipPaths.some((p) => req.originalUrl.startsWith(p))) {
+            console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
+        }
+        next();
+    });
+}
 
 // Security middleware
 app.use(helmet());
@@ -66,11 +66,6 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// DEBUG PROOF OF LIFE
-app.get('/test-live-code', (req, res) => {
-    res.send('<h1>I AM RUNNING THE NEW CODE 🔥</h1>');
-});
-
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/instagram', instagramRoutes);
@@ -91,6 +86,7 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
 });
 
 export default app;
