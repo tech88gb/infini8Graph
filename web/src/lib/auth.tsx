@@ -19,6 +19,7 @@ interface Account {
     profile_picture_url: string | null;
     followers_count: number;
     is_active: boolean;
+    is_enabled: boolean;
 }
 
 interface AuthContextType {
@@ -27,6 +28,7 @@ interface AuthContextType {
     accounts: Account[];
     activeAccountId: string | null;
     login: () => Promise<void>;
+    connectMeta: () => Promise<void>;
     logout: () => Promise<void>;
     checkAuth: () => Promise<void>;
     switchAccount: (accountId: string) => Promise<boolean>;
@@ -126,6 +128,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const connectMeta = async () => {
+        const response = user?.metaConnected
+            ? await authApi.reconnectMeta()
+            : await authApi.connectMeta();
+
+        if (!response.data.success || !response.data.loginUrl) {
+            throw new Error(response.data.error || 'Failed to start Meta connection');
+        }
+
+        window.location.href = response.data.loginUrl;
+    };
+
 
     const logout = async () => {
         try {
@@ -154,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     userId: user?.userId || '',
                     googleEmail: user?.googleEmail || null,
                     metaConnected: true, // If they can switch, they are connected
-                    instagramUserId: response.data.account.id,
+                    instagramUserId: response.data.account.instagramUserId || null,
                     username: response.data.account.username
                 });
 
@@ -185,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             accounts,
             activeAccountId,
             login,
+            connectMeta,
             logout,
             checkAuth,
             switchAccount,

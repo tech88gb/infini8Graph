@@ -71,7 +71,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     const pathname = usePathname();
-    const { user, logout, accounts, activeAccountId, switchAccount, login } = useAuth();
+    const { user, logout, accounts, activeAccountId, switchAccount, connectMeta } = useAuth();
     const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
     const [switching, setSwitching] = useState(false);
 
@@ -86,7 +86,9 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     };
 
     const handleAddAccount = () => {
-        login();
+        connectMeta().catch((error) => {
+            console.error('Meta connect error:', error);
+        });
     };
 
     return (
