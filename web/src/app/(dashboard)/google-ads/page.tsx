@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { googleAdsApi } from '@/lib/api';
 import {
@@ -8,7 +8,7 @@ import {
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
     Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin,
-    Crosshair, UserCheck, ShieldAlert
+    Crosshair, UserCheck, ShieldAlert, X, Sparkles
 } from 'lucide-react';
 import {
     TrueRoasTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab,
@@ -1105,7 +1105,23 @@ const PRESETS = [
 export default function GoogleAdsPage() {
     const [activeTab, setActiveTab] = useState('overview');
     const [preset, setPreset] = useState('30d');
+    const [showTip, setShowTip] = useState(false);
     const queryClient = useQueryClient();
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const dismissed = window.localStorage.getItem('onboarding-tip:google-ads');
+        if (!dismissed) {
+            setShowTip(true);
+        }
+    }, []);
+
+    const dismissTip = () => {
+        setShowTip(false);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('onboarding-tip:google-ads', 'dismissed');
+        }
+    };
 
     const { data: status, isLoading: statusLoading } = useQuery({
         queryKey: ['google-status'],
@@ -1170,6 +1186,35 @@ export default function GoogleAdsPage() {
         }
     });
 
+    const onboardingTip = showTip ? (
+        <div
+            className="card"
+            style={{
+                marginBottom: 20,
+                border: '1px solid rgba(16,185,129,0.24)',
+                background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.08))',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(16,185,129,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Sparkles size={18} style={{ color: '#6ee7b7' }} />
+                    </div>
+                    <div>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>First look guide</div>
+                        <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
+                            Start in `Overview` for spend and ROAS, then use `Keywords` to spot wasted budget and `Alerts` for issues that need action. Account switching stays at the top so you always know which Google Ads client you are viewing.
+                        </p>
+                    </div>
+                </div>
+                <button type="button" onClick={dismissTip} className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
+                    <X size={14} />
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    ) : null;
+
     if (statusLoading) {
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
@@ -1181,6 +1226,7 @@ export default function GoogleAdsPage() {
     if (!status?.connected) {
         return (
             <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                {onboardingTip}
                 <div className="page-header" style={{ marginBottom: 32 }}>
                     <div>
                         <h1 className="page-title">Google Ads</h1>
@@ -1210,6 +1256,8 @@ export default function GoogleAdsPage() {
 
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+            {onboardingTip}
+
             {/* Header */}
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <div>

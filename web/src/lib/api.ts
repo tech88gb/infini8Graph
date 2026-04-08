@@ -108,6 +108,10 @@ export const automationApi = {
     getActivity: () => api.get('/automation/activity'),
 };
 
+export const webhookApi = {
+    getStatus: () => api.get('/webhook/status'),
+};
+
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
     getAdAccounts: () => api.get('/ads/accounts'),

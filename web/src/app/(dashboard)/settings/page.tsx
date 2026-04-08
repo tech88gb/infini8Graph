@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { authApi } from '@/lib/api';
-import { User, Shield, Palette, LogOut, RefreshCw, Instagram } from 'lucide-react';
+import { authApi, googleAdsApi, webhookApi } from '@/lib/api';
+import { User, Shield, Palette, LogOut, RefreshCw, Instagram, Activity, CheckCircle2, AlertTriangle, Radio } from 'lucide-react';
 
 interface ManagedAccount {
     id: string;
@@ -14,6 +14,14 @@ interface ManagedAccount {
     followers_count: number;
     is_active: boolean;
     is_enabled: boolean;
+}
+
+interface SystemStatusCard {
+    key: string;
+    label: string;
+    state: 'healthy' | 'warning' | 'inactive';
+    summary: string;
+    detail: string;
 }
 
 function Toggle({
@@ -66,6 +74,8 @@ export default function SettingsPage() {
     const [accountsLoading, setAccountsLoading] = useState(true);
     const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
     const [updatingAccountId, setUpdatingAccountId] = useState<string | null>(null);
+    const [systemStatuses, setSystemStatuses] = useState<SystemStatusCard[]>([]);
+    const [statusLoading, setStatusLoading] = useState(true);
 
     const loadAccounts = async () => {
         setAccountsLoading(true);
@@ -81,8 +91,76 @@ export default function SettingsPage() {
         }
     };
 
+    const loadSystemStatuses = async () => {
+        setStatusLoading(true);
+        try {
+            const [accountsResponse, googleResponse, webhookResponse] = await Promise.allSettled([
+                authApi.getAccounts(true),
+                googleAdsApi.getStatus(),
+                webhookApi.getStatus(),
+            ]);
+
+            const accountList =
+                accountsResponse.status === 'fulfilled' && accountsResponse.value.data.success
+                    ? accountsResponse.value.data.accounts || []
+                    : [];
+
+            const enabledAccounts = accountList.filter((account: ManagedAccount) => account.is_enabled);
+            const activeAccount = accountList.find((account: ManagedAccount) => account.is_active);
+            const googleConnected =
+                googleResponse.status === 'fulfilled' && googleResponse.value.data.connected === true;
+            const webhookActive =
+                webhookResponse.status === 'fulfilled' && webhookResponse.value.data.status === 'active';
+
+            setSystemStatuses([
+                {
+                    key: 'meta',
+                    label: 'Meta token healthy',
+                    state: user?.metaConnected && enabledAccounts.length > 0 ? 'healthy' : user?.metaConnected ? 'warning' : 'inactive',
+                    summary: user?.metaConnected && enabledAccounts.length > 0 ? 'Healthy' : user?.metaConnected ? 'Attention needed' : 'Disconnected',
+                    detail: user?.metaConnected && enabledAccounts.length > 0
+                        ? `Ready for ${enabledAccounts.length} enabled Instagram account${enabledAccounts.length === 1 ? '' : 's'}${activeAccount ? ` with @${activeAccount.username} active` : ''}.`
+                        : user?.metaConnected
+                            ? 'Meta is connected, but no Instagram account is enabled for this login.'
+                            : 'Reconnect Meta access to restore Instagram analytics and automation.',
+                },
+                {
+                    key: 'google',
+                    label: 'Google Ads connected',
+                    state: googleConnected ? 'healthy' : 'inactive',
+                    summary: googleConnected ? 'Connected' : 'Not connected',
+                    detail: googleConnected
+                        ? `Google Ads is connected${googleResponse.status === 'fulfilled' && googleResponse.value.data.account?.email ? ` as ${googleResponse.value.data.account.email}` : ''}.`
+                        : 'Connect Google Ads if you want cross-platform reporting and campaign intelligence.',
+                },
+                {
+                    key: 'webhook',
+                    label: 'Webhook receiving',
+                    state: webhookActive ? 'healthy' : 'warning',
+                    summary: webhookActive ? 'Active' : 'Check required',
+                    detail: webhookActive
+                        ? 'The webhook endpoint is live and ready to receive Instagram comment and DM events.'
+                        : 'The webhook status endpoint did not confirm a healthy listener.',
+                },
+            ]);
+        } catch {
+            setSystemStatuses([
+                {
+                    key: 'meta',
+                    label: 'Meta token healthy',
+                    state: 'warning',
+                    summary: 'Unavailable',
+                    detail: 'Status checks could not be completed right now.',
+                },
+            ]);
+        } finally {
+            setStatusLoading(false);
+        }
+    };
+
     useEffect(() => {
         loadAccounts();
+        loadSystemStatuses();
     }, []);
 
     const handleReconnectMeta = async () => {
@@ -110,6 +188,7 @@ export default function SettingsPage() {
 
             await refreshAccounts();
             await loadAccounts();
+            await loadSystemStatuses();
         } catch (error: any) {
             console.error('Account toggle error:', error);
             alert(error.message || 'Failed to update this account.');
@@ -118,11 +197,81 @@ export default function SettingsPage() {
         }
     };
 
+    const statusTone = (state: SystemStatusCard['state']) => {
+        if (state === 'healthy') {
+            return {
+                border: 'rgba(34,197,94,0.25)',
+                background: 'rgba(34,197,94,0.08)',
+                text: '#22c55e',
+                icon: CheckCircle2,
+            };
+        }
+
+        if (state === 'warning') {
+            return {
+                border: 'rgba(245,158,11,0.25)',
+                background: 'rgba(245,158,11,0.08)',
+                text: '#f59e0b',
+                icon: AlertTriangle,
+            };
+        }
+
+        return {
+            border: 'rgba(148,163,184,0.2)',
+            background: 'rgba(148,163,184,0.08)',
+            text: '#94a3b8',
+            icon: Radio,
+        };
+    };
+
     return (
         <div className="space-y-8 max-w-4xl">
             <div>
                 <h1 className="text-3xl font-bold mb-2">Settings</h1>
                 <p className="text-[var(--muted)]">Manage your account and preferences</p>
+            </div>
+
+            <div className="card">
+                <div className="flex items-center gap-4 mb-6">
+                    <Activity size={24} className="text-[var(--primary)]" />
+                    <h3 className="text-lg font-semibold">System Status</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {statusLoading ? (
+                        <div className="p-4 rounded-xl bg-[var(--card-hover)] text-sm text-[var(--muted)] md:col-span-3">
+                            Checking system health...
+                        </div>
+                    ) : (
+                        systemStatuses.map((status) => {
+                            const tone = statusTone(status.state);
+                            const Icon = tone.icon;
+
+                            return (
+                                <div
+                                    key={status.key}
+                                    style={{
+                                        padding: 18,
+                                        borderRadius: 18,
+                                        border: `1px solid ${tone.border}`,
+                                        background: tone.background,
+                                    }}
+                                >
+                                    <div className="flex items-start justify-between gap-3 mb-4">
+                                        <div>
+                                            <div className="text-sm font-semibold text-white">{status.label}</div>
+                                            <div className="text-xs uppercase tracking-wider mt-1" style={{ color: tone.text }}>
+                                                {status.summary}
+                                            </div>
+                                        </div>
+                                        <Icon size={18} style={{ color: tone.text, flexShrink: 0 }} />
+                                    </div>
+                                    <p className="text-sm text-[var(--muted)] leading-6">{status.detail}</p>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
 
             <div className="card">

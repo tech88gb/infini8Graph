@@ -88,6 +88,9 @@ export default function AutomationPage() {
     const [defaultKwInput, setDefaultKwInput] = useState('');
     const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
     const [editKwInput, setEditKwInput] = useState('');
+    const [ruleSearch, setRuleSearch] = useState('');
+    const [ruleStatusFilter, setRuleStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+    const [showTip, setShowTip] = useState(false);
 
     const rulesQuery = useQuery({
         queryKey: AUTOMATION_RULES_QUERY_KEY,
@@ -161,13 +164,59 @@ export default function AutomationPage() {
         setMedia(mediaQuery.data);
     }, [mediaQuery.data]);
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const dismissed = window.localStorage.getItem('onboarding-tip:automation');
+        if (!dismissed) {
+            setShowTip(true);
+        }
+    }, []);
+
     const specificRules = useMemo(() => {
         const filtered = rules.filter(r => r.media_id || (r.media_ids && r.media_ids.length > 0));
         console.log('🎯 Computing specificRules:', filtered.length, 'from', rules.length, 'total rules');
-        return filtered;
+        return filtered.sort((a, b) => {
+            if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+            return a.name.localeCompare(b.name);
+        });
     }, [rules]);
+
+    const filteredSpecificRules = useMemo(() => {
+        const search = ruleSearch.trim().toLowerCase();
+
+        return specificRules.filter((rule) => {
+            if (ruleStatusFilter === 'active' && !rule.is_active) return false;
+            if (ruleStatusFilter === 'inactive' && rule.is_active) return false;
+
+            if (!search) return true;
+
+            const postCaptions = (rule.media_ids || [])
+                .map((id) => media.find((item) => item.id === id)?.caption || '')
+                .join(' ');
+
+            const haystack = [
+                rule.name,
+                (rule.keywords || []).join(' '),
+                rule.comment_reply,
+                rule.dm_reply,
+                postCaptions,
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+            return haystack.includes(search);
+        });
+    }, [specificRules, ruleSearch, ruleStatusFilter, media]);
     
     const notify = (type: 'success' | 'error', message: string) => { setToast({ type, message }); setTimeout(() => setToast(null), 3000); };
+
+    const dismissTip = () => {
+        setShowTip(false);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('onboarding-tip:automation', 'dismissed');
+        }
+    };
 
     const refreshRules = async () => {
         await queryClient.invalidateQueries({ queryKey: AUTOMATION_RULES_QUERY_KEY });
@@ -334,6 +383,36 @@ export default function AutomationPage() {
                     icon={<svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
                 />
 
+                {showTip && (
+                    <Card
+                        style={{
+                            marginBottom: 'var(--space-6)',
+                            border: '1px solid rgba(59,130,246,0.25)',
+                            background: 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.08))',
+                        }}
+                    >
+                        <CardBody style={{ padding: 'var(--space-5)' }}>
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3">
+                                    <div style={{ width: 42, height: 42, borderRadius: '14px', background: 'rgba(59,130,246,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <svg width="18" height="18" fill="none" stroke="#93c5fd" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3l1.912 5.813a2 2 0 001.266 1.266L21 12l-5.822 1.921a2 2 0 00-1.257 1.257L12 21l-1.921-5.822a2 2 0 00-1.257-1.257L3 12l5.813-1.921a2 2 0 001.266-1.266L12 3z" /></svg>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 700, marginBottom: 4 }}>Quick setup tip</div>
+                                        <p className="text-muted" style={{ fontSize: '13px', lineHeight: 1.6 }}>
+                                            Most brands lead with post-specific automations, so they’re listed first here. Use search to find a keyword or campaign rule fast, then keep the general automation as your fallback for everything else.
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={dismissTip}>
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    Dismiss
+                                </Button>
+                            </div>
+                        </CardBody>
+                    </Card>
+                )}
+
                 {/* Automation Stats Bar */}
                 <div style={{
                     display: 'grid',
@@ -369,7 +448,7 @@ export default function AutomationPage() {
                 <div className="layout-split">
                     <div className="layout-split-main flex flex-col gap-6">
                         {/* General Response Rule - CLEANER LAYOUT */}
-                        <Card style={{ border: '1px solid var(--border)', background: 'linear-gradient(180deg, var(--card-raised) 0%, rgba(16, 17, 26, 0.8) 100%)' }}>
+                        <Card style={{ order: 2, border: '1px solid var(--border)', background: 'linear-gradient(180deg, var(--card-raised) 0%, rgba(16, 17, 26, 0.8) 100%)' }}>
                             <CardHeader style={{ borderBottom: '1px solid var(--border-light)', padding: 'var(--space-6)' }}>
                                 <div className="flex items-center gap-4">
                                     <div style={{ width: 44, height: 44, borderRadius: '12px', background: defaultRule.is_active ? 'var(--success-light)' : 'var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
@@ -452,10 +531,10 @@ export default function AutomationPage() {
                         </Card>
 
                         {/* Post Overrides */}
-                        <Card>
+                        <Card style={{ order: 1 }}>
                             <CardHeader>
                                 <div className="flex items-center gap-1">
-                                    <CardTitle subtitle="Custom rules for individual posts">Custom Post Settings</CardTitle>
+                                    <CardTitle subtitle="Custom rules for individual posts, campaigns, and keywords">Custom Post Settings</CardTitle>
                                     <Tooltip content="Create special responses for specific posts (e.g., for a giveaway or a product sale).">
                                         <InfoIcon />
                                     </Tooltip>
@@ -570,6 +649,37 @@ export default function AutomationPage() {
                             )}
 
                             <div style={{ padding: '0 var(--space-4) var(--space-4)' }}>
+                                <div style={{ padding: '0 var(--space-2) var(--space-5)' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 'var(--space-3)', alignItems: 'center' }}>
+                                        <div className="flex gap-2 p-1.5 background-alt border border-light rounded-xl focus-within:border-primary">
+                                            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ opacity: 0.45, marginLeft: 10, marginTop: 8 }}>
+                                                <circle cx="11" cy="11" r="7" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M20 20l-3.5-3.5" />
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                value={ruleSearch}
+                                                onChange={(e) => setRuleSearch(e.target.value)}
+                                                placeholder="Search by keyword, rule name, or post caption..."
+                                                className="bg-transparent border-none outline-none px-2 py-1.5 flex-1 text-sm"
+                                            />
+                                        </div>
+                                        <select
+                                            value={ruleStatusFilter}
+                                            onChange={(e) => setRuleStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+                                            className="input"
+                                            style={{ minWidth: 140 }}
+                                        >
+                                            <option value="all">All rules</option>
+                                            <option value="active">Active only</option>
+                                            <option value="inactive">Paused only</option>
+                                        </select>
+                                        <div style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+                                            {filteredSpecificRules.length} shown
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {specificRules.length === 0 ? (
                                     <div className="p-12 mb-4 bg-transparent border border-dashed border-light rounded-2xl">
                                         <EmptyState 
@@ -578,9 +688,18 @@ export default function AutomationPage() {
                                             description="Custom rules let you automate specific responses for different posts." 
                                         />
                                     </div>
+                                ) : filteredSpecificRules.length === 0 ? (
+                                    <div className="p-12 mb-4 bg-transparent border border-dashed border-light rounded-2xl">
+                                        <EmptyState
+                                            icon={<div style={{ padding: 16, background: 'var(--border-light)', borderRadius: '16px' }}><svg width="28" height="28" fill="none" stroke="var(--muted)" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="M20 20l-3.5-3.5" /></svg></div>}
+                                            title="No rules match these filters"
+                                            description="Try another keyword or switch back to all rules."
+                                            action={<Button variant="ghost" size="sm" onClick={() => { setRuleSearch(''); setRuleStatusFilter('all'); }}>Clear filters</Button>}
+                                        />
+                                    </div>
                                 ) : (
                                     <div className="flex flex-col gap-3 pb-4">
-                                        {specificRules.map(rule => {
+                                        {filteredSpecificRules.map(rule => {
                                             const expanded = expandedOverride === rule.id;
                                             const thumbs = rule.media_ids?.map(id => media.find(x => x.id === id)?.media_url).filter(Boolean).slice(0, 4) || [];
                                             return (

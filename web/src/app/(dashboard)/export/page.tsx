@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { instagramApi } from '@/lib/api';
-import { Download, FileJson, FileText, FileSpreadsheet, FileCode2, FileImage, Check, CalendarRange, Target, BarChart3 } from 'lucide-react';
+import { Download, FileJson, FileText, FileSpreadsheet, FileCode2, FileImage, Check, CalendarRange, Target, BarChart3, X, Sparkles } from 'lucide-react';
 
 type ExportFormat = 'json' | 'csv' | 'tsv' | 'md' | 'html';
 
@@ -52,6 +52,22 @@ export default function ExportPage() {
     const [startDate, setStartDate] = useState(defaultStartDate());
     const [endDate, setEndDate] = useState(formatDateForInput(new Date()));
     const [status, setStatus] = useState<string | null>(null);
+    const [showTip, setShowTip] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const dismissed = window.localStorage.getItem('onboarding-tip:export');
+        if (!dismissed) {
+            setShowTip(true);
+        }
+    }, []);
+
+    const dismissTip = () => {
+        setShowTip(false);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('onboarding-tip:export', 'dismissed');
+        }
+    };
 
     const selectedLabels = useMemo(
         () => exportOptions.filter(option => selectedMetrics.includes(option.id)).map(option => option.label),
@@ -107,6 +123,39 @@ export default function ExportPage() {
                 <h1 className="text-3xl font-bold mb-2">Export Studio</h1>
                 <p className="text-[var(--muted)]">Build performance-marketing exports that are ready for spreadsheets, client decks, and deeper analysis.</p>
             </div>
+
+            {showTip && (
+                <div
+                    className="card"
+                    style={{
+                        border: '1px solid rgba(59,130,246,0.22)',
+                        background: 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(14,165,233,0.08))',
+                    }}
+                >
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <div style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(59,130,246,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <Sparkles size={18} className="text-sky-300" />
+                            </div>
+                            <div>
+                                <div className="font-semibold text-white mb-1">Quick start tip</div>
+                                <p className="text-sm text-[var(--muted)] leading-6">
+                                    Pick `CSV Workbook` when you want spreadsheet-ready reporting, or `HTML Report` when you need a client-facing shareout. The export scope can mix KPI summaries, post tables, and content-intelligence in one run.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={dismissTip}
+                            className="btn btn-ghost btn-sm"
+                            style={{ flexShrink: 0 }}
+                        >
+                            <X size={14} />
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-6">
                 <div className="card">
