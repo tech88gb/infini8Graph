@@ -400,7 +400,7 @@ export default function AutomationPage() {
                                     <div>
                                         <div style={{ fontWeight: 700, marginBottom: 4 }}>Quick setup tip</div>
                                         <p className="text-muted" style={{ fontSize: '13px', lineHeight: 1.6 }}>
-                                            Most brands lead with post-specific automations, so they’re listed first here. Use search to find a keyword or campaign rule fast, then keep the general automation as your fallback for everything else.
+                                            Use custom post rules when a single post needs a unique reply flow, and keep the general automation as your fallback for everything else. Search helps you quickly find a rule by keyword, name, or linked post.
                                         </p>
                                     </div>
                                 </div>
