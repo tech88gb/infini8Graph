@@ -594,6 +594,12 @@ textarea.input {
   padding-right: var(--space-10);
 }
 
+select.input option,
+select.input optgroup {
+  color: var(--color-gray-900);
+  background: #ffffff;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /* TOGGLE SWITCH                                                                */
 /* ═══════════════════════════════════════════════════════════════════════════ */
