@@ -86,8 +86,19 @@ export const instagramApi = (() => {
             if (endDate) p.append('endDate', endDate);
             return api.get(`/instagram/posts?${p.toString()}`);
         },
-        exportData: (format = 'json', metrics = 'overview,growth,posts') =>
-            api.get(`/instagram/export?format=${format}&metrics=${metrics}`),
+        exportData: (
+            format: 'json' | 'csv' | 'tsv' | 'md' | 'html' = 'json',
+            metrics = 'overview,growth,posts',
+            startDate?: string,
+            endDate?: string
+        ) => {
+            const params = new URLSearchParams({ format, metrics });
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            return api.get(`/instagram/export?${params.toString()}`, {
+                responseType: format === 'json' ? 'json' : 'blob',
+            });
+        },
         getContentIntelligence: (startDate?: string, endDate?: string) => api.get(`/instagram/content-intelligence${buildParams(startDate, endDate)}`),
         getUnifiedOverview: (startDate?: string, endDate?: string) => api.get(`/instagram/unified-overview${buildParams(startDate, endDate)}`)
     };

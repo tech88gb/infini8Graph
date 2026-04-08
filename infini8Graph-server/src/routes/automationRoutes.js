@@ -19,7 +19,8 @@ async function getAccountIdsForUser(userId) {
 }
 
 /**
- * Get all automation rules for the authenticated user
+ * Get all automation rules for the authenticated user's accessible account(s)
+ * Rules are shared per Instagram account; access remains gated by auth_tokens.
  */
 router.get('/rules', authenticate, async (req, res) => {
     try {
@@ -31,7 +32,6 @@ router.get('/rules', authenticate, async (req, res) => {
             const { data: rules, error: rulesError } = await supabase
                 .from('automation_rules')
                 .select('*')
-                .eq('user_id', userId)
                 .eq('instagram_account_id', activeAccountId)
                 .order('created_at', { ascending: false });
 
@@ -42,10 +42,13 @@ router.get('/rules', authenticate, async (req, res) => {
         // Fallback: resolve all accounts for this user via auth_tokens
         const accountIds = await getAccountIdsForUser(userId);
 
+        if (accountIds.length === 0) {
+            return res.json({ success: true, rules: [] });
+        }
+
         const { data: rules, error: rulesError } = await supabase
             .from('automation_rules')
             .select('*')
-            .eq('user_id', userId)
             .in('instagram_account_id', accountIds)
             .order('created_at', { ascending: false });
 
@@ -100,7 +103,7 @@ router.post('/rules', authenticate, async (req, res) => {
 
 /**
  * Update an automation rule
- * FIX: Ownership check via auth_tokens instead of instagram_accounts.user_id
+ * Rules are shared per Instagram account; any user with access to the account can edit them.
  */
 router.patch('/rules/:id', authenticate, async (req, res) => {
     try {
@@ -113,16 +116,11 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
 
         const { data: existingRule, error: fetchError } = await supabase
             .from('automation_rules')
-            .select('instagram_account_id, user_id')
+            .select('instagram_account_id')
             .eq('id', ruleId)
             .single();
 
-        if (
-            fetchError ||
-            !existingRule ||
-            existingRule.user_id !== userId ||
-            !accountIds.includes(existingRule.instagram_account_id)
-        ) {
+        if (fetchError || !existingRule || !accountIds.includes(existingRule.instagram_account_id)) {
             return res.status(404).json({ success: false, error: 'Rule not found' });
         }
 
@@ -143,7 +141,7 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
 
 /**
  * Delete an automation rule
- * FIX: Ownership check via auth_tokens instead of instagram_accounts.user_id
+ * Rules are shared per Instagram account; any user with access to the account can delete them.
  */
 router.delete('/rules/:id', authenticate, async (req, res) => {
     try {
@@ -155,16 +153,11 @@ router.delete('/rules/:id', authenticate, async (req, res) => {
 
         const { data: existingRule, error: fetchError } = await supabase
             .from('automation_rules')
-            .select('instagram_account_id, user_id')
+            .select('instagram_account_id')
             .eq('id', ruleId)
             .single();
 
-        if (
-            fetchError ||
-            !existingRule ||
-            existingRule.user_id !== userId ||
-            !accountIds.includes(existingRule.instagram_account_id)
-        ) {
+        if (fetchError || !existingRule || !accountIds.includes(existingRule.instagram_account_id)) {
             return res.status(404).json({ success: false, error: 'Rule not found' });
         }
 
@@ -203,13 +196,12 @@ router.get('/activity', authenticate, async (req, res) => {
  */
 router.get('/stats', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
         const activeAccountId = req.user.instagramAccountId;
         if (!activeAccountId) {
             return res.status(400).json({ success: false, error: 'No active account selected' });
         }
 
-        const stats = await autoReplyService.getStats(activeAccountId, userId);
+        const stats = await autoReplyService.getStats(activeAccountId);
         res.json({ success: true, stats });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

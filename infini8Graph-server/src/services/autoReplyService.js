@@ -271,44 +271,17 @@ class AutoReplyService {
                 console.log(`   │     Rule ${idx + 1}: "${rule.name}" | User: ${rule.user_id || 'legacy'} | Active: ${rule.is_active} | media_ids: ${JSON.stringify(rule.media_ids)} | media_id: ${rule.media_id || 'null'}`);
             });
 
-            const userContextMap = new Map(contexts.map((context) => [context.userId, context]));
-            const scopedCandidates = [];
-
-            for (const [userId, context] of userContextMap.entries()) {
-                const userRules = allRules.filter((rule) => rule.user_id === userId);
-                const applicableRules = this.getApplicableRules(userRules, currentMediaId);
-                if (!applicableRules || applicableRules.length === 0) {
-                    continue;
-                }
-
-                scopedCandidates.push({
-                    tokenData: context,
-                    rules: applicableRules,
-                    sortKey: applicableRules[0]?.updatedAt || context.updatedAt || '',
-                });
-            }
-
-            if (scopedCandidates.length > 1) {
-                scopedCandidates.sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
-                console.warn(`   │  ⚠️  Multiple user-owned automation configs found for account ${account.id}. Using the most recently updated owner: ${scopedCandidates[0].tokenData.userId}`);
-            }
-
-            if (scopedCandidates.length > 0) {
-                return scopedCandidates[0];
-            }
-
-            const legacyRules = allRules.filter((rule) => !rule.user_id);
-            const applicableLegacyRules = this.getApplicableRules(legacyRules, currentMediaId);
-            if (!applicableLegacyRules || applicableLegacyRules.length === 0) {
-                console.log(`   │  📭 No active user-scoped or legacy rules for media ${currentMediaId}. Skipping.`);
+            const applicableRules = this.getApplicableRules(allRules, currentMediaId);
+            if (!applicableRules || applicableRules.length === 0) {
+                console.log(`   │  📭 No active shared rules for media ${currentMediaId}. Skipping.`);
                 return null;
             }
 
-            console.warn(`   │  ⚠️  Falling back to legacy account-wide automation rules for account ${account.id}.`);
+            console.log(`   │     ✅ Using shared automation rules for account ${account.id}`);
             return {
                 tokenData: contexts[0],
-                rules: applicableLegacyRules,
-                sortKey: applicableLegacyRules[0]?.updatedAt || contexts[0]?.updatedAt || '',
+                rules: applicableRules,
+                sortKey: applicableRules[0]?.updatedAt || contexts[0]?.updatedAt || '',
             };
 
         } catch (error) {
@@ -669,7 +642,7 @@ class AutoReplyService {
     /**
      * Get auto-reply statistics
      */
-    async getStats(instagramAccountId, userId = null) {
+    async getStats(instagramAccountId) {
         const defaultStats = {
             totalRepliesSent: 0,
             messagingReplies: 0,
@@ -687,17 +660,11 @@ class AutoReplyService {
         // Try to get rules count from DB if possible
         let rulesCount = defaultStats.activeRules;
         try {
-            let query = supabase
+            const { count } = await supabase
                 .from('automation_rules')
                 .select('*', { count: 'exact', head: true })
                 .eq('instagram_account_id', instagramAccountId)
                 .eq('is_active', true);
-
-            if (userId) {
-                query = query.eq('user_id', userId);
-            }
-
-            const { count } = await query;
             if (count !== null) rulesCount = count;
         } catch (e) { /* ignore */ }
 

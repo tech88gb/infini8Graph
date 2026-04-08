@@ -919,63 +919,414 @@ class AnalyticsService {
         return posts;
     }
 
-    /**
-     * Export analytics data in various formats
-     */
-    async exportData(format = 'json', metrics = ['overview', 'growth', 'posts']) {
+    sanitizeExportMetrics(metrics = []) {
+        const validMetrics = new Set(['overview', 'growth', 'posts', 'reels', 'bestTime', 'hashtags', 'contentIntelligence']);
+        const cleaned = (metrics || [])
+            .map(metric => String(metric || '').trim())
+            .filter(metric => validMetrics.has(metric));
+
+        return cleaned.length > 0 ? [...new Set(cleaned)] : ['overview', 'growth', 'posts'];
+    }
+
+    async collectExportData(metrics, startDate = null, endDate = null) {
+        const selectedMetrics = this.sanitizeExportMetrics(metrics);
         const data = {};
 
-        for (const metric of metrics) {
+        for (const metric of selectedMetrics) {
             switch (metric) {
                 case 'overview':
-                    data.overview = await this.getOverview();
+                    data.overview = await this.getOverview(startDate, endDate);
                     break;
                 case 'growth':
-                    data.growth = await this.getGrowth();
+                    data.growth = await this.getGrowth(startDate, endDate);
                     break;
                 case 'posts':
-                    data.posts = await this.getPostsAnalytics();
+                    data.posts = await this.getPostsAnalytics(200, startDate, endDate);
                     break;
                 case 'reels':
-                    data.reels = await this.getReelsAnalytics();
+                    data.reels = await this.getReelsAnalytics(startDate, endDate);
                     break;
                 case 'bestTime':
-                    data.bestTime = await this.getBestTimeToPost();
+                    data.bestTime = await this.getBestTimeToPost(startDate, endDate);
                     break;
                 case 'hashtags':
-                    data.hashtags = await this.getHashtagAnalysis();
+                    data.hashtags = await this.getHashtagAnalysis(startDate, endDate);
+                    break;
+                case 'contentIntelligence':
+                    data.contentIntelligence = await this.getContentIntelligence(startDate, endDate);
                     break;
             }
         }
 
-        if (format === 'csv') {
-            return this.convertToCSV(data);
-        }
-
-        return data;
+        return { selectedMetrics, data };
     }
 
-    /**
-     * Convert data to CSV format
-     */
-    convertToCSV(data) {
-        const csvSections = {};
+    buildExportSummary(data) {
+        const summary = [];
+        const overviewMetrics = data.overview?.metrics || {};
+        const growth = data.growth || {};
+        const reelsSummary = data.reels?.summary || {};
+        const postsSummary = data.posts?.summary || {};
+        const hashtags = data.hashtags || {};
+        const intelligence = data.contentIntelligence || {};
 
-        if (data.overview) {
-            const metrics = data.overview.metrics;
-            csvSections.overview = 'Metric,Value\n' +
-                Object.entries(metrics).map(([k, v]) => `${k},${v}`).join('\n');
-        }
-
-        if (data.posts?.all) {
-            const headers = 'ID,Type,Likes,Comments,Engagement,Reach,Timestamp';
-            const rows = data.posts.all.map(p =>
-                `${p.id},${p.type},${p.likes},${p.comments},${p.engagement},${p.reach},${p.timestamp}`
+        if (Object.keys(overviewMetrics).length > 0) {
+            summary.push(
+                { category: 'Audience', metric: 'Followers', value: overviewMetrics.followers ?? 0 },
+                { category: 'Audience', metric: 'Following', value: overviewMetrics.following ?? 0 },
+                { category: 'Content', metric: 'Posts Published', value: overviewMetrics.posts ?? 0 },
+                { category: 'Performance', metric: 'Engagement Rate %', value: overviewMetrics.engagementRate ?? 0 },
+                { category: 'Performance', metric: 'Total Impressions', value: overviewMetrics.totalImpressions ?? 0 },
+                { category: 'Performance', metric: 'Total Reach', value: overviewMetrics.totalReach ?? 0 },
+                { category: 'Performance', metric: 'Total Saves', value: overviewMetrics.totalSaved ?? 0 }
             );
-            csvSections.posts = headers + '\n' + rows.join('\n');
         }
 
-        return csvSections;
+        if (growth.weeklyStats) {
+            summary.push(
+                { category: 'Momentum', metric: 'Posts This Week', value: growth.weeklyStats.postsThisWeek ?? 0 },
+                { category: 'Momentum', metric: 'Engagement This Week', value: growth.weeklyStats.engagementThisWeek ?? 0 },
+                { category: 'Momentum', metric: 'Weekly Engagement Change %', value: growth.weeklyStats.engagementChange ?? 0 },
+                { category: 'Momentum', metric: 'Avg Engagement Per Post', value: growth.weeklyStats.avgEngagementPerPost ?? 0 }
+            );
+        }
+
+        if (Object.keys(postsSummary).length > 0) {
+            summary.push(
+                { category: 'Posts', metric: 'Exported Posts', value: postsSummary.totalPosts ?? 0 },
+                { category: 'Posts', metric: 'Avg Reach Per Post', value: postsSummary.avgReach ?? 0 },
+                { category: 'Posts', metric: 'Avg Engagement Per Post', value: postsSummary.avgEngagement ?? 0 }
+            );
+        }
+
+        if (Object.keys(reelsSummary).length > 0) {
+            summary.push(
+                { category: 'Reels', metric: 'Total Reels', value: reelsSummary.totalReels ?? 0 },
+                { category: 'Reels', metric: 'Avg Reel Engagement', value: reelsSummary.avgEngagement ?? 0 },
+                { category: 'Reels', metric: 'Avg Reel Reach', value: reelsSummary.totalReels ? Math.round((reelsSummary.totalReach || 0) / Math.max(reelsSummary.totalReels, 1)) : 0 }
+            );
+        }
+
+        if (hashtags.topPerforming?.length) {
+            summary.push(
+                { category: 'Hashtags', metric: 'Unique Hashtags Used', value: hashtags.totalHashtagsUsed ?? 0 },
+                { category: 'Hashtags', metric: 'Avg Hashtags Per Post', value: hashtags.avgHashtagsPerPost ?? 0 },
+                { category: 'Hashtags', metric: 'Top Performing Hashtag', value: hashtags.topPerforming[0]?.tag || '' }
+            );
+        }
+
+        if (intelligence.contentQuality || intelligence.formatBattle) {
+            summary.push(
+                { category: 'Creative', metric: 'Best Format', value: intelligence.formatBattle?.winner || '' },
+                { category: 'Creative', metric: 'Avg Content Quality Score', value: intelligence.contentQuality?.averageScore ?? 0 },
+                { category: 'Creative', metric: 'Optimal Caption Length', value: intelligence.captionAnalysis?.optimalLength || '' }
+            );
+        }
+
+        return summary;
+    }
+
+    buildExportTables(data) {
+        const tables = [];
+        const pushTable = (key, title, rows) => {
+            if (Array.isArray(rows) && rows.length > 0) {
+                tables.push({ key, title, rows });
+            }
+        };
+
+        pushTable('summary', 'Executive Summary', this.buildExportSummary(data));
+
+        if (data.overview?.dailyMetrics?.length) {
+            pushTable('daily_metrics', 'Daily Account Metrics', data.overview.dailyMetrics);
+        }
+
+        if (data.growth?.growthData?.length) {
+            pushTable('growth_trends', 'Growth Trends', data.growth.growthData);
+        }
+
+        if (data.posts?.all?.length) {
+            pushTable('post_performance', 'Post Performance', data.posts.all.map((post, index) => ({
+                rank: index + 1,
+                postId: post.id,
+                type: post.type,
+                caption: post.caption,
+                likes: post.likes,
+                comments: post.comments,
+                saves: post.saved,
+                impressions: post.impressions,
+                reach: post.reach,
+                engagement: post.engagement,
+                permalink: post.permalink,
+                timestamp: post.timestamp,
+            })));
+        }
+
+        if (data.reels?.reels?.length) {
+            pushTable('reels_performance', 'Reels Performance', data.reels.reels.map((reel, index) => ({
+                rank: index + 1,
+                reelId: reel.id,
+                likes: reel.likes,
+                comments: reel.comments,
+                impressions: reel.impressions,
+                reach: reel.reach,
+                engagement: reel.engagement,
+                timestamp: reel.timestamp,
+            })));
+        }
+
+        if (data.bestTime?.hourlyAnalysis?.length) {
+            pushTable('posting_hours', 'Best Posting Hours', data.bestTime.hourlyAnalysis.map((entry) => ({
+                hour: entry.hour,
+                avgEngagement: entry.avgEngagement,
+                postCount: entry.postCount,
+            })));
+        }
+
+        if (data.bestTime?.dailyAnalysis?.length) {
+            pushTable('posting_days', 'Best Posting Days', data.bestTime.dailyAnalysis.map((entry) => ({
+                day: entry.day,
+                avgEngagement: entry.avgEngagement,
+                postCount: entry.postCount,
+            })));
+        }
+
+        if (data.hashtags?.topPerforming?.length) {
+            pushTable('hashtags_top_performing', 'Top Performing Hashtags', data.hashtags.topPerforming.map((item, index) => ({
+                rank: index + 1,
+                hashtag: item.tag,
+                usageCount: item.usageCount,
+                avgEngagement: item.avgEngagement,
+                avgLikes: item.avgLikes,
+                avgComments: item.avgComments,
+            })));
+        }
+
+        if (data.hashtags?.reachExpanders?.length) {
+            pushTable('hashtags_reach_expanders', 'Reach Expander Hashtags', data.hashtags.reachExpanders.map((item, index) => ({
+                rank: index + 1,
+                hashtag: item.tag,
+                usageCount: item.usageCount,
+                avgReach: item.avgReach,
+                reachMultiplier: item.reachMultiplier,
+            })));
+        }
+
+        if (data.contentIntelligence?.formatBattle?.ranking?.length) {
+            pushTable('creative_formats', 'Creative Format Ranking', data.contentIntelligence.formatBattle.ranking.map((item) => ({
+                rank: item.rank,
+                format: item.format,
+                posts: item.count,
+                avgEngagement: item.avgEngagement,
+                avgReach: item.avgReach,
+                avgSaved: item.avgSaved,
+                engagementRate: item.engagementRate,
+            })));
+        }
+
+        if (data.contentIntelligence?.contentQuality?.topContent?.length) {
+            pushTable('creative_quality', 'Top Content Quality', data.contentIntelligence.contentQuality.topContent.map((item, index) => ({
+                rank: index + 1,
+                postId: item.id,
+                type: item.type,
+                qualityScore: item.qualityScore,
+                engagement: item.engagement,
+                reach: item.reach,
+                saves: item.saved,
+                insight: item.insight,
+                topFactors: (item.topFactors || []).join(' | '),
+                permalink: item.permalink,
+                timestamp: item.timestamp,
+            })));
+        }
+
+        return tables;
+    }
+
+    buildExportPackage(data, metrics, startDate = null, endDate = null) {
+        const generatedAt = new Date().toISOString();
+        return {
+            metadata: {
+                generatedAt,
+                accountId: this.instagramAccountId,
+                instagramUserId: this.instagramUserId,
+                metrics,
+                dateRange: {
+                    startDate: startDate || null,
+                    endDate: endDate || null,
+                },
+            },
+            summary: this.buildExportSummary(data),
+            tables: this.buildExportTables(data),
+            datasets: data,
+        };
+    }
+
+    stringifyCell(value) {
+        if (value === null || value === undefined) return '';
+        if (Array.isArray(value)) return value.join(' | ');
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    }
+
+    renderDelimitedTable(rows, delimiter = ',') {
+        if (!rows || rows.length === 0) return '';
+        const headers = Array.from(rows.reduce((set, row) => {
+            Object.keys(row).forEach((key) => set.add(key));
+            return set;
+        }, new Set()));
+
+        const escapeCell = (value) => {
+            const text = this.stringifyCell(value);
+            if (delimiter === '\t') return text.replace(/\r?\n/g, ' ');
+            const escaped = text.replace(/"/g, '""');
+            return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+        };
+
+        const lines = [
+            headers.join(delimiter),
+            ...rows.map((row) => headers.map((header) => escapeCell(row[header])).join(delimiter))
+        ];
+
+        return lines.join('\n');
+    }
+
+    renderDelimitedExport(exportPackage, delimiter = ',') {
+        return exportPackage.tables
+            .map((table) => {
+                const content = this.renderDelimitedTable(table.rows, delimiter);
+                if (!content) return '';
+                return [`# ${table.title}`, content].join('\n');
+            })
+            .filter(Boolean)
+            .join('\n\n');
+    }
+
+    renderMarkdownExport(exportPackage) {
+        const lines = [
+            '# Performance Marketing Export',
+            '',
+            `Generated: ${exportPackage.metadata.generatedAt}`,
+            `Metrics: ${exportPackage.metadata.metrics.join(', ')}`,
+            `Date Range: ${exportPackage.metadata.dateRange.startDate || 'All time'} -> ${exportPackage.metadata.dateRange.endDate || 'Today'}`,
+            '',
+            '## Executive Summary',
+            ''
+        ];
+
+        exportPackage.summary.forEach((item) => {
+            lines.push(`- ${item.category}: ${item.metric} = ${item.value}`);
+        });
+
+        exportPackage.tables
+            .filter((table) => table.key !== 'summary')
+            .forEach((table) => {
+                lines.push('', `## ${table.title}`, '');
+                const previewRows = table.rows.slice(0, 12);
+                const headers = Array.from(previewRows.reduce((set, row) => {
+                    Object.keys(row).forEach((key) => set.add(key));
+                    return set;
+                }, new Set()));
+
+                if (headers.length === 0) {
+                    lines.push('_No rows available_');
+                    return;
+                }
+
+                lines.push(`| ${headers.join(' | ')} |`);
+                lines.push(`| ${headers.map(() => '---').join(' | ')} |`);
+                previewRows.forEach((row) => {
+                    lines.push(`| ${headers.map((header) => this.stringifyCell(row[header]).replace(/\|/g, '\\|')).join(' | ')} |`);
+                });
+
+                if (table.rows.length > previewRows.length) {
+                    lines.push('', `_Showing ${previewRows.length} of ${table.rows.length} rows_`);
+                }
+            });
+
+        return lines.join('\n');
+    }
+
+    renderHtmlExport(exportPackage) {
+        const summaryCards = exportPackage.summary.map((item) => `
+            <div class="card">
+                <div class="eyebrow">${item.category}</div>
+                <div class="metric">${item.metric}</div>
+                <div class="value">${this.stringifyCell(item.value)}</div>
+            </div>
+        `).join('');
+
+        const sections = exportPackage.tables.map((table) => {
+            const previewRows = table.rows.slice(0, 20);
+            const headers = Array.from(previewRows.reduce((set, row) => {
+                Object.keys(row).forEach((key) => set.add(key));
+                return set;
+            }, new Set()));
+
+            const head = headers.map((header) => `<th>${header}</th>`).join('');
+            const body = previewRows.map((row) => `<tr>${headers.map((header) => `<td>${this.stringifyCell(row[header])}</td>`).join('')}</tr>`).join('');
+
+            return `
+                <section>
+                    <h2>${table.title}</h2>
+                    <table>
+                        <thead><tr>${head}</tr></thead>
+                        <tbody>${body}</tbody>
+                    </table>
+                    ${table.rows.length > previewRows.length ? `<p class="note">Showing ${previewRows.length} of ${table.rows.length} rows.</p>` : ''}
+                </section>
+            `;
+        }).join('');
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>infini8Graph Export</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 32px; color: #111827; background: #f8fafc; }
+        h1, h2 { margin: 0 0 12px; }
+        p { color: #475569; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 24px 0 32px; }
+        .card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; }
+        .eyebrow { font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.08em; margin-bottom: 8px; }
+        .metric { font-weight: 700; margin-bottom: 6px; }
+        .value { font-size: 20px; color: #0f172a; }
+        section { margin: 28px 0; background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border-bottom: 1px solid #e2e8f0; text-align: left; padding: 8px 10px; vertical-align: top; }
+        th { background: #f8fafc; position: sticky; top: 0; }
+        .note { font-size: 12px; color: #64748b; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Performance Marketing Export</h1>
+    <p>Generated ${exportPackage.metadata.generatedAt}</p>
+    <p>Metrics: ${exportPackage.metadata.metrics.join(', ')}</p>
+    <div class="summary">${summaryCards}</div>
+    ${sections}
+</body>
+</html>`;
+    }
+
+    async exportData(format = 'json', metrics = ['overview', 'growth', 'posts'], options = {}) {
+        const { startDate = null, endDate = null } = options;
+        const { selectedMetrics, data } = await this.collectExportData(metrics, startDate, endDate);
+        const exportPackage = this.buildExportPackage(data, selectedMetrics, startDate, endDate);
+
+        switch (format) {
+            case 'json':
+                return exportPackage;
+            case 'csv':
+                return this.renderDelimitedExport(exportPackage, ',');
+            case 'tsv':
+                return this.renderDelimitedExport(exportPackage, '\t');
+            case 'md':
+                return this.renderMarkdownExport(exportPackage);
+            case 'html':
+                return this.renderHtmlExport(exportPackage);
+            default:
+                throw new Error(`Unsupported export format: ${format}`);
+        }
     }
 }
 

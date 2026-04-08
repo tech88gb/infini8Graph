@@ -132,21 +132,35 @@ export async function getPosts(req, res) {
 
 export async function exportData(req, res) {
     try {
-        const { format = 'json', metrics = 'overview,growth,posts' } = req.query;
-        const metricsArray = metrics.split(',');
+        const { format = 'json', metrics = 'overview,growth,posts', startDate, endDate } = req.query;
+        const metricsArray = metrics.split(',').map(m => m.trim()).filter(Boolean);
         const analytics = await getAnalyticsService(req);
-        const data = await analytics.exportData(format, metricsArray);
+        const data = await analytics.exportData(format, metricsArray, { startDate, endDate });
 
-        if (format === 'csv') {
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', `attachment; filename=export-${Date.now()}.csv`);
-            let csv = '';
-            for (const [section, content] of Object.entries(data)) {
-                csv += `\n--- ${section.toUpperCase()} ---\n${content}\n`;
-            }
-            return res.send(csv);
+        const extMap = {
+            json: 'json',
+            csv: 'csv',
+            tsv: 'tsv',
+            md: 'md',
+            html: 'html',
+        };
+
+        const filename = `infini8graph-export-${Date.now()}.${extMap[format] || 'txt'}`;
+
+        if (format === 'json') {
+            return res.json({ success: true, data });
         }
-        res.json({ success: true, data });
+
+        const typeMap = {
+            csv: 'text/csv; charset=utf-8',
+            tsv: 'text/tab-separated-values; charset=utf-8',
+            md: 'text/markdown; charset=utf-8',
+            html: 'text/html; charset=utf-8',
+        };
+
+        res.setHeader('Content-Type', typeMap[format] || 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+        return res.send(data);
     } catch (error) {
         console.error('Export error:', error);
         res.status(500).json({ success: false, error: error.message });
