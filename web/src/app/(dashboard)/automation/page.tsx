@@ -3,35 +3,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
+import { automationApi, instagramApi } from '@/lib/api';
 import {
     Card, CardHeader, CardTitle, CardBody,
     Button, Toggle, Checkbox, Chip, Badge,
     EmptyState, PageHeader, LoadingPage, Toast, Spinner,
     Tooltip, InfoIcon
 } from '@/components/ui';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-
-/**
- * Authenticated fetch — mirrors the axios interceptor in api.ts.
- * Reads the JWT from localStorage and adds it as an Authorization header
- * so requests work even when third-party / cross-site cookies are blocked
- * (Safari ITP, Firefox strict mode, Chrome incognito, etc.).
- * @param url  Full URL to fetch
- * @param opts Standard RequestInit options
- */
-async function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...((opts.headers as Record<string, string>) || {}),
-    };
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        headers['X-Auth-Token'] = token;
-    }
-    return fetch(url, { ...opts, headers, credentials: 'include' });
-}
 
 interface AutomationRule {
     id?: string;
@@ -87,21 +65,6 @@ const AUTOMATION_RULES_QUERY_KEY = ['automation', 'rules'];
 const AUTOMATION_MEDIA_QUERY_KEY = ['automation', 'media'];
 const AUTOMATION_STATS_QUERY_KEY = ['automation', 'stats'];
 
-async function fetchJson<T>(url: string, opts: RequestInit = {}): Promise<T> {
-    const res = await authFetch(url, opts);
-    if (!res.ok) {
-        let message = 'Request failed';
-        try {
-            const errorBody = await res.json();
-            message = errorBody?.error || message;
-        } catch {
-            // Keep the fallback message if the error response is not JSON.
-        }
-        throw new Error(message);
-    }
-    return res.json();
-}
-
 export default function AutomationPage() {
     const { user } = useAuth();
     const queryClient = useQueryClient();
@@ -132,7 +95,7 @@ export default function AutomationPage() {
         staleTime: 1000 * 60 * 2,
         refetchOnWindowFocus: false,
         queryFn: async () => {
-            const data = await fetchJson<AutomationRulesResponse>(`${API_BASE}/api/automation/rules`);
+            const { data } = await automationApi.getRules() as { data: AutomationRulesResponse };
             return data.rules || [];
         }
     });
@@ -143,8 +106,9 @@ export default function AutomationPage() {
         staleTime: 1000 * 60 * 10,
         refetchOnWindowFocus: false,
         queryFn: async () => {
-            const data = await fetchJson<AutomationMediaResponse>(`${API_BASE}/api/instagram/posts?limit=100&includeCollabs=true`);
-            return (data.data?.all || []).map((p) => ({
+            const { data } = await instagramApi.getPosts(100, undefined, undefined, true);
+            const posts: NonNullable<NonNullable<AutomationMediaResponse['data']>['all']> = data.data?.all ?? [];
+            return posts.map((p) => ({
                 id: p.id,
                 media_url: p.thumbnail || p.media_url || '',
                 caption: p.caption || '',
@@ -161,7 +125,7 @@ export default function AutomationPage() {
         refetchIntervalInBackground: false,
         refetchOnWindowFocus: false,
         queryFn: async () => {
-            const data = await fetchJson<AutomationStatsResponse>(`${API_BASE}/api/automation/stats`);
+            const { data } = await automationApi.getStats() as { data: AutomationStatsResponse };
             return data.stats || {
                 totalRepliesSent: 0,
                 messagingReplies: 0,
@@ -216,16 +180,9 @@ export default function AutomationPage() {
         
         if (defaultRule.id) {
             try {
-                const res = await authFetch(`${API_BASE}/api/automation/rules/${defaultRule.id}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ is_active: checked })
-                });
-                if (!res.ok) {
-                    notify('error', 'Failed to update');
-                    await rulesQuery.refetch(); // Rollback
-                }
+                await automationApi.updateRule(defaultRule.id, { is_active: checked });
             } catch { 
-                notify('error', 'Network error'); 
+                notify('error', 'Failed to update');
                 await rulesQuery.refetch(); // Rollback
             }
         }
@@ -235,12 +192,16 @@ export default function AutomationPage() {
         if (!defaultRule.comment_reply.trim()) { notify('error', 'Please enter a reply message'); return; }
         setSaving(true);
         try {
-            const method = defaultRule.id ? 'PATCH' : 'POST';
-            const url = defaultRule.id ? `${API_BASE}/api/automation/rules/${defaultRule.id}` : `${API_BASE}/api/automation/rules`;
-            const res = await authFetch(url, { method, body: JSON.stringify({ ...defaultRule, name: 'Default Automation', keywords: defaultRule.keywords || [], media_id: null, media_ids: [] }) });
-            if (res.ok) { const data = await res.json(); setDefaultRule(data.rule); notify('success', 'Saved successfully!'); await refreshRules(); }
-            else { const err = await res.json(); notify('error', err.error || 'Save failed'); }
-        } catch { notify('error', 'Network error'); } finally { setSaving(false); }
+            const payload = { ...defaultRule, name: 'Default Automation', keywords: defaultRule.keywords || [], media_id: null, media_ids: [] };
+            const { data } = defaultRule.id
+                ? await automationApi.updateRule(defaultRule.id, payload)
+                : await automationApi.createRule(payload);
+            setDefaultRule(data.rule);
+            notify('success', 'Saved successfully!');
+            await refreshRules();
+        } catch (error: any) {
+            notify('error', error.response?.data?.error || error.message || 'Save failed');
+        } finally { setSaving(false); }
     };
 
     const createOverride = async () => {
@@ -250,29 +211,22 @@ export default function AutomationPage() {
         setSaving(true);
         try {
             console.log('🔧 Creating override:', newRule);
-            const res = await authFetch(`${API_BASE}/api/automation/rules`, { method: 'POST', body: JSON.stringify(newRule) });
-            const data = await res.json();
+            const { data } = await automationApi.createRule(newRule);
             console.log('📥 Create response:', data);
-            if (res.ok) { 
-                notify('success', 'Override created!'); 
-                setShowCreateOverride(false); 
-                setNewRule({ name: '', keywords: [], comment_reply: '', dm_reply: '', send_dm: true, is_active: true, media_id: null, media_ids: [] }); 
-                await refreshRules();
-            }
-            else {
-                console.error('❌ Create failed:', data);
-                notify('error', data.error || 'Failed to create');
-            }
+            notify('success', 'Override created!');
+            setShowCreateOverride(false);
+            setNewRule({ name: '', keywords: [], comment_reply: '', dm_reply: '', send_dm: true, is_active: true, media_id: null, media_ids: [] });
+            await refreshRules();
         } catch (err) { 
             console.error('❌ Network error:', err);
-            notify('error', 'Network error'); 
+            notify('error', (err as any)?.response?.data?.error || (err as Error)?.message || 'Network error'); 
         } finally { setSaving(false); }
     };
 
     const deleteRule = async (id: string) => {
         if (!confirm('Delete this override?')) return;
         try {
-            await authFetch(`${API_BASE}/api/automation/rules/${id}`, { method: 'DELETE' });
+            await automationApi.deleteRule(id);
             await refreshRules();
         } catch { }
     };
@@ -284,19 +238,13 @@ export default function AutomationPage() {
         if (!editingRule.comment_reply.trim()) return notify('error', 'Enter a reply');
         setSaving(true);
         try {
-            const res = await authFetch(`${API_BASE}/api/automation/rules/${editingRule.id}`, {
-                method: 'PATCH',
-                body: JSON.stringify(editingRule)
-            });
-            const data = await res.json();
-            if (res.ok) {
-                notify('success', 'Rule updated!');
-                setEditingRule(null);
-                await refreshRules();
-            } else {
-                notify('error', data.error || 'Update failed');
-            }
-        } catch { notify('error', 'Network error'); } finally { setSaving(false); }
+            await automationApi.updateRule(editingRule.id!, editingRule);
+            notify('success', 'Rule updated!');
+            setEditingRule(null);
+            await refreshRules();
+        } catch (error: any) {
+            notify('error', error.response?.data?.error || error.message || 'Update failed');
+        } finally { setSaving(false); }
     };
 
     const editTogglePost = (id: string) => {
@@ -310,18 +258,10 @@ export default function AutomationPage() {
             // Optimistic update
             setRules(rules.map(r => r.id === rule.id ? { ...r, is_active: !r.is_active } : r));
             
-            const res = await authFetch(`${API_BASE}/api/automation/rules/${rule.id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ is_active: !rule.is_active })
-            });
-            if (!res.ok) {
-                notify('error', 'Failed to update rule');
-                await rulesQuery.refetch(); // Rollback
-            } else {
-                await queryClient.invalidateQueries({ queryKey: AUTOMATION_STATS_QUERY_KEY });
-            }
+            await automationApi.updateRule(rule.id!, { is_active: !rule.is_active });
+            await queryClient.invalidateQueries({ queryKey: AUTOMATION_STATS_QUERY_KEY });
         } catch { 
-            notify('error', 'Network error'); 
+            notify('error', 'Failed to update rule'); 
             await rulesQuery.refetch(); // Rollback
         }
     };

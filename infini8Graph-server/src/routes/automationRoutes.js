@@ -184,7 +184,7 @@ router.get('/activity', authenticate, async (req, res) => {
             return res.status(400).json({ success: false, error: 'No active account selected' });
         }
 
-        const activity = autoReplyService.getRecentActivity(activeAccountId, 20);
+        const activity = await autoReplyService.getRecentActivity(activeAccountId, 20);
         res.json({ success: true, activity });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

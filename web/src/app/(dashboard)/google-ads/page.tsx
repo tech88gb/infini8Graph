@@ -1132,11 +1132,17 @@ export default function GoogleAdsPage() {
         mutationFn: async (id: string) => {
             await googleAdsApi.updateAccount({ customerId: id });
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['google-status'] });
-            queryClient.invalidateQueries({ queryKey: ['google-accounts'] });
-            queryClient.invalidateQueries({ queryKey: ['google-perf'] });
-            window.location.reload(); // Refresh to ensure all tab queries pick up new ID
+        onSuccess: async () => {
+            const isGoogleQuery = (queryKey: readonly unknown[]) =>
+                typeof queryKey[0] === 'string' && queryKey[0].startsWith('google-');
+
+            await queryClient.invalidateQueries({
+                predicate: (query) => isGoogleQuery(query.queryKey),
+            });
+            await queryClient.refetchQueries({
+                predicate: (query) => isGoogleQuery(query.queryKey),
+                type: 'active',
+            });
         }
     });
 

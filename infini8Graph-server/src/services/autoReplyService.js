@@ -1,6 +1,8 @@
 import axios from 'axios';
+import crypto from 'crypto';
 import supabase from '../config/database.js';
 import { decrypt } from '../utils/encryption.js';
+import { deleteRuntimeCache, getRuntimeCache, setRuntimeCache } from './runtimeStateService.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -14,13 +16,7 @@ const REPLY_COOLDOWN_SECONDS = 30;
 
 // 24-hour messaging window (in milliseconds)
 const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-// In-memory cooldown tracker (for demo - use Redis in production)
-const replyCooldowns = new Map();
-
-// In-memory activity log for API traces (Live Console)
-const recentActivity = [];
-const MAX_ACTIVITY_LOGS = 50;
+const COOLDOWN_CACHE_PREFIX = 'autoreply:cooldown:';
 
 /**
  * Auto-Reply Service
@@ -30,9 +26,9 @@ class AutoReplyService {
     /**
      * Store an activity log entry for the Live Console
      */
-    addActivityLog(instagramAccountId, action, detail, extra = {}) {
+    async addActivityLog(instagramAccountId, action, detail, extra = {}) {
         const entry = {
-            id: Math.random().toString(36).substring(2, 11),
+            id: crypto.randomUUID(),
             instagramAccountId,
             action,
             detail,
@@ -40,43 +36,79 @@ class AutoReplyService {
             ...extra
         };
 
-        // Update stats
         if (instagramAccountId) {
-            if (!this.stats.has(instagramAccountId)) {
-                this.stats.set(instagramAccountId, { comments: 0, dms: 0, errors: 0 });
-            }
-            const s = this.stats.get(instagramAccountId);
-            if (action === 'WEBHOOK RECEIVED' && (extra.commentId || detail.toLowerCase().includes('comment'))) {
-                s.comments++;
-            } else if (action === 'API RESPONSE' && extra.type === 'dm') {
-                s.dms++;
-            } else if (action === 'API ERROR') {
-                s.errors++;
-            }
-        }
+            try {
+                const { error: insertError } = await supabase
+                    .from('auto_reply_activity_logs')
+                    .insert({
+                        id: entry.id,
+                        instagram_account_id: instagramAccountId,
+                        action,
+                        detail,
+                        extra,
+                        created_at: entry.timestamp,
+                    });
 
-        recentActivity.unshift(entry);
+                if (insertError) {
+                    throw insertError;
+                }
 
-        // Keep only the most recent logs
-        if (recentActivity.length > MAX_ACTIVITY_LOGS) {
-            recentActivity.pop();
+                const deltas = this.getStatsDeltas(action, detail, extra);
+                if (deltas.comments || deltas.dms || deltas.errors) {
+                    const { error: statsError } = await supabase.rpc('increment_auto_reply_runtime_stats', {
+                        target_account_id: instagramAccountId,
+                        comments_delta: deltas.comments,
+                        dms_delta: deltas.dms,
+                        errors_delta: deltas.errors,
+                    });
+
+                    if (statsError) {
+                        throw statsError;
+                    }
+                }
+            } catch (error) {
+                console.error(`[ACTIVITY] Failed to persist runtime state: ${error.message}`);
+            }
         }
 
         console.log(`[ACTIVITY] ${action}: ${detail}`);
         return entry;
     }
 
+    getStatsDeltas(action, detail, extra = {}) {
+        return {
+            comments: action === 'WEBHOOK RECEIVED' && (extra.commentId || detail.toLowerCase().includes('comment')) ? 1 : 0,
+            dms: action === 'API RESPONSE' && extra.type === 'dm' ? 1 : 0,
+            errors: action === 'API ERROR' ? 1 : 0,
+        };
+    }
+
     /**
      * Get recent activity for a specific account
      */
-    getRecentActivity(instagramAccountId, limit = 10) {
-        return recentActivity
-            .filter(a => a.instagramAccountId === instagramAccountId)
-            .slice(0, limit);
+    async getRecentActivity(instagramAccountId, limit = 10) {
+        const { data, error } = await supabase
+            .from('auto_reply_activity_logs')
+            .select('id, instagram_account_id, action, detail, extra, created_at')
+            .eq('instagram_account_id', instagramAccountId)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error || !data) {
+            return [];
+        }
+
+        return data.map((row) => ({
+            id: row.id,
+            instagramAccountId: row.instagram_account_id,
+            action: row.action,
+            detail: row.detail,
+            timestamp: row.created_at,
+            ...(row.extra || {}),
+        }));
     }
 
     constructor() {
-        this.stats = new Map(); // Map<instagramAccountId, { comments: 0, dms: 0, errors: 0 }>
         // Define auto-reply rules (can be moved to database later)
         this.messageRules = [
             {
@@ -293,12 +325,11 @@ class AutoReplyService {
     /**
      * Check if we should reply (cooldown check)
      */
-    shouldReply(senderId, type = 'message') {
-        const key = `${type}:${senderId}`;
-        const lastReply = replyCooldowns.get(key);
-        const now = Date.now();
+    async shouldReply(senderId, type = 'message') {
+        const key = `${COOLDOWN_CACHE_PREFIX}${type}:${senderId}`;
+        const lastReply = await getRuntimeCache(key);
 
-        if (lastReply && (now - lastReply) < (REPLY_COOLDOWN_SECONDS * 1000)) {
+        if (lastReply?.blockedUntil && new Date(lastReply.blockedUntil).getTime() > Date.now()) {
             console.log(`⏳ Cooldown active for ${senderId}, skipping reply`);
             return false;
         }
@@ -309,9 +340,19 @@ class AutoReplyService {
     /**
      * Mark that we replied (set cooldown)
      */
-    markReplied(senderId, type = 'message') {
-        const key = `${type}:${senderId}`;
-        replyCooldowns.set(key, Date.now());
+    async markReplied(senderId, type = 'message') {
+        const key = `${COOLDOWN_CACHE_PREFIX}${type}:${senderId}`;
+        const blockedUntil = new Date(Date.now() + (REPLY_COOLDOWN_SECONDS * 1000)).toISOString();
+        await setRuntimeCache(key, { blockedUntil }, REPLY_COOLDOWN_SECONDS);
+    }
+
+    async clearReplyCooldown(senderId, type = 'message') {
+        const key = `${COOLDOWN_CACHE_PREFIX}${type}:${senderId}`;
+        try {
+            await deleteRuntimeCache(key);
+        } catch {
+            // Ignore cache cleanup issues.
+        }
     }
 
     /**
@@ -361,7 +402,7 @@ class AutoReplyService {
             const tokenData = await this.getAccessTokenByInstagramId(recipientId);
             const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
 
-            this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
+            await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
                 senderId, recipientId, text: message.text
             });
 
@@ -373,7 +414,7 @@ class AutoReplyService {
 
             if (!tokenData) {
                 console.log(`   │  ❌ No valid token for account ${recipientId}`);
-                this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
+                await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
                 console.log(`   └─ END`);
                 return;
             }
@@ -381,7 +422,7 @@ class AutoReplyService {
             console.log(`   │  Account      : @${tokenData.username}`);
             console.log(`   │  Page ID      : ${tokenData.facebookPageId}`);
 
-            this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
+            await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
                 pageId: tokenData.facebookPageId, username: tokenData.username
             });
 
@@ -402,7 +443,7 @@ class AutoReplyService {
             const rule = this.findMatchingRule(message.text, this.messageRules);
             if (!rule) {
                 console.log(`   │  📭 No matching rule found`);
-                this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
+                await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
                 console.log(`   └─ END`);
                 return;
             }
@@ -410,12 +451,12 @@ class AutoReplyService {
             console.log(`   │  ✅ Rule matched: "${rule.name || 'default'}"`);
             console.log(`   │  Reply text   : "${rule.reply.substring(0, 60)}..."`);
 
-            this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
+            await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
                 replyText: rule.reply, ruleName: rule.name
             });
 
             await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.accessToken, null, activeId);
-            this.markReplied(senderId, 'message');
+            await this.markReplied(senderId, 'message');
 
             console.log(`   │  ✅ DM reply sent successfully`);
             console.log(`   └─ END`);
@@ -442,7 +483,7 @@ class AutoReplyService {
                 ? { comment_id: commentId }
                 : { id: recipientIGSID };
 
-            this.addActivityLog(instagramAccountId, 'API REQUEST', `POST /${facebookPageId}/messages`, {
+            await this.addActivityLog(instagramAccountId, 'API REQUEST', `POST /${facebookPageId}/messages`, {
                 endpoint: `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
                 payload: { recipient, message: { text } }
             });
@@ -469,7 +510,7 @@ class AutoReplyService {
             console.log(`   │     Recipient ID : ${response.data?.recipient_id || 'N/A'}`);
             console.log(`   │     Message ID   : ${response.data?.message_id || 'N/A'}`);
 
-            this.addActivityLog(instagramAccountId, 'API RESPONSE', 'DM sent successfully via Instagram API', {
+            await this.addActivityLog(instagramAccountId, 'API RESPONSE', 'DM sent successfully via Instagram API', {
                 recipientIGSID, response: response.data, httpStatus: 200, type: 'dm'
             });
 
@@ -480,7 +521,7 @@ class AutoReplyService {
             console.error(`   │     Error Code  : ${metaError?.code || 'N/A'}`);
             console.error(`   │     HTTP Status : ${error.response?.status || 'N/A'}`);
 
-            this.addActivityLog(instagramAccountId, 'API ERROR', metaError?.message || error.message, {
+            await this.addActivityLog(instagramAccountId, 'API ERROR', metaError?.message || error.message, {
                 recipientIGSID, httpStatus: error.response?.status,
                 errorType: metaError?.type, errorCode: metaError?.code, type: 'dm'
             });
@@ -506,7 +547,7 @@ class AutoReplyService {
                 const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(instagramAccountId);
                 const activeId = tokenData ? tokenData.instagramAccountId : instagramAccountId;
 
-                this.addActivityLog(activeId, 'WEBHOOK RECEIVED', `Received comment from @${from?.username}`, {
+                await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', `Received comment from @${from?.username}`, {
                     commentId, text, mediaId: media?.id, username: from?.username
                 });
 
@@ -519,7 +560,7 @@ class AutoReplyService {
 
                 if (!tokenData) {
                     console.log(`   │  ❌ No valid token for account`);
-                    this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
+                    await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
                     console.log(`   └─ END`);
                     continue;
                 }
@@ -527,7 +568,7 @@ class AutoReplyService {
                 console.log(`   │  Account      : @${tokenData.username}`);
                 console.log(`   │  Page ID      : ${tokenData.facebookPageId}`);
 
-                this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
+                await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
                     pageId: tokenData.facebookPageId, username: tokenData.username
                 });
 
@@ -551,14 +592,14 @@ class AutoReplyService {
                 const rule = this.findMatchingRule(text, rules);
                 if (!rule) {
                     console.log(`   │  📭 No matching rule found`);
-                    this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${text}"`);
+                    await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${text}"`);
                     console.log(`   └─ END`);
                     continue;
                 }
 
                 console.log(`   │  ✅ Rule matched: "${rule.name || 'default'}"`);
 
-                this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
+                await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
                     commentReply: rule.reply, dmReply: rule.dmReply, sendDM: rule.sendDM
                 });
 
@@ -567,7 +608,7 @@ class AutoReplyService {
                 console.log(`   │     Comment ID : ${commentId}`);
                 console.log(`   │     Reply      : "${rule.reply.substring(0, 80)}${rule.reply.length > 80 ? '...' : ''}"`);
                 await this.sendCommentReply(commentId, rule.reply, tokenData.accessToken);
-                this.markReplied(from?.id, 'comment');
+                await this.markReplied(from?.id, 'comment');
                 console.log(`   │     ✅ Comment reply sent`);
 
                 // Send DM if configured
@@ -583,10 +624,10 @@ class AutoReplyService {
                             console.log(`   │     ✅ DM sent to @${from?.username}`);
                         } else if (!tokenData.pageToken) {
                             console.log(`   │     ⚠️  No Page Token — user needs to re-login`);
-                            this.addActivityLog(activeId, 'API ERROR', 'Missing Page Token for DM reply');
+                            await this.addActivityLog(activeId, 'API ERROR', 'Missing Page Token for DM reply');
                         } else {
                             console.log(`   │     ⚠️  No Facebook Page ID — user needs to re-login`);
-                            this.addActivityLog(activeId, 'API ERROR', 'Missing Facebook Page ID for DM reply');
+                            await this.addActivityLog(activeId, 'API ERROR', 'Missing Facebook Page ID for DM reply');
                         }
                     } catch (dmError) {
                         console.warn(`   │     ⚠️  DM failed: ${dmError.response?.data?.error?.message || dmError.message}`);
@@ -654,8 +695,33 @@ class AutoReplyService {
 
         if (!instagramAccountId) return defaultStats;
 
-        const s = this.stats.get(instagramAccountId) || { comments: 0, dms: 0, errors: 0 };
-        const recent = recentActivity.filter(a => a.instagramAccountId === instagramAccountId).length;
+        let runtimeStats = { comments: 0, dms: 0, errors: 0 };
+        let recent = 0;
+
+        try {
+            const { data: statsRow } = await supabase
+                .from('auto_reply_runtime_stats')
+                .select('comments, dms, errors')
+                .eq('instagram_account_id', instagramAccountId)
+                .maybeSingle();
+
+            if (statsRow) {
+                runtimeStats = {
+                    comments: Number(statsRow.comments || 0),
+                    dms: Number(statsRow.dms || 0),
+                    errors: Number(statsRow.errors || 0),
+                };
+            }
+
+            const { count } = await supabase
+                .from('auto_reply_activity_logs')
+                .select('*', { count: 'exact', head: true })
+                .eq('instagram_account_id', instagramAccountId);
+
+            recent = count || 0;
+        } catch (error) {
+            console.warn('Auto-reply runtime stats lookup failed:', error.message);
+        }
 
         // Try to get rules count from DB if possible
         let rulesCount = defaultStats.activeRules;
@@ -669,10 +735,10 @@ class AutoReplyService {
         } catch (e) { /* ignore */ }
 
         return {
-            totalRepliesSent: s.comments + s.dms,
-            messagingReplies: s.dms,
-            commentReplies: s.comments,
-            errors: s.errors,
+            totalRepliesSent: runtimeStats.comments + runtimeStats.dms,
+            messagingReplies: runtimeStats.dms,
+            commentReplies: runtimeStats.comments,
+            errors: runtimeStats.errors,
             activeRules: rulesCount,
             recentEvents: recent
         };

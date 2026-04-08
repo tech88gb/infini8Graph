@@ -1,5 +1,6 @@
 import { GoogleAdsApi } from 'google-ads-api';
 import { getGoogleTokensForUser, getConnectedGoogleAccount, updateConnectedAccount } from './googleAuthService.js';
+import { deleteRuntimeCacheByPrefix, getRuntimeCache, setRuntimeCache } from './runtimeStateService.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -30,11 +31,6 @@ export function buildClient(refreshToken, customerId, loginCustomerId) {
     };
 }
 
-/**
- * Memory cache to prevent Google Ads rate-limit hanging when the frontend
- * fires 4 simultaneous widget requests all calling listAccessibleCustomers.
- */
-const customerCache = new Map();
 const pendingPromises = new Map();
 
 /**
@@ -43,16 +39,21 @@ const pendingPromises = new Map();
  * calling campaigns+keywords+budget, and OverviewTab calling budget at the
  * same time) from hitting Google twice for the same data.
  */
-const resultCache = new Map();
+const GOOGLE_CACHE_TTL_SECONDS = 300;
+const GOOGLE_CUSTOMER_CACHE_PREFIX = 'googleads:customer:';
+const GOOGLE_RESULT_CACHE_PREFIX = 'googleads:result:';
 
-function getCachedResult(key) {
-    const entry = resultCache.get(key);
-    if (entry && Date.now() - entry.ts < 300000) return entry.data;
-    return null;
+async function getCachedResult(key) {
+    return getRuntimeCache(`${GOOGLE_RESULT_CACHE_PREFIX}${key}`);
 }
 
-function setCachedResult(key, data) {
-    resultCache.set(key, { data, ts: Date.now() });
+async function setCachedResult(key, data) {
+    return setRuntimeCache(`${GOOGLE_RESULT_CACHE_PREFIX}${key}`, data, GOOGLE_CACHE_TTL_SECONDS);
+}
+
+export async function invalidateUserGoogleAdsCache(userId) {
+    await deleteRuntimeCacheByPrefix(`${GOOGLE_RESULT_CACHE_PREFIX}${userId}:`);
+    await deleteRuntimeCacheByPrefix(`${GOOGLE_CUSTOMER_CACHE_PREFIX}${userId}`);
 }
 
 /**
@@ -60,20 +61,13 @@ function setCachedResult(key, data) {
  */
 export async function getCustomerId(userId) {
     const cacheKey = String(userId);
-    const now = Date.now();
-    const memCached = customerCache.get(cacheKey);
 
-    // 1. Check Memory Cache (30 minutes — survives most Railway restart intervals)
-    if (memCached && now - memCached.timestamp < 1800000) {
-        return memCached.data;
-    }
-
-    // 2. Check In-Flight Promise Cache (Deduplication)
+    // 1. Check In-Flight Promise Cache (Deduplication)
     if (pendingPromises.has(cacheKey)) {
         return pendingPromises.get(cacheKey);
     }
 
-    // 3. Resolve
+    // 2. Resolve
     const resolvePromise = (async () => {
         try {
             console.log(`📡 [GoogleAds] Resolving CID for user ${userId}...`);
@@ -85,19 +79,29 @@ export async function getCustomerId(userId) {
                 return null;
             }
 
+            const cachedCustomer = await getRuntimeCache(`${GOOGLE_CUSTOMER_CACHE_PREFIX}${userId}`);
+            if (cachedCustomer?.customerId) {
+                return {
+                    ...cachedCustomer,
+                    refreshToken: tokenData.refreshToken,
+                };
+            }
+
             // DB-level cache: customer_id stored after first discovery — instant lookup
             if (tokenData.storedCustomerId) {
                 console.log(`✅ [DB Cache] Using stored CID: ${tokenData.storedCustomerId}`);
-                const result = {
+                const customerSelection = {
                     customerId: String(tokenData.storedCustomerId),
                     loginCustomerId: tokenData.storedLoginCustomerId
                         ? String(tokenData.storedLoginCustomerId)
                         : String(tokenData.storedCustomerId),
                     allClientIds: tokenData.storedAllClientIds || [String(tokenData.storedCustomerId)],
+                };
+                await setRuntimeCache(`${GOOGLE_CUSTOMER_CACHE_PREFIX}${userId}`, customerSelection, 1800);
+                return {
+                    ...customerSelection,
                     refreshToken: tokenData.refreshToken,
                 };
-                customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
-                return result;
             }
 
             // PARALLEL DISCOVERY — only runs once (until persisted to DB)
@@ -157,7 +161,8 @@ export async function getCustomerId(userId) {
             if (discoveryResults.length > 0) {
                 const mccResult = discoveryResults.find(r => r.loginCustomerId !== r.customerId);
                 const primary = mccResult || discoveryResults[0];
-                const result = { ...primary, refreshToken: tokenData.refreshToken };
+                const customerSelection = { ...primary };
+                const result = { ...customerSelection, refreshToken: tokenData.refreshToken };
 
                 console.log(`💾 [DB Persist] Saving CID ${result.customerId} for user ${userId}`);
                 try {
@@ -167,7 +172,7 @@ export async function getCustomerId(userId) {
                     console.error(`❌ [DB Persist] FAILED for user ${userId}:`, persistErr);
                 }
 
-                customerCache.set(cacheKey, { data: result, timestamp: Date.now() });
+                await setRuntimeCache(`${GOOGLE_CUSTOMER_CACHE_PREFIX}${userId}`, customerSelection, 1800);
                 return result;
             }
 
@@ -201,7 +206,7 @@ function getDateRange(preset = '30d') {
 
 export async function getAdsPerformance(userId, preset = '30d') {
     const cacheKey = `${userId}:performance:${preset}`;
-    const cached = getCachedResult(cacheKey);
+    const cached = await getCachedResult(cacheKey);
     if (cached) { console.log(`⚡ [cache] performance:${preset}`); return cached; }
 
     try {
@@ -255,7 +260,7 @@ export async function getAdsPerformance(userId, preset = '30d') {
             },
             period: preset,
         };
-        setCachedResult(cacheKey, result);
+        await setCachedResult(cacheKey, result);
         return result;
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;
@@ -268,7 +273,7 @@ export async function getAdsPerformance(userId, preset = '30d') {
 
 export async function getCampaignBreakdown(userId, preset = '30d') {
     const cacheKey = `${userId}:campaigns:${preset}`;
-    const cached = getCachedResult(cacheKey);
+    const cached = await getCachedResult(cacheKey);
     if (cached) { console.log(`⚡ [cache] campaigns:${preset}`); return cached; }
 
     try {
@@ -342,7 +347,7 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
         }).sort((a, b) => b.spend - a.spend);
 
         const result = { connected: true, campaigns, period: preset };
-        setCachedResult(cacheKey, result);
+        await setCachedResult(cacheKey, result);
         return result;
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;
@@ -355,7 +360,7 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
 
 export async function getBudgetUtilization(userId) {
     const cacheKey = `${userId}:budget`;
-    const cached = getCachedResult(cacheKey);
+    const cached = await getCachedResult(cacheKey);
     if (cached) { console.log('⚡ [cache] budget'); return cached; }
 
     try {
@@ -401,7 +406,7 @@ export async function getBudgetUtilization(userId) {
           .sort((a, b) => b.utilization - a.utilization);
 
         const result = { connected: true, campaigns };
-        setCachedResult(cacheKey, result);
+        await setCachedResult(cacheKey, result);
         return result;
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;

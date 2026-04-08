@@ -21,6 +21,7 @@ import {
     getBiddingInsights,
     getGeoPerformance,
     getCustomerId,
+    invalidateUserGoogleAdsCache,
 } from '../services/googleAdsService.js';
 import dotenv from 'dotenv';
 
@@ -88,6 +89,7 @@ export async function disconnect(req, res) {
     try {
         const userId = req.user?.userId;
         await disconnectGoogleAccount(userId);
+        await invalidateUserGoogleAdsCache(userId);
         return res.json({ success: true, message: 'Google account disconnected successfully' });
     } catch (error) {
         console.error('Google disconnect error:', error.message);
@@ -274,6 +276,7 @@ export async function updateAccount(req, res) {
         const userId = req.user?.userId;
         const { customerId, loginCustomerId, allClientIds } = req.body;
         await updateConnectedAccount(userId, { customerId, loginCustomerId, allClientIds });
+        await invalidateUserGoogleAdsCache(userId);
         return res.json({ success: true });
     } catch (error) {
         return res.status(500).json({ success: false, error: error.message });

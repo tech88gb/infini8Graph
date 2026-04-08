@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import Cookies from 'js-cookie';
+import { useQueryClient } from '@tanstack/react-query';
 import { authApi } from './api';
 
 interface User {
@@ -33,16 +35,29 @@ interface AuthContextType {
     checkAuth: () => Promise<void>;
     switchAccount: (accountId: string) => Promise<boolean>;
     refreshAccounts: () => Promise<void>;
+    syncSession: (jwt?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+    const queryClient = useQueryClient();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
     const authChecked = useRef(false);
+
+    const persistAuthToken = useCallback((token: string) => {
+        Cookies.set('auth_token', token, { path: '/', sameSite: 'Lax' });
+        localStorage.setItem('auth_token', token);
+    }, []);
+
+    const clearSessionState = useCallback(() => {
+        setUser(null);
+        setAccounts([]);
+        setActiveAccountId(null);
+    }, []);
 
     const refreshAccounts = useCallback(async () => {
         try {
@@ -55,6 +70,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('Failed to fetch accounts:', err);
         }
     }, []);
+
+    const syncSession = useCallback(async (jwt?: string) => {
+        if (jwt) {
+            persistAuthToken(jwt);
+        }
+
+        try {
+            const response = await authApi.getMe();
+
+            if (response.data.success && response.data.user) {
+                const apiUser = response.data.user;
+                setUser({
+                    userId: apiUser.userId || apiUser.id,
+                    googleEmail: apiUser.googleEmail || null,
+                    metaConnected: apiUser.metaConnected === true,
+                    instagramUserId: apiUser.instagramUserId || null,
+                    username: apiUser.username || null
+                });
+                await refreshAccounts();
+            } else {
+                clearSessionState();
+            }
+        } catch (err) {
+            console.error('Session sync failed:', err);
+            clearSessionState();
+        }
+
+        await queryClient.invalidateQueries();
+        await queryClient.refetchQueries({ type: 'active' });
+    }, [clearSessionState, persistAuthToken, queryClient, refreshAccounts]);
 
     const checkAuth = async () => {
         // Check for token in URL (from OAuth redirect)
@@ -69,9 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (tokenFromUrl && !isCallbackPage) {
                 console.log('Got token from URL, saving...');
-                const Cookies = (await import('js-cookie')).default;
-                Cookies.set('auth_token', tokenFromUrl, { path: '/', sameSite: 'Lax' });
-                localStorage.setItem('auth_token', tokenFromUrl);
+                persistAuthToken(tokenFromUrl);
 
                 // Clean URL without refresh
                 window.history.replaceState({}, '', window.location.pathname);
@@ -105,11 +148,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Fetch accounts after successful auth
                 await refreshAccounts();
             } else {
-                setUser(null);
+                clearSessionState();
             }
         } catch (err) {
             console.error('Auth Check Failed:', err);
-            setUser(null);
+            clearSessionState();
         } finally {
             setLoading(false);
         }
@@ -147,10 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
             // Ignore logout errors
         }
-        setUser(null);
-        setAccounts([]);
-        setActiveAccountId(null);
+        clearSessionState();
         localStorage.removeItem('auth_token');
+        queryClient.clear();
         window.location.href = '/login';
     };
 
@@ -158,27 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             const response = await authApi.switchAccount(accountId);
             if (response.data.success) {
-                // Update token
-                const Cookies = (await import('js-cookie')).default;
-                Cookies.set('auth_token', response.data.jwt, { path: '/', sameSite: 'Lax' });
-                localStorage.setItem('auth_token', response.data.jwt);
-
-                // Update user context
-                setUser({
-                    userId: user?.userId || '',
-                    googleEmail: user?.googleEmail || null,
-                    metaConnected: true, // If they can switch, they are connected
-                    instagramUserId: response.data.account.instagramUserId || null,
-                    username: response.data.account.username
-                });
-
-                setActiveAccountId(accountId);
-
-                // Refresh accounts to update is_active flags
-                await refreshAccounts();
-
-                // Reload to refresh dashboard data with new account
-                window.location.reload();
+                await syncSession(response.data.jwt);
                 return true;
             }
             return false;
@@ -203,7 +225,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             logout,
             checkAuth,
             switchAccount,
-            refreshAccounts
+            refreshAccounts,
+            syncSession
         }}>
             {children}
         </AuthContext.Provider>

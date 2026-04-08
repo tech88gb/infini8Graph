@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { authApi } from '@/lib/api';
 import { User, Shield, Palette, LogOut, RefreshCw, Instagram } from 'lucide-react';
-import Cookies from 'js-cookie';
 
 interface ManagedAccount {
     id: string;
@@ -62,7 +61,7 @@ function Toggle({
 }
 
 export default function SettingsPage() {
-    const { user, logout, connectMeta, refreshAccounts } = useAuth();
+    const { user, logout, connectMeta, refreshAccounts, syncSession } = useAuth();
     const [isReconnecting, setIsReconnecting] = useState(false);
     const [accountsLoading, setAccountsLoading] = useState(true);
     const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
@@ -106,16 +105,11 @@ export default function SettingsPage() {
             }
 
             if (response.data.jwt) {
-                Cookies.set('auth_token', response.data.jwt, { path: '/', sameSite: 'Lax' });
-                localStorage.setItem('auth_token', response.data.jwt);
+                await syncSession(response.data.jwt);
             }
 
             await refreshAccounts();
             await loadAccounts();
-
-            if (account.is_active || response.data.activeAccountId !== account.id) {
-                window.location.reload();
-            }
         } catch (error: any) {
             console.error('Account toggle error:', error);
             alert(error.message || 'Failed to update this account.');

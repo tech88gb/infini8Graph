@@ -80,10 +80,11 @@ export const instagramApi = (() => {
         getBestTime: (startDate?: string, endDate?: string) => api.get(`/instagram/best-time${buildParams(startDate, endDate)}`),
         getHashtags: (startDate?: string, endDate?: string) => api.get(`/instagram/hashtags${buildParams(startDate, endDate)}`),
         getReels: (startDate?: string, endDate?: string) => api.get(`/instagram/reels${buildParams(startDate, endDate)}`),
-        getPosts: (limit = 50, startDate?: string, endDate?: string) => {
+        getPosts: (limit = 50, startDate?: string, endDate?: string, includeCollabs = false) => {
             const p = new URLSearchParams({ limit: String(limit) });
             if (startDate) p.append('startDate', startDate);
             if (endDate) p.append('endDate', endDate);
+            if (includeCollabs) p.append('includeCollabs', 'true');
             return api.get(`/instagram/posts?${p.toString()}`);
         },
         exportData: (
@@ -103,6 +104,15 @@ export const instagramApi = (() => {
         getUnifiedOverview: (startDate?: string, endDate?: string) => api.get(`/instagram/unified-overview${buildParams(startDate, endDate)}`)
     };
 })();
+
+export const automationApi = {
+    getRules: () => api.get('/automation/rules'),
+    createRule: (payload: unknown) => api.post('/automation/rules', payload),
+    updateRule: (ruleId: string, payload: unknown) => api.patch(`/automation/rules/${ruleId}`, payload),
+    deleteRule: (ruleId: string) => api.delete(`/automation/rules/${ruleId}`),
+    getStats: () => api.get('/automation/stats'),
+    getActivity: () => api.get('/automation/activity'),
+};
 
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
