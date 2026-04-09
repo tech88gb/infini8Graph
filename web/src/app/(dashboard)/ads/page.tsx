@@ -65,7 +65,12 @@ type CompetitorCandidate = {
     category?: string | null;
     website?: string | null;
     locationHint?: string | null;
+    instagramHandle?: string | null;
     searchTerms: string;
+    source?: string;
+    score?: number;
+    archiveHits?: number;
+    variantHits?: number;
 };
 
 type SavedCompetitor = CompetitorCandidate & {
@@ -427,10 +432,10 @@ export default function AdsPage() {
     const activeCompetitor = savedCompetitors.find((competitor) => competitor.id === activeCompetitorId) || null;
 
     const { data: competitorSearchData, isLoading: competitorSearchLoading } = useQuery({
-        queryKey: ['meta-competitor-search', submittedCompetitorQuery],
+        queryKey: ['meta-competitor-search', submittedCompetitorQuery, competitorCountry],
         queryFn: async () => {
             if (!submittedCompetitorQuery) return null;
-            const res = await adsApi.searchCompetitors(submittedCompetitorQuery);
+            const res = await adsApi.searchCompetitors(submittedCompetitorQuery, competitorCountry);
             return res.data;
         },
         enabled: activeTab === 'competitors' && submittedCompetitorQuery.trim().length >= 2,
@@ -2693,7 +2698,24 @@ export default function AdsPage() {
                                                 <div style={{ minWidth: 0 }}>
                                                     <div style={{ fontWeight: 600 }}>{candidate.name}</div>
                                                     <div className="text-muted" style={{ fontSize: 12 }}>
-                                                        {[candidate.category, candidate.locationHint, candidate.website].filter(Boolean).join(' • ') || 'Public page match'}
+                                                        {[candidate.category, candidate.locationHint, candidate.website].filter(Boolean).join(' • ') || 'Public brand match'}
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                                                        {candidate.instagramHandle && (
+                                                            <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', fontSize: 11, fontWeight: 700 }}>
+                                                                @{candidate.instagramHandle}
+                                                            </span>
+                                                        )}
+                                                        {candidate.source && (
+                                                            <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', fontSize: 11, fontWeight: 700 }}>
+                                                                {candidate.source === 'page+ads' ? 'Facebook + public ads' : candidate.source === 'ads' ? 'Public ads match' : 'Facebook page match'}
+                                                            </span>
+                                                        )}
+                                                        {typeof candidate.archiveHits === 'number' && candidate.archiveHits > 0 && (
+                                                            <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontSize: 11, fontWeight: 700 }}>
+                                                                {candidate.archiveHits} ad hits
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     {candidate.pageUrl && (
                                                         <a href={candidate.pageUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 4 }}>
@@ -2708,7 +2730,9 @@ export default function AdsPage() {
                                         </div>
                                     ))
                                 ) : (
-                                    <p className="text-muted" style={{ fontSize: 13 }}>No page matches came back yet, so the brand-term fallback above is the safest starting point.</p>
+                                    <p className="text-muted" style={{ fontSize: 13 }}>
+                                        No strong page matches came back yet. You can still analyze the brand term directly, but the resolver is now also checking Facebook page results plus public ads-based matches for the selected country.
+                                    </p>
                                 )}
                             </div>
                         ) : (

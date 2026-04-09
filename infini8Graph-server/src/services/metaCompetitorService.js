@@ -72,6 +72,25 @@ const REGIONAL_TERMS = {
     ]
 };
 
+const BRAND_SUFFIX_PATTERNS = [
+    'wear',
+    'store',
+    'stores',
+    'fashion',
+    'fashions',
+    'style',
+    'styles',
+    'boutique',
+    'clothing',
+    'apparel',
+    'collection',
+    'collections',
+    'sarees',
+    'saree',
+    'ethnic',
+    'closet'
+];
+
 function asArray(value) {
     if (Array.isArray(value)) return value.filter(Boolean);
     if (typeof value === 'string' && value.trim()) return [value.trim()];
@@ -94,6 +113,41 @@ function truncate(value, length = 180) {
 
 function unique(values) {
     return [...new Set(values.filter(Boolean))];
+}
+
+function toTitleCase(value) {
+    return value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
+function buildSearchVariants(query) {
+    const original = String(query || '').trim();
+    const normalized = normalizeText(original);
+    const noSpaces = normalized.replace(/\s+/g, '');
+    const variants = new Set([original, normalized, noSpaces, toTitleCase(normalized)]);
+
+    for (const suffix of BRAND_SUFFIX_PATTERNS) {
+        const condensedSuffix = new RegExp(`([a-z])(${suffix})$`, 'i');
+        if (condensedSuffix.test(original)) {
+            variants.add(original.replace(condensedSuffix, `$1 ${suffix}`));
+        }
+
+        if (noSpaces.endsWith(suffix)) {
+            const base = noSpaces.slice(0, noSpaces.length - suffix.length).trim();
+            if (base.length >= 3) {
+                variants.add(`${base} ${suffix}`);
+                variants.add(toTitleCase(`${base} ${suffix}`));
+            }
+        }
+    }
+
+    if (normalized.includes(' ')) {
+        variants.add(normalized.replace(/\s+/g, ''));
+    }
+
+    return [...variants]
+        .map((value) => value.trim())
+        .filter((value, index, arr) => value.length >= 2 && arr.indexOf(value) === index)
+        .slice(0, 8);
 }
 
 function extractKeywords(text, limit = 4) {
@@ -352,6 +406,7 @@ function mapSearchCandidate(candidate, query) {
         category: candidate.category || null,
         website: candidate.website || null,
         locationHint: locationHint || null,
+        instagramHandle: candidate.instagram_business_account?.username || null,
         searchTerms: candidate.name || query
     };
 }
@@ -374,20 +429,191 @@ async function fetchAdsArchive(accessToken, params) {
     }
 }
 
-export async function searchCompetitorPages({ accessToken, query }) {
-    const response = await axios.get(`${GRAPH_API_BASE}/search`, {
-        params: {
-            access_token: accessToken,
-            type: 'page',
-            q: query,
-            fields: 'id,name,link,category,website,location,picture{url}',
-            limit: 8
+async function searchPagesByVariant(accessToken, variant) {
+    try {
+        const response = await axios.get(`${GRAPH_API_BASE}/search`, {
+            params: {
+                access_token: accessToken,
+                type: 'page',
+                q: variant,
+                fields: 'id,name,link,category,website,location,picture{url},instagram_business_account{id,username}',
+                limit: 8
+            }
+        });
+
+        return response.data.data || [];
+    } catch {
+        const fallback = await axios.get(`${GRAPH_API_BASE}/search`, {
+            params: {
+                access_token: accessToken,
+                type: 'page',
+                q: variant,
+                fields: 'id,name,link,category,website,location,picture{url}',
+                limit: 8
+            }
+        });
+
+        return fallback.data.data || [];
+    }
+}
+
+async function searchAdsArchiveCandidates(accessToken, variant, country) {
+    const response = await fetchAdsArchive(accessToken, {
+        access_token: accessToken,
+        ad_type: 'ALL',
+        ad_active_status: 'ALL',
+        ad_reached_countries: JSON.stringify([country]),
+        search_terms: variant,
+        fields: 'page_id,page_name,ad_snapshot_url,publisher_platforms',
+        limit: 20
+    });
+
+    return response.data.data || [];
+}
+
+async function enrichPageCandidate(accessToken, pageId, fallbackName, query) {
+    try {
+        const response = await axios.get(`${GRAPH_API_BASE}/${pageId}`, {
+            params: {
+                access_token: accessToken,
+                fields: 'id,name,link,category,website,location,picture{url},instagram_business_account{id,username}'
+            }
+        });
+
+        return mapSearchCandidate(response.data, query);
+    } catch {
+        try {
+            const fallback = await axios.get(`${GRAPH_API_BASE}/${pageId}`, {
+                params: {
+                    access_token: accessToken,
+                    fields: 'id,name,link,category,website,location,picture{url}'
+                }
+            });
+
+            return mapSearchCandidate(fallback.data, query);
+        } catch {
+            return {
+                pageId: String(pageId),
+                name: fallbackName || query,
+                pageUrl: null,
+                pictureUrl: null,
+                category: null,
+                website: null,
+                locationHint: null,
+                instagramHandle: null,
+                searchTerms: fallbackName || query
+            };
+        }
+    }
+}
+
+function computeCandidateScore(candidate, query, variantHits = 0, archiveHits = 0) {
+    const normalizedQuery = normalizeText(query);
+    const normalizedName = normalizeText(candidate.name);
+    const condensedQuery = normalizedQuery.replace(/\s+/g, '');
+    const condensedName = normalizedName.replace(/\s+/g, '');
+
+    let score = 0;
+    if (normalizedName === normalizedQuery || condensedName === condensedQuery) score += 120;
+    if (normalizedName.startsWith(normalizedQuery) || condensedName.startsWith(condensedQuery)) score += 80;
+    if (normalizedName.includes(normalizedQuery) || condensedName.includes(condensedQuery)) score += 55;
+    if (candidate.instagramHandle && normalizeText(candidate.instagramHandle).includes(condensedQuery)) score += 35;
+    if (candidate.website && normalizeText(candidate.website).includes(condensedQuery)) score += 25;
+    if (candidate.category) score += 5;
+    if (candidate.locationHint) score += 5;
+    score += Math.min(variantHits * 14, 42);
+    score += Math.min(archiveHits * 8, 40);
+
+    return score;
+}
+
+export async function searchCompetitorPages({ accessToken, query, country = 'IN' }) {
+    const variants = buildSearchVariants(query);
+    const pageHits = new Map();
+    const archiveHits = new Map();
+
+    const results = await Promise.allSettled([
+        ...variants.map((variant) => searchPagesByVariant(accessToken, variant)),
+        ...variants.map((variant) => searchAdsArchiveCandidates(accessToken, variant, country))
+    ]);
+
+    const pageResults = results.slice(0, variants.length);
+    const archiveResults = results.slice(variants.length);
+
+    pageResults.forEach((result, index) => {
+        if (result.status !== 'fulfilled') return;
+        const variant = variants[index];
+        for (const candidate of result.value) {
+            const pageId = candidate.id ? String(candidate.id) : `name:${normalizeText(candidate.name || variant)}`;
+            const existing = pageHits.get(pageId);
+            pageHits.set(pageId, {
+                raw: candidate,
+                variantHits: (existing?.variantHits || 0) + 1
+            });
         }
     });
 
-    return (response.data.data || [])
-        .map((candidate) => mapSearchCandidate(candidate, query))
-        .filter((candidate) => candidate.pageId || candidate.name);
+    archiveResults.forEach((result) => {
+        if (result.status !== 'fulfilled') return;
+        for (const ad of result.value) {
+            const key = ad.page_id ? String(ad.page_id) : `name:${normalizeText(ad.page_name || query)}`;
+            const existing = archiveHits.get(key);
+            archiveHits.set(key, {
+                pageId: ad.page_id ? String(ad.page_id) : null,
+                name: ad.page_name || query,
+                archiveHits: (existing?.archiveHits || 0) + 1,
+                publisherPlatforms: unique([...(existing?.publisherPlatforms || []), ...asArray(ad.publisher_platforms)])
+            });
+        }
+    });
+
+    const archiveOnlyCandidates = [...archiveHits.values()].filter((candidate) => candidate.pageId && !pageHits.has(candidate.pageId));
+    const enrichedArchiveCandidates = await Promise.all(
+        archiveOnlyCandidates.slice(0, 8).map((candidate) =>
+            enrichPageCandidate(accessToken, candidate.pageId, candidate.name, query)
+        )
+    );
+
+    const combined = [];
+
+    for (const [key, value] of pageHits.entries()) {
+        const mapped = mapSearchCandidate(value.raw, query);
+        const archiveMeta = archiveHits.get(key) || archiveHits.get(mapped.pageId || '');
+        combined.push({
+            ...mapped,
+            source: archiveMeta ? 'page+ads' : 'page',
+            variantHits: value.variantHits || 1,
+            archiveHits: archiveMeta?.archiveHits || 0
+        });
+    }
+
+    for (const candidate of enrichedArchiveCandidates) {
+        const archiveMeta = archiveHits.get(candidate.pageId || '');
+        combined.push({
+            ...candidate,
+            source: 'ads',
+            variantHits: 0,
+            archiveHits: archiveMeta?.archiveHits || 1
+        });
+    }
+
+    const deduped = combined.reduce((acc, candidate) => {
+        const key = candidate.pageId || `name:${normalizeText(candidate.name)}`;
+        const existing = acc.get(key);
+        if (!existing || computeCandidateScore(candidate, query, candidate.variantHits, candidate.archiveHits) > computeCandidateScore(existing, query, existing.variantHits, existing.archiveHits)) {
+            acc.set(key, candidate);
+        }
+        return acc;
+    }, new Map());
+
+    return [...deduped.values()]
+        .map((candidate) => ({
+            ...candidate,
+            score: computeCandidateScore(candidate, query, candidate.variantHits, candidate.archiveHits),
+            searchTerms: candidate.searchTerms || candidate.name || query
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
 }
 
 export async function getCompetitorIntelligence({ accessToken, competitor }) {

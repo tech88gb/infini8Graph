@@ -115,8 +115,8 @@ export const webhookApi = {
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
     getAdAccounts: () => api.get('/ads/accounts'),
-    searchCompetitors: (query: string) =>
-        api.get(`/ads/competitors/search?q=${encodeURIComponent(query)}`),
+    searchCompetitors: (query: string, country = 'IN') =>
+        api.get(`/ads/competitors/search?q=${encodeURIComponent(query)}&country=${encodeURIComponent(country)}`),
     getCompetitorIntelligence: (params: {
         searchTerms?: string;
         pageId?: string;

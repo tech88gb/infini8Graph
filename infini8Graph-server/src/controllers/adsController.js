@@ -75,6 +75,7 @@ async function fetchInsightsBreakdown(accountId, accessToken, datePreset, breakd
 export async function searchCompetitorPages(req, res) {
     try {
         const query = String(req.query.q || '').trim();
+        const country = String(req.query.country || 'IN').trim().toUpperCase();
         if (query.length < 2) {
             return res.status(400).json({ success: false, error: 'Query must be at least 2 characters long' });
         }
@@ -84,15 +85,16 @@ export async function searchCompetitorPages(req, res) {
             return res.status(401).json({ success: false, error: 'Access token not found' });
         }
 
-        const cacheKey = buildMetaCacheKey('meta-competitor-search', [req.user.userId, query.toLowerCase()]);
+        const cacheKey = buildMetaCacheKey('meta-competitor-search', [req.user.userId, query.toLowerCase(), country]);
         const candidates = await withMetaCache(cacheKey, META_CACHE_TTL.competitors, async () =>
-            metaCompetitorService.searchCompetitorPages({ accessToken, query })
+            metaCompetitorService.searchCompetitorPages({ accessToken, query, country })
         );
 
         res.json({
             success: true,
             data: {
                 query,
+                country,
                 candidates
             }
         });
