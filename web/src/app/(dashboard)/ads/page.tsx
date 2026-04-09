@@ -61,6 +61,7 @@ type CompetitorCandidate = {
     pageId?: string | null;
     name: string;
     pageUrl?: string | null;
+    instagramUrl?: string | null;
     pictureUrl?: string | null;
     category?: string | null;
     website?: string | null;
@@ -2708,7 +2709,17 @@ export default function AdsPage() {
                                                         )}
                                                         {candidate.source && (
                                                             <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', fontSize: 11, fontWeight: 700 }}>
-                                                                {candidate.source === 'page+ads' ? 'Facebook + public ads' : candidate.source === 'ads' ? 'Public ads match' : 'Facebook page match'}
+                                                                {candidate.source.includes('cache')
+                                                                    ? 'Saved competitor cache'
+                                                                    : candidate.source.includes('web-facebook') || candidate.source.includes('meta-page')
+                                                                        ? 'Facebook discovery'
+                                                                        : candidate.source.includes('web-instagram')
+                                                                            ? 'Instagram discovery'
+                                                                            : candidate.source.includes('web-domain')
+                                                                                ? 'Website discovery'
+                                                                                : candidate.source.includes('meta-ads')
+                                                                                    ? 'Public ads signal'
+                                                                                    : 'Resolved match'}
                                                             </span>
                                                         )}
                                                         {typeof candidate.archiveHits === 'number' && candidate.archiveHits > 0 && (
@@ -2717,11 +2728,23 @@ export default function AdsPage() {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    {candidate.pageUrl && (
-                                                        <a href={candidate.pageUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 4 }}>
-                                                            Open page <ExternalLink size={12} />
-                                                        </a>
-                                                    )}
+                                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+                                                        {candidate.pageUrl && (
+                                                            <a href={candidate.pageUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                                                                Facebook <ExternalLink size={12} />
+                                                            </a>
+                                                        )}
+                                                        {candidate.instagramUrl && (
+                                                            <a href={candidate.instagramUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                                                                Instagram <ExternalLink size={12} />
+                                                            </a>
+                                                        )}
+                                                        {candidate.website && (
+                                                            <a href={candidate.website} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                                                                Website <ExternalLink size={12} />
+                                                            </a>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <button className="btn btn-sm" onClick={() => handleAddCompetitor(candidate)}>

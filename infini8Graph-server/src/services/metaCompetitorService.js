@@ -1,4 +1,5 @@
 import axios from 'axios';
+import runtimeStateService from './runtimeStateService.js';
 
 const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v18.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
@@ -15,6 +16,17 @@ const AD_ARCHIVE_FIELDS = [
     'ad_snapshot_url',
     'publisher_platforms'
 ].join(',');
+const PUBLIC_SEARCH_URL = 'https://html.duckduckgo.com/html/';
+const DISCOVERY_CACHE_KEY_PREFIX = 'competitor-discovery-candidates';
+const PUBLIC_SEARCH_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+const COUNTRY_LABELS = {
+    IN: 'India',
+    US: 'United States',
+    GB: 'United Kingdom',
+    AE: 'UAE',
+    SG: 'Singapore',
+    MY: 'Malaysia'
+};
 
 const STOP_WORDS = new Set([
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'best', 'big', 'buy', 'by', 'for', 'from', 'get', 'has',
@@ -148,6 +160,263 @@ function buildSearchVariants(query) {
         .map((value) => value.trim())
         .filter((value, index, arr) => value.length >= 2 && arr.indexOf(value) === index)
         .slice(0, 8);
+}
+
+function getDiscoveryCacheKey(userId) {
+    return `${DISCOVERY_CACHE_KEY_PREFIX}:${userId}`;
+}
+
+function htmlDecode(value) {
+    return String(value || '')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+}
+
+function stripHtml(value) {
+    return htmlDecode(String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function safeUrl(rawValue) {
+    try {
+        const parsed = new URL(rawValue, 'https://duckduckgo.com');
+        const redirectTarget = parsed.searchParams.get('uddg');
+        const finalUrl = redirectTarget ? decodeURIComponent(redirectTarget) : parsed.toString();
+        return new URL(finalUrl);
+    } catch {
+        return null;
+    }
+}
+
+function extractDomain(urlValue) {
+    const parsed = safeUrl(urlValue);
+    if (!parsed) return null;
+    return parsed.hostname.replace(/^www\./, '');
+}
+
+function normalizeDomain(urlValue) {
+    const domain = extractDomain(urlValue);
+    if (!domain) return null;
+    return domain.toLowerCase();
+}
+
+function extractInstagramHandle(urlValue) {
+    const parsed = safeUrl(urlValue);
+    if (!parsed || !parsed.hostname.includes('instagram.com')) return null;
+    const segment = parsed.pathname.split('/').filter(Boolean)[0];
+    if (!segment || ['p', 'reel', 'explore', 'stories', 'accounts'].includes(segment.toLowerCase())) return null;
+    return segment;
+}
+
+function sanitizeProfileUrl(urlValue) {
+    const parsed = safeUrl(urlValue);
+    if (!parsed) return null;
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+}
+
+function normalizeCandidateKey(candidate) {
+    return candidate.pageId
+        || candidate.pageUrl
+        || candidate.instagramUrl
+        || candidate.website
+        || `name:${normalizeText(candidate.name || candidate.searchTerms || '')}`;
+}
+
+function cleanBrandTitle(title, urlValue) {
+    const domain = normalizeDomain(urlValue) || '';
+    let cleaned = stripHtml(title)
+        .replace(/\s*[-|]\s*Facebook.*$/i, '')
+        .replace(/\s*[-|]\s*Instagram.*$/i, '')
+        .replace(/\s*[-|]\s*Official.*$/i, '')
+        .replace(/\s*•\s*Instagram photos.*$/i, '')
+        .replace(/\s*\/\s*Facebook.*$/i, '')
+        .trim();
+
+    if (!cleaned && domain) {
+        cleaned = domain.split('.')[0];
+    }
+
+    return cleaned;
+}
+
+function scoreNameMatch(name, query) {
+    const normalizedQuery = normalizeText(query);
+    const normalizedName = normalizeText(name);
+    const condensedQuery = normalizedQuery.replace(/\s+/g, '');
+    const condensedName = normalizedName.replace(/\s+/g, '');
+
+    if (!normalizedName) return 0;
+    if (normalizedName === normalizedQuery || condensedName === condensedQuery) return 120;
+    if (normalizedName.startsWith(normalizedQuery) || condensedName.startsWith(condensedQuery)) return 85;
+    if (normalizedName.includes(normalizedQuery) || condensedName.includes(condensedQuery)) return 60;
+    return 0;
+}
+
+async function getCachedDiscoveryCandidates(userId, query) {
+    if (!userId) return [];
+
+    try {
+        const existing = await runtimeStateService.getRuntimeCache(getDiscoveryCacheKey(userId));
+        const cachedEntries = Array.isArray(existing) ? existing : [];
+        const normalizedQuery = normalizeText(query);
+
+        return cachedEntries
+            .filter((candidate) => {
+                const haystack = normalizeText([
+                    candidate.name,
+                    candidate.searchTerms,
+                    candidate.instagramHandle,
+                    candidate.website
+                ].filter(Boolean).join(' '));
+                return haystack.includes(normalizedQuery);
+            })
+            .slice(0, 6)
+            .map((candidate) => ({
+                ...candidate,
+                source: candidate.source ? `${candidate.source}+cache` : 'cache',
+                cacheHits: (candidate.cacheHits || 0) + 1
+            }));
+    } catch {
+        return [];
+    }
+}
+
+async function rememberDiscoveryCandidates(userId, candidates) {
+    if (!userId || !Array.isArray(candidates) || candidates.length === 0) return;
+
+    try {
+        const cacheKey = getDiscoveryCacheKey(userId);
+        const existing = await runtimeStateService.getRuntimeCache(cacheKey);
+        const merged = new Map();
+
+        for (const candidate of Array.isArray(existing) ? existing : []) {
+            merged.set(normalizeCandidateKey(candidate), candidate);
+        }
+
+        for (const candidate of candidates) {
+            const key = normalizeCandidateKey(candidate);
+            const previous = merged.get(key);
+            merged.set(key, {
+                ...previous,
+                ...candidate,
+                lastSeenAt: new Date().toISOString()
+            });
+        }
+
+        const stored = [...merged.values()].slice(0, 120);
+        await runtimeStateService.setRuntimeCache(cacheKey, stored, 60 * 60 * 24 * 30);
+    } catch {
+        // Discovery cache is a best-effort accelerator, not a hard dependency.
+    }
+}
+
+function parseDuckDuckGoResults(html) {
+    const results = [];
+    const anchorRegex = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)<\/a>/gis;
+    let match;
+
+    while ((match = anchorRegex.exec(html)) && results.length < 10) {
+        const href = match[1];
+        const title = cleanBrandTitle(match[2], href);
+        const url = sanitizeProfileUrl(href);
+        if (!url) continue;
+        results.push({ title, url });
+    }
+
+    return results;
+}
+
+async function searchPublicWeb(query) {
+    const response = await axios.get(PUBLIC_SEARCH_URL, {
+        params: { q: query, kl: 'wt-wt' },
+        timeout: 12000,
+        headers: {
+            'User-Agent': PUBLIC_SEARCH_USER_AGENT,
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+    });
+
+    return parseDuckDuckGoResults(response.data);
+}
+
+function buildPublicSearchQueries(query, country) {
+    const variants = buildSearchVariants(query).slice(0, 4);
+    const countryLabel = COUNTRY_LABELS[country] || '';
+
+    const queries = [
+        `${variants[0] || query} official website`,
+        `${variants[0] || query} instagram`,
+        `${variants[0] || query} facebook`
+    ];
+
+    for (const variant of variants) {
+        queries.push(`site:facebook.com "${variant}"`);
+        queries.push(`site:instagram.com "${variant}"`);
+        if (countryLabel) {
+            queries.push(`"${variant}" "${countryLabel}" site:facebook.com`);
+            queries.push(`"${variant}" "${countryLabel}" site:instagram.com`);
+        }
+    }
+
+    return unique(queries).slice(0, 8);
+}
+
+function mapPublicSearchResultToCandidate(result, query) {
+    const domain = normalizeDomain(result.url);
+    const instagramHandle = extractInstagramHandle(result.url);
+    const title = cleanBrandTitle(result.title, result.url) || query;
+
+    if (!domain) return null;
+
+    if (domain.includes('facebook.com')) {
+        return {
+            name: title,
+            pageUrl: sanitizeProfileUrl(result.url),
+            pictureUrl: null,
+            category: null,
+            website: null,
+            locationHint: null,
+            instagramHandle: null,
+            instagramUrl: null,
+            searchTerms: title || query,
+            source: 'web-facebook',
+            publicHits: 1
+        };
+    }
+
+    if (domain.includes('instagram.com')) {
+        return {
+            name: title,
+            pageUrl: null,
+            pictureUrl: null,
+            category: null,
+            website: null,
+            locationHint: null,
+            instagramHandle,
+            instagramUrl: sanitizeProfileUrl(result.url),
+            searchTerms: instagramHandle || title || query,
+            source: 'web-instagram',
+            publicHits: 1
+        };
+    }
+
+    return {
+        name: title,
+        pageUrl: null,
+        pictureUrl: null,
+        category: null,
+        website: sanitizeProfileUrl(result.url),
+        locationHint: null,
+        instagramHandle: null,
+        instagramUrl: null,
+        searchTerms: title || query,
+        source: 'web-domain',
+        publicHits: 1
+    };
 }
 
 function extractKeywords(text, limit = 4) {
@@ -407,6 +676,9 @@ function mapSearchCandidate(candidate, query) {
         website: candidate.website || null,
         locationHint: locationHint || null,
         instagramHandle: candidate.instagram_business_account?.username || null,
+        instagramUrl: candidate.instagram_business_account?.username
+            ? `https://www.instagram.com/${candidate.instagram_business_account.username}/`
+            : null,
         searchTerms: candidate.name || query
     };
 }
@@ -457,12 +729,11 @@ async function searchPagesByVariant(accessToken, variant) {
     }
 }
 
-async function searchAdsArchiveCandidates(accessToken, variant, country) {
+async function searchAdsArchiveCandidates(accessToken, variant) {
     const response = await fetchAdsArchive(accessToken, {
         access_token: accessToken,
         ad_type: 'ALL',
         ad_active_status: 'ALL',
-        ad_reached_countries: JSON.stringify([country]),
         search_terms: variant,
         fields: 'page_id,page_name,ad_snapshot_url,publisher_platforms',
         limit: 20
@@ -508,37 +779,59 @@ async function enrichPageCandidate(accessToken, pageId, fallbackName, query) {
 }
 
 function computeCandidateScore(candidate, query, variantHits = 0, archiveHits = 0) {
-    const normalizedQuery = normalizeText(query);
-    const normalizedName = normalizeText(candidate.name);
-    const condensedQuery = normalizedQuery.replace(/\s+/g, '');
-    const condensedName = normalizedName.replace(/\s+/g, '');
-
-    let score = 0;
-    if (normalizedName === normalizedQuery || condensedName === condensedQuery) score += 120;
-    if (normalizedName.startsWith(normalizedQuery) || condensedName.startsWith(condensedQuery)) score += 80;
-    if (normalizedName.includes(normalizedQuery) || condensedName.includes(condensedQuery)) score += 55;
+    const condensedQuery = normalizeText(query).replace(/\s+/g, '');
+    let score = scoreNameMatch(candidate.name, query);
     if (candidate.instagramHandle && normalizeText(candidate.instagramHandle).includes(condensedQuery)) score += 35;
     if (candidate.website && normalizeText(candidate.website).includes(condensedQuery)) score += 25;
+    if (candidate.pageUrl && normalizeText(candidate.pageUrl).includes(condensedQuery)) score += 18;
     if (candidate.category) score += 5;
     if (candidate.locationHint) score += 5;
+    score += Math.min((candidate.publicHits || 0) * 16, 48);
+    score += Math.min((candidate.cacheHits || 0) * 20, 40);
     score += Math.min(variantHits * 14, 42);
     score += Math.min(archiveHits * 8, 40);
 
     return score;
 }
 
-export async function searchCompetitorPages({ accessToken, query, country = 'IN' }) {
+export async function searchCompetitorPages({ accessToken, query, country = 'IN', userId = null }) {
     const variants = buildSearchVariants(query);
     const pageHits = new Map();
     const archiveHits = new Map();
+    const publicQueries = buildPublicSearchQueries(query, country);
+    const cachedCandidates = await getCachedDiscoveryCandidates(userId, query);
 
     const results = await Promise.allSettled([
+        ...publicQueries.map((publicQuery) => searchPublicWeb(publicQuery)),
         ...variants.map((variant) => searchPagesByVariant(accessToken, variant)),
-        ...variants.map((variant) => searchAdsArchiveCandidates(accessToken, variant, country))
+        ...variants.map((variant) => searchAdsArchiveCandidates(accessToken, variant))
     ]);
 
-    const pageResults = results.slice(0, variants.length);
-    const archiveResults = results.slice(variants.length);
+    const publicResults = results.slice(0, publicQueries.length);
+    const pageResults = results.slice(publicQueries.length, publicQueries.length + variants.length);
+    const archiveResults = results.slice(publicQueries.length + variants.length);
+    const publicCandidateMap = new Map();
+
+    for (const cachedCandidate of cachedCandidates) {
+        publicCandidateMap.set(normalizeCandidateKey(cachedCandidate), cachedCandidate);
+    }
+
+    publicResults.forEach((result) => {
+        if (result.status !== 'fulfilled') return;
+        for (const publicResult of result.value) {
+            const candidate = mapPublicSearchResultToCandidate(publicResult, query);
+            if (!candidate) continue;
+            const key = normalizeCandidateKey(candidate);
+            const existing = publicCandidateMap.get(key);
+            publicCandidateMap.set(key, {
+                ...(existing || {}),
+                ...candidate,
+                source: existing?.source ? `${existing.source}+web` : candidate.source,
+                publicHits: (existing?.publicHits || 0) + 1,
+                cacheHits: existing?.cacheHits || 0
+            });
+        }
+    });
 
     pageResults.forEach((result, index) => {
         if (result.status !== 'fulfilled') return;
@@ -576,12 +869,27 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
 
     const combined = [];
 
+    for (const candidate of publicCandidateMap.values()) {
+        combined.push(candidate);
+    }
+
     for (const [key, value] of pageHits.entries()) {
         const mapped = mapSearchCandidate(value.raw, query);
         const archiveMeta = archiveHits.get(key) || archiveHits.get(mapped.pageId || '');
+        const publicMeta = publicCandidateMap.get(normalizeCandidateKey(mapped))
+            || publicCandidateMap.get(mapped.pageUrl)
+            || publicCandidateMap.get(mapped.instagramUrl)
+            || publicCandidateMap.get(mapped.website);
         combined.push({
+            ...(publicMeta || {}),
             ...mapped,
-            source: archiveMeta ? 'page+ads' : 'page',
+            source: unique([
+                publicMeta?.source,
+                'meta-page',
+                archiveMeta ? 'meta-ads' : null
+            ]).join('+'),
+            publicHits: publicMeta?.publicHits || 0,
+            cacheHits: publicMeta?.cacheHits || 0,
             variantHits: value.variantHits || 1,
             archiveHits: archiveMeta?.archiveHits || 0
         });
@@ -589,9 +897,16 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
 
     for (const candidate of enrichedArchiveCandidates) {
         const archiveMeta = archiveHits.get(candidate.pageId || '');
+        const publicMeta = publicCandidateMap.get(normalizeCandidateKey(candidate))
+            || publicCandidateMap.get(candidate.pageUrl)
+            || publicCandidateMap.get(candidate.instagramUrl)
+            || publicCandidateMap.get(candidate.website);
         combined.push({
+            ...(publicMeta || {}),
             ...candidate,
-            source: 'ads',
+            source: unique([publicMeta?.source, 'meta-ads']).join('+'),
+            publicHits: publicMeta?.publicHits || 0,
+            cacheHits: publicMeta?.cacheHits || 0,
             variantHits: 0,
             archiveHits: archiveMeta?.archiveHits || 1
         });
@@ -606,7 +921,7 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
         return acc;
     }, new Map());
 
-    return [...deduped.values()]
+    const rankedCandidates = [...deduped.values()]
         .map((candidate) => ({
             ...candidate,
             score: computeCandidateScore(candidate, query, candidate.variantHits, candidate.archiveHits),
@@ -614,6 +929,9 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 10);
+
+    await rememberDiscoveryCandidates(userId, rankedCandidates);
+    return rankedCandidates;
 }
 
 export async function getCompetitorIntelligence({ accessToken, competitor }) {

@@ -87,7 +87,7 @@ export async function searchCompetitorPages(req, res) {
 
         const cacheKey = buildMetaCacheKey('meta-competitor-search', [req.user.userId, query.toLowerCase(), country]);
         const candidates = await withMetaCache(cacheKey, META_CACHE_TTL.competitors, async () =>
-            metaCompetitorService.searchCompetitorPages({ accessToken, query, country })
+            metaCompetitorService.searchCompetitorPages({ accessToken, query, country, userId: req.user.userId })
         );
 
         res.json({
