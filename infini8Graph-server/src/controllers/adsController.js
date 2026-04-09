@@ -1,4 +1,5 @@
 import * as authService from '../services/authService.js';
+import * as metaCompetitorService from '../services/metaCompetitorService.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -16,7 +17,8 @@ const META_CACHE_TTL = {
     funnel: parseInt(process.env.META_ADS_CACHE_TTL_FUNNEL || '180', 10),
     intelligence: parseInt(process.env.META_ADS_CACHE_TTL_INTELLIGENCE || '300', 10),
     advanced: parseInt(process.env.META_ADS_CACHE_TTL_ADVANCED || '300', 10),
-    deep: parseInt(process.env.META_ADS_CACHE_TTL_DEEP || '300', 10)
+    deep: parseInt(process.env.META_ADS_CACHE_TTL_DEEP || '300', 10),
+    competitors: parseInt(process.env.META_ADS_CACHE_TTL_COMPETITORS || '600', 10)
 };
 
 function getMetaCacheEntry(key) {
@@ -68,6 +70,87 @@ async function fetchInsightsBreakdown(accountId, accessToken, datePreset, breakd
     });
 
     return response.data.data || [];
+}
+
+export async function searchCompetitorPages(req, res) {
+    try {
+        const query = String(req.query.q || '').trim();
+        if (query.length < 2) {
+            return res.status(400).json({ success: false, error: 'Query must be at least 2 characters long' });
+        }
+
+        const accessToken = await authService.getAccessToken(req.user.userId);
+        if (!accessToken) {
+            return res.status(401).json({ success: false, error: 'Access token not found' });
+        }
+
+        const cacheKey = buildMetaCacheKey('meta-competitor-search', [req.user.userId, query.toLowerCase()]);
+        const candidates = await withMetaCache(cacheKey, META_CACHE_TTL.competitors, async () =>
+            metaCompetitorService.searchCompetitorPages({ accessToken, query })
+        );
+
+        res.json({
+            success: true,
+            data: {
+                query,
+                candidates
+            }
+        });
+    } catch (error) {
+        console.error('Competitor page search error:', error.response?.data || error.message);
+        res.status(500).json({
+            success: false,
+            error: error.response?.data?.error?.message || 'Failed to search competitor pages'
+        });
+    }
+}
+
+export async function getCompetitorIntelligence(req, res) {
+    try {
+        const searchTerms = String(req.query.searchTerms || '').trim();
+        const pageId = String(req.query.pageId || '').trim();
+        const name = String(req.query.name || '').trim();
+        const country = String(req.query.country || 'IN').trim().toUpperCase();
+        const status = String(req.query.status || 'ACTIVE').trim().toUpperCase();
+
+        if (!searchTerms && !pageId) {
+            return res.status(400).json({ success: false, error: 'Provide either searchTerms or pageId' });
+        }
+
+        const accessToken = await authService.getAccessToken(req.user.userId);
+        if (!accessToken) {
+            return res.status(401).json({ success: false, error: 'Access token not found' });
+        }
+
+        const cacheKey = buildMetaCacheKey('meta-competitor-intel', [
+            req.user.userId,
+            pageId || 'term',
+            searchTerms.toLowerCase() || 'none',
+            country,
+            status
+        ]);
+
+        const intelligence = await withMetaCache(cacheKey, META_CACHE_TTL.competitors, async () =>
+            metaCompetitorService.getCompetitorIntelligence({
+                accessToken,
+                competitor: {
+                    pageId: pageId || null,
+                    name: name || searchTerms || pageId,
+                    searchTerms: searchTerms || name || pageId,
+                    country,
+                    status
+                }
+            })
+        );
+
+        res.json({ success: true, data: intelligence });
+    } catch (error) {
+        console.error('Competitor intelligence error:', error.response?.data || error.message);
+        res.status(500).json({
+            success: false,
+            error: error.response?.data?.error?.message || 'Failed to fetch competitor intelligence'
+        });
+    }
 }
 
 /**

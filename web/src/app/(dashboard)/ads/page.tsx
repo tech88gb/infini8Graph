@@ -8,7 +8,8 @@ import {
     Megaphone, IndianRupee, Eye, MousePointer, Users, BarChart3,
     Play, Target, Layers, TrendingUp, HelpCircle, Smartphone, Monitor,
     Globe, MapPin, Award, Zap, DollarSign, ExternalLink, ChevronDown, ChevronUp,
-    Filter, Calendar, Clock, ArrowRight, ShoppingCart, CreditCard, Package, Brain, Activity
+    Filter, Calendar, Clock, ArrowRight, ShoppingCart, CreditCard, Package, Brain, Activity,
+    Search, BookmarkPlus, Trash2, Sparkles
 } from 'lucide-react';
 import {
     AreaChart, Area, BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
@@ -46,6 +47,52 @@ function formatRoas(value: number | string) {
 }
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'];
+const WATCHLIST_STORAGE_KEY = 'meta_competitor_watchlist_v1';
+const COMPETITOR_COUNTRIES = [
+    { value: 'IN', label: 'India' },
+    { value: 'AE', label: 'UAE' },
+    { value: 'SG', label: 'Singapore' },
+    { value: 'MY', label: 'Malaysia' },
+    { value: 'GB', label: 'United Kingdom' },
+    { value: 'US', label: 'United States' }
+];
+
+type CompetitorCandidate = {
+    pageId?: string | null;
+    name: string;
+    pageUrl?: string | null;
+    pictureUrl?: string | null;
+    category?: string | null;
+    website?: string | null;
+    locationHint?: string | null;
+    searchTerms: string;
+};
+
+type SavedCompetitor = CompetitorCandidate & {
+    id: string;
+    country: string;
+    status: 'ACTIVE' | 'ALL';
+};
+
+function formatDateTime(value?: string | null) {
+    if (!value) return 'Live now';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function loadSavedCompetitors() {
+    if (typeof window === 'undefined') return [] as SavedCompetitor[];
+
+    try {
+        const raw = window.localStorage.getItem(WATCHLIST_STORAGE_KEY);
+        if (!raw) return [] as SavedCompetitor[];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [] as SavedCompetitor[];
+    }
+}
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -240,8 +287,14 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 export default function AdsPage() {
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'placements' | 'geo'>('overview'); 
+    const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'placements' | 'geo' | 'competitors'>('overview');
     const [datePreset, setDatePreset] = useState<'today' | 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d' | 'maximum'>('today');
+    const [competitorQuery, setCompetitorQuery] = useState('');
+    const [submittedCompetitorQuery, setSubmittedCompetitorQuery] = useState('');
+    const [competitorCountry, setCompetitorCountry] = useState('IN');
+    const [competitorStatus, setCompetitorStatus] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
+    const [savedCompetitors, setSavedCompetitors] = useState<SavedCompetitor[]>([]);
+    const [activeCompetitorId, setActiveCompetitorId] = useState<string | null>(null);
 
     // Fetch accounts
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -356,6 +409,57 @@ export default function AdsPage() {
         enabled: !!effectiveAccount && activeTab === 'deep'
     });
 
+    useEffect(() => {
+        const stored = loadSavedCompetitors();
+        setSavedCompetitors(stored);
+        if (stored.length > 0) {
+            setActiveCompetitorId(stored[0].id);
+            setCompetitorCountry(stored[0].country || 'IN');
+            setCompetitorStatus(stored[0].status || 'ACTIVE');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(savedCompetitors));
+    }, [savedCompetitors]);
+
+    const activeCompetitor = savedCompetitors.find((competitor) => competitor.id === activeCompetitorId) || null;
+
+    const { data: competitorSearchData, isLoading: competitorSearchLoading } = useQuery({
+        queryKey: ['meta-competitor-search', submittedCompetitorQuery],
+        queryFn: async () => {
+            if (!submittedCompetitorQuery) return null;
+            const res = await adsApi.searchCompetitors(submittedCompetitorQuery);
+            return res.data;
+        },
+        enabled: activeTab === 'competitors' && submittedCompetitorQuery.trim().length >= 2,
+        refetchOnWindowFocus: false
+    });
+
+    const { data: competitorIntelData, isLoading: competitorIntelLoading, error: competitorIntelError } = useQuery({
+        queryKey: [
+            'meta-competitor-intel',
+            activeCompetitor?.pageId || null,
+            activeCompetitor?.searchTerms || null,
+            activeCompetitor?.country || competitorCountry,
+            activeCompetitor?.status || competitorStatus
+        ],
+        queryFn: async () => {
+            if (!activeCompetitor) return null;
+            const res = await adsApi.getCompetitorIntelligence({
+                pageId: activeCompetitor.pageId || undefined,
+                name: activeCompetitor.name,
+                searchTerms: activeCompetitor.searchTerms,
+                country: activeCompetitor.country,
+                status: activeCompetitor.status
+            });
+            return res.data;
+        },
+        enabled: activeTab === 'competitors' && !!activeCompetitor,
+        refetchOnWindowFocus: false
+    });
+
     if (accountsLoading) {
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
@@ -366,6 +470,47 @@ export default function AdsPage() {
             </div>
         );
     }
+
+    const handleCompetitorSearch = () => {
+        const nextQuery = competitorQuery.trim();
+        if (nextQuery.length < 2) return;
+        setSubmittedCompetitorQuery(nextQuery);
+    };
+
+    const handleAddCompetitor = (candidate: CompetitorCandidate) => {
+        const candidateKey = `${candidate.pageId || candidate.searchTerms}-${competitorCountry}`;
+        const existing = savedCompetitors.find((item) => `${item.pageId || item.searchTerms}-${item.country}` === candidateKey);
+
+        if (existing) {
+            setActiveCompetitorId(existing.id);
+            setCompetitorCountry(existing.country);
+            setCompetitorStatus(existing.status);
+            return;
+        }
+
+        const saved: SavedCompetitor = {
+            ...candidate,
+            id: candidateKey,
+            country: competitorCountry,
+            status: competitorStatus
+        };
+
+        setSavedCompetitors((current) => [saved, ...current].slice(0, 10));
+        setActiveCompetitorId(saved.id);
+    };
+
+    const handleRemoveCompetitor = (competitorId: string) => {
+        setSavedCompetitors((current) => {
+            const next = current.filter((item) => item.id !== competitorId);
+            if (activeCompetitorId === competitorId) {
+                setActiveCompetitorId(next[0]?.id || null);
+            }
+            return next;
+        });
+    };
+
+    const competitorCandidates = competitorSearchData?.data?.candidates || [];
+    const competitorIntel = competitorIntelData?.data || null;
 
     // Extract data from insights
     const summary = insightsData?.data?.summary || {};
@@ -540,6 +685,9 @@ export default function AdsPage() {
                 </TabButton>
                 <TabButton active={activeTab === 'geo'} onClick={() => setActiveTab('geo')}>
                     <Globe size={14} /> Geography
+                </TabButton>
+                <TabButton active={activeTab === 'competitors'} onClick={() => setActiveTab('competitors')}>
+                    <Megaphone size={14} /> Competitors
                 </TabButton>
             </div>
 
@@ -2376,6 +2524,387 @@ export default function AdsPage() {
                         <div style={{ textAlign: 'center', padding: 40 }}>
                             <p className="text-muted">No deep insights data available for this account.</p>
                         </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'competitors' && (
+                <div style={{ display: 'grid', gap: 20 }}>
+                    <SectionCard
+                        title={<span style={{ display: 'flex', alignItems: 'center' }}>Competitor Intel <InfoTooltip text="Search a brand name, confirm the right page, and turn Meta's public ad-transparency surface into practical creative takeaways." /></span>}
+                        subtitle="See which angles competitors keep repeating, which offers stay live, and what to test in response."
+                    >
+                        <div style={{
+                            marginBottom: 18,
+                            padding: '16px 18px',
+                            borderRadius: 12,
+                            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(16, 185, 129, 0.08))',
+                            border: '1px solid rgba(99, 102, 241, 0.24)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                                <Sparkles size={18} style={{ color: '#818cf8' }} />
+                                <strong style={{ fontSize: 14 }}>Why use this</strong>
+                            </div>
+                            <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>
+                                It is built for marketers who want more than a competitor ad feed. This view highlights repeated offers, regional messaging, angle clustering, and practical response ideas so you can decide what is worth testing next.
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) 160px 140px 120px', gap: 12, marginBottom: 16 }}>
+                            <div style={{ position: 'relative' }}>
+                                <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                                <input
+                                    className="input"
+                                    placeholder="Search competitor brand name"
+                                    value={competitorQuery}
+                                    onChange={(e) => setCompetitorQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCompetitorSearch();
+                                    }}
+                                    style={{ paddingLeft: 38 }}
+                                />
+                            </div>
+                            <select
+                                className="input"
+                                value={competitorCountry}
+                                onChange={(e) => setCompetitorCountry(e.target.value)}
+                            >
+                                {COMPETITOR_COUNTRIES.map((country) => (
+                                    <option key={country.value} value={country.value}>{country.label}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="input"
+                                value={competitorStatus}
+                                onChange={(e) => setCompetitorStatus(e.target.value as 'ACTIVE' | 'ALL')}
+                            >
+                                <option value="ACTIVE">Active ads</option>
+                                <option value="ALL">All visible ads</option>
+                            </select>
+                            <button className="btn" onClick={handleCompetitorSearch} disabled={competitorQuery.trim().length < 2}>
+                                Search
+                            </button>
+                        </div>
+
+                        {savedCompetitors.length > 0 && (
+                            <div style={{ marginBottom: 18 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 10 }}>Saved Watchlist</div>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {savedCompetitors.map((competitor) => (
+                                        <div
+                                            key={competitor.id}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 8,
+                                                padding: '8px 10px',
+                                                borderRadius: 999,
+                                                border: activeCompetitorId === competitor.id ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                                background: activeCompetitorId === competitor.id ? 'rgba(99, 102, 241, 0.12)' : 'transparent'
+                                            }}
+                                        >
+                                            <button
+                                                onClick={() => {
+                                                    setActiveCompetitorId(competitor.id);
+                                                    setCompetitorCountry(competitor.country);
+                                                    setCompetitorStatus(competitor.status);
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontWeight: 600 }}
+                                            >
+                                                {competitor.name}
+                                            </button>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{competitor.country}</span>
+                                            <button
+                                                onClick={() => handleRemoveCompetitor(competitor.id)}
+                                                style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, display: 'flex' }}
+                                                aria-label={`Remove ${competitor.name}`}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {competitorSearchLoading ? (
+                            <div style={{ textAlign: 'center', padding: 24 }}>
+                                <div className="spinner" style={{ margin: '0 auto 12px' }}></div>
+                                <p className="text-muted">Finding likely page matches...</p>
+                            </div>
+                        ) : submittedCompetitorQuery ? (
+                            <div style={{ display: 'grid', gap: 12 }}>
+                                <div
+                                    style={{
+                                        padding: 16,
+                                        borderRadius: 12,
+                                        border: '1px dashed rgba(99, 102, 241, 0.35)',
+                                        background: 'rgba(99, 102, 241, 0.06)'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Analyze "{submittedCompetitorQuery}" as a brand term</div>
+                                            <div className="text-muted" style={{ fontSize: 13 }}>
+                                                Useful when the exact page match is unclear. The backend will analyze public ads using the brand search term directly.
+                                            </div>
+                                        </div>
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => handleAddCompetitor({
+                                                name: submittedCompetitorQuery,
+                                                searchTerms: submittedCompetitorQuery
+                                            })}
+                                        >
+                                            <BookmarkPlus size={14} /> Analyze term
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {competitorCandidates.length > 0 ? (
+                                    competitorCandidates.map((candidate: CompetitorCandidate, index: number) => (
+                                        <div
+                                            key={`${candidate.pageId || candidate.name}-${index}`}
+                                            style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                gap: 16,
+                                                padding: 16,
+                                                borderRadius: 12,
+                                                border: '1px solid var(--border)',
+                                                background: 'var(--background)',
+                                                alignItems: 'center',
+                                                flexWrap: 'wrap'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', gap: 14, alignItems: 'center', minWidth: 0 }}>
+                                                <div style={{
+                                                    width: 44,
+                                                    height: 44,
+                                                    borderRadius: 12,
+                                                    background: candidate.pictureUrl ? `url(${candidate.pictureUrl}) center / cover` : 'rgba(99, 102, 241, 0.14)',
+                                                    display: 'grid',
+                                                    placeItems: 'center',
+                                                    color: '#818cf8',
+                                                    flexShrink: 0
+                                                }}>
+                                                    {!candidate.pictureUrl && <Megaphone size={18} />}
+                                                </div>
+                                                <div style={{ minWidth: 0 }}>
+                                                    <div style={{ fontWeight: 600 }}>{candidate.name}</div>
+                                                    <div className="text-muted" style={{ fontSize: 12 }}>
+                                                        {[candidate.category, candidate.locationHint, candidate.website].filter(Boolean).join(' • ') || 'Public page match'}
+                                                    </div>
+                                                    {candidate.pageUrl && (
+                                                        <a href={candidate.pageUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 4 }}>
+                                                            Open page <ExternalLink size={12} />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button className="btn btn-sm" onClick={() => handleAddCompetitor(candidate)}>
+                                                <BookmarkPlus size={14} /> Add to watchlist
+                                            </button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-muted" style={{ fontSize: 13 }}>No page matches came back yet, so the brand-term fallback above is the safest starting point.</p>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-muted" style={{ fontSize: 13 }}>Type a competitor brand name to find likely page matches and start building your watchlist.</p>
+                        )}
+                    </SectionCard>
+
+                    {activeCompetitor && competitorIntelLoading && (
+                        <div style={{ textAlign: 'center', padding: 40 }}>
+                            <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                            <p className="text-muted">Analyzing public Meta ads and clustering likely winning angles...</p>
+                        </div>
+                    )}
+
+                    {!activeCompetitor && (
+                        <SectionCard title="No Competitor Selected" subtitle="Add a competitor to start the analysis">
+                            <p className="text-muted" style={{ fontSize: 13 }}>
+                                The watchlist lets you track brands that matter and revisit them without re-searching every time.
+                            </p>
+                        </SectionCard>
+                    )}
+
+                    {activeCompetitor && competitorIntelError && (
+                        <SectionCard title="Competitor Analysis Unavailable" subtitle="The public ads surface could not be fetched right now">
+                            <p className="text-muted" style={{ fontSize: 13 }}>
+                                {(competitorIntelError as any)?.response?.data?.error || 'Meta did not return competitor ad data for this query yet.'}
+                            </p>
+                        </SectionCard>
+                    )}
+
+                    {activeCompetitor && competitorIntel && !competitorIntelLoading && (
+                        <>
+                            <div className="grid-metrics" style={{ marginBottom: 4, gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+                                <MetricCard label="Public Ads Found" value={formatNumber(competitorIntel.overview?.totalAds || 0)} icon={Megaphone} color="#818cf8" />
+                                <MetricCard label="Long-running Ads" value={formatNumber(competitorIntel.overview?.longRunningAds || 0)} icon={Clock} color="#f59e0b" />
+                                <MetricCard label="Repeated Angles" value={formatNumber(competitorIntel.overview?.repeatedAngleClusters || 0)} icon={Sparkles} color="#10b981" />
+                                <MetricCard label="Localized Ads" value={formatNumber(competitorIntel.overview?.localizedAds || 0)} icon={MapPin} color="#0ea5e9" />
+                            </div>
+
+                            <SectionCard
+                                title={<span style={{ display: 'flex', alignItems: 'center' }}>{competitorIntel.competitor?.name || activeCompetitor.name} <InfoTooltip text="This summary is based on the public ad-transparency surface, then scored with heuristic signals like longevity, repetition, offer clarity, and regional cues." /></span>}
+                                subtitle={`Confidence: ${competitorIntel.confidenceLevel} (${competitorIntel.confidenceScore}/100)`}
+                            >
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 18 }}>
+                                    <div style={{ padding: 16, borderRadius: 12, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#818cf8', marginBottom: 8 }}>Creative Angle Summary</div>
+                                        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{competitorIntel.creativeAngleSummary}</div>
+                                    </div>
+                                    <div style={{ padding: 16, borderRadius: 12, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: 8 }}>Offer Analysis</div>
+                                        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{competitorIntel.offerAnalysis}</div>
+                                    </div>
+                                    <div style={{ padding: 16, borderRadius: 12, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0ea5e9', marginBottom: 8 }}>Regional Relevance</div>
+                                        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{competitorIntel.regionalRelevanceAnalysis}</div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+                                    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.18)' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: 10 }}>Likely Performance Rationale</div>
+                                        <div style={{ display: 'grid', gap: 8 }}>
+                                            {(competitorIntel.likelyPerformanceRationale || []).map((reason: string) => (
+                                                <div key={reason} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.5 }}>
+                                                    <ArrowRight size={14} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
+                                                    <span>{reason}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.18)' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#818cf8', marginBottom: 10 }}>What To Test In Response</div>
+                                        <div style={{ display: 'grid', gap: 8 }}>
+                                            {(competitorIntel.whatToTest || []).map((idea: string) => (
+                                                <div key={idea} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.5 }}>
+                                                    <Zap size={14} style={{ color: '#818cf8', flexShrink: 0, marginTop: 2 }} />
+                                                    <span>{idea}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {(competitorIntel.topAngles?.length > 0 || competitorIntel.topOffers?.length > 0) && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginTop: 18 }}>
+                                        <div>
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 10 }}>Top Angles</div>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                {(competitorIntel.topAngles || []).map((angle: any) => (
+                                                    <span key={angle.angle} style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', fontSize: 12, fontWeight: 600 }}>
+                                                        {angle.angle} ({angle.count})
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 10 }}>Top Offer Patterns</div>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                {(competitorIntel.topOffers || []).map((offer: any) => (
+                                                    <span key={offer.label} style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontSize: 12, fontWeight: 600 }}>
+                                                        {offer.label} ({offer.count})
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </SectionCard>
+
+                            <SectionCard title={`Analyzed Ads (${competitorIntel.ads?.length || 0})`} subtitle="Each card explains why the creative may be working and what you can test in response.">
+                                {competitorIntel.ads?.length > 0 ? (
+                                    <div style={{ display: 'grid', gap: 14 }}>
+                                        {competitorIntel.ads.map((ad: any) => (
+                                            <div
+                                                key={ad.id}
+                                                style={{
+                                                    padding: 18,
+                                                    borderRadius: 14,
+                                                    border: '1px solid var(--border)',
+                                                    background: 'var(--background)'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                                                    <div style={{ flex: 1, minWidth: 240 }}>
+                                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                                                            <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', fontSize: 11, fontWeight: 700 }}>
+                                                                {ad.angle}
+                                                            </span>
+                                                            <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontSize: 11, fontWeight: 700 }}>
+                                                                {ad.confidenceLevel} confidence
+                                                            </span>
+                                                            <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', fontSize: 11, fontWeight: 700 }}>
+                                                                {ad.longevityDays}d live
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{ad.title || ad.body || 'Untitled creative'}</div>
+                                                        {ad.body && <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>{ad.body}</div>}
+                                                    </div>
+                                                    <div style={{ minWidth: 180 }}>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Live window</div>
+                                                        <div style={{ fontSize: 13, fontWeight: 600 }}>{formatDateTime(ad.adDeliveryStartTime)} to {formatDateTime(ad.adDeliveryStopTime)}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+                                                            {(ad.publisherPlatforms || []).join(', ') || 'Meta placements'}
+                                                        </div>
+                                                        {ad.adSnapshotUrl && (
+                                                            <a href={ad.adSnapshotUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 10 }}>
+                                                                Open ad snapshot <ExternalLink size={12} />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                                                    <div style={{ padding: 14, borderRadius: 10, background: 'rgba(16, 185, 129, 0.08)' }}>
+                                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: 8 }}>Why This May Work</div>
+                                                        <div style={{ display: 'grid', gap: 6 }}>
+                                                            {(ad.whyItMayWork || []).map((reason: string) => (
+                                                                <div key={reason} style={{ fontSize: 13, lineHeight: 1.5 }}>{reason}</div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ padding: 14, borderRadius: 10, background: 'rgba(99, 102, 241, 0.08)' }}>
+                                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#818cf8', marginBottom: 8 }}>What To Test</div>
+                                                        <div style={{ display: 'grid', gap: 6 }}>
+                                                            {(ad.whatToTest || []).map((idea: string) => (
+                                                                <div key={idea} style={{ fontSize: 13, lineHeight: 1.5 }}>{idea}</div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                                                    {(ad.offerSignals || []).map((signal: string) => (
+                                                        <span key={signal} style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', fontSize: 11, fontWeight: 700 }}>
+                                                            {signal}
+                                                        </span>
+                                                    ))}
+                                                    {(ad.regionalSignals || []).map((signal: string) => (
+                                                        <span key={signal} style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(14, 165, 233, 0.12)', color: '#0ea5e9', fontSize: 11, fontWeight: 700 }}>
+                                                            {signal}
+                                                        </span>
+                                                    ))}
+                                                    {ad.visualPattern && (
+                                                        <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', fontSize: 11, fontWeight: 700 }}>
+                                                            {ad.visualPattern}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-muted" style={{ fontSize: 13 }}>No competitor ads were available for this watchlist entry yet.</p>
+                                )}
+                            </SectionCard>
+                        </>
                     )}
                 </div>
             )}

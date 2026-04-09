@@ -115,6 +115,23 @@ export const webhookApi = {
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
     getAdAccounts: () => api.get('/ads/accounts'),
+    searchCompetitors: (query: string) =>
+        api.get(`/ads/competitors/search?q=${encodeURIComponent(query)}`),
+    getCompetitorIntelligence: (params: {
+        searchTerms?: string;
+        pageId?: string;
+        name?: string;
+        country?: string;
+        status?: 'ACTIVE' | 'ALL';
+    }) => {
+        const search = new URLSearchParams();
+        if (params.searchTerms) search.set('searchTerms', params.searchTerms);
+        if (params.pageId) search.set('pageId', params.pageId);
+        if (params.name) search.set('name', params.name);
+        if (params.country) search.set('country', params.country);
+        if (params.status) search.set('status', params.status);
+        return api.get(`/ads/competitors/intelligence?${search.toString()}`);
+    },
     getAdInsights: (adAccountId: string, datePreset = 'last_90d') =>
         api.get(`/ads/accounts/${adAccountId}/insights?datePreset=${datePreset}`),
     getDemographics: (adAccountId: string, datePreset = 'last_90d') =>
