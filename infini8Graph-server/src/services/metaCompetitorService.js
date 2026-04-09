@@ -811,13 +811,54 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
     const pageResults = results.slice(publicQueries.length, publicQueries.length + variants.length);
     const archiveResults = results.slice(publicQueries.length + variants.length);
     const publicCandidateMap = new Map();
+    const diagnostics = {
+        cache: {
+            source: 'saved-competitor-cache',
+            status: cachedCandidates.length > 0 ? 'ok' : 'empty',
+            hits: cachedCandidates.length,
+            detail: cachedCandidates.length > 0
+                ? `Found ${cachedCandidates.length} saved competitors matching this query.`
+                : 'No saved competitor matches for this query yet.'
+        },
+        webSearch: {
+            source: 'public-web-search',
+            status: 'empty',
+            queriesTried: publicQueries.length,
+            successfulQueries: 0,
+            failedQueries: 0,
+            hits: 0,
+            detail: 'No public web candidates were found yet.'
+        },
+        metaPageSearch: {
+            source: 'meta-page-search',
+            status: 'empty',
+            variantsTried: variants.length,
+            successfulVariants: 0,
+            failedVariants: 0,
+            hits: 0,
+            detail: 'Meta page search did not return candidates yet.'
+        },
+        adsArchiveDiscovery: {
+            source: 'meta-ads-archive',
+            status: 'empty',
+            variantsTried: variants.length,
+            successfulVariants: 0,
+            failedVariants: 0,
+            hits: 0,
+            detail: 'Ads archive discovery did not return advertiser candidates yet.'
+        }
+    };
 
     for (const cachedCandidate of cachedCandidates) {
         publicCandidateMap.set(normalizeCandidateKey(cachedCandidate), cachedCandidate);
     }
 
     publicResults.forEach((result) => {
-        if (result.status !== 'fulfilled') return;
+        if (result.status !== 'fulfilled') {
+            diagnostics.webSearch.failedQueries += 1;
+            return;
+        }
+        diagnostics.webSearch.successfulQueries += 1;
         for (const publicResult of result.value) {
             const candidate = mapPublicSearchResultToCandidate(publicResult, query);
             if (!candidate) continue;
@@ -832,9 +873,24 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
             });
         }
     });
+    diagnostics.webSearch.hits = [...publicCandidateMap.values()].filter((candidate) => !candidate.cacheHits).length;
+    diagnostics.webSearch.status = diagnostics.webSearch.hits > 0
+        ? 'ok'
+        : diagnostics.webSearch.failedQueries === publicQueries.length
+            ? 'failed'
+            : 'empty';
+    diagnostics.webSearch.detail = diagnostics.webSearch.status === 'ok'
+        ? `Resolved ${diagnostics.webSearch.hits} public web candidates from Facebook, Instagram, or website search.`
+        : diagnostics.webSearch.status === 'failed'
+            ? 'Public web discovery failed for every query that was tried.'
+            : 'Public web discovery completed but returned no brand candidates.';
 
     pageResults.forEach((result, index) => {
-        if (result.status !== 'fulfilled') return;
+        if (result.status !== 'fulfilled') {
+            diagnostics.metaPageSearch.failedVariants += 1;
+            return;
+        }
+        diagnostics.metaPageSearch.successfulVariants += 1;
         const variant = variants[index];
         for (const candidate of result.value) {
             const pageId = candidate.id ? String(candidate.id) : `name:${normalizeText(candidate.name || variant)}`;
@@ -845,9 +901,24 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
             });
         }
     });
+    diagnostics.metaPageSearch.hits = pageHits.size;
+    diagnostics.metaPageSearch.status = diagnostics.metaPageSearch.hits > 0
+        ? 'ok'
+        : diagnostics.metaPageSearch.failedVariants === variants.length
+            ? 'failed'
+            : 'empty';
+    diagnostics.metaPageSearch.detail = diagnostics.metaPageSearch.status === 'ok'
+        ? `Meta page search returned ${pageHits.size} candidate pages.`
+        : diagnostics.metaPageSearch.status === 'failed'
+            ? 'Every Meta page search variant failed or was rejected.'
+            : 'Meta page search completed but returned no candidate pages.';
 
     archiveResults.forEach((result) => {
-        if (result.status !== 'fulfilled') return;
+        if (result.status !== 'fulfilled') {
+            diagnostics.adsArchiveDiscovery.failedVariants += 1;
+            return;
+        }
+        diagnostics.adsArchiveDiscovery.successfulVariants += 1;
         for (const ad of result.value) {
             const key = ad.page_id ? String(ad.page_id) : `name:${normalizeText(ad.page_name || query)}`;
             const existing = archiveHits.get(key);
@@ -859,6 +930,17 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
             });
         }
     });
+    diagnostics.adsArchiveDiscovery.hits = archiveHits.size;
+    diagnostics.adsArchiveDiscovery.status = diagnostics.adsArchiveDiscovery.hits > 0
+        ? 'ok'
+        : diagnostics.adsArchiveDiscovery.failedVariants === variants.length
+            ? 'failed'
+            : 'empty';
+    diagnostics.adsArchiveDiscovery.detail = diagnostics.adsArchiveDiscovery.status === 'ok'
+        ? `Ads archive discovery found ${archiveHits.size} advertisers with public ad signals.`
+        : diagnostics.adsArchiveDiscovery.status === 'failed'
+            ? 'Every ads archive discovery request failed or was rejected.'
+            : 'Ads archive discovery completed but returned no advertiser candidates.';
 
     const archiveOnlyCandidates = [...archiveHits.values()].filter((candidate) => candidate.pageId && !pageHits.has(candidate.pageId));
     const enrichedArchiveCandidates = await Promise.all(
@@ -931,7 +1013,12 @@ export async function searchCompetitorPages({ accessToken, query, country = 'IN'
         .slice(0, 10);
 
     await rememberDiscoveryCandidates(userId, rankedCandidates);
-    return rankedCandidates;
+    return {
+        candidates: rankedCandidates,
+        diagnostics,
+        canCache: rankedCandidates.length > 0,
+        cacheTtlSeconds: rankedCandidates.length > 0 ? 600 : 30
+    };
 }
 
 export async function getCompetitorIntelligence({ accessToken, competitor }) {

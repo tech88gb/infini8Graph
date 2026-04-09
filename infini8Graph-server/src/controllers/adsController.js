@@ -86,16 +86,47 @@ export async function searchCompetitorPages(req, res) {
         }
 
         const cacheKey = buildMetaCacheKey('meta-competitor-search', [req.user.userId, query.toLowerCase(), country]);
-        const candidates = await withMetaCache(cacheKey, META_CACHE_TTL.competitors, async () =>
-            metaCompetitorService.searchCompetitorPages({ accessToken, query, country, userId: req.user.userId })
-        );
+        const cached = getMetaCacheEntry(cacheKey);
+        if (cached) {
+            return res.json({
+                success: true,
+                data: {
+                    ...cached,
+                    query,
+                    country,
+                    cache: {
+                        status: 'hit',
+                        ttlSeconds: META_CACHE_TTL.competitors
+                    }
+                }
+            });
+        }
+
+        const discovery = await metaCompetitorService.searchCompetitorPages({
+            accessToken,
+            query,
+            country,
+            userId: req.user.userId
+        });
+
+        if (discovery.canCache) {
+            setMetaCacheEntry(cacheKey, {
+                candidates: discovery.candidates,
+                diagnostics: discovery.diagnostics
+            }, META_CACHE_TTL.competitors);
+        }
 
         res.json({
             success: true,
             data: {
                 query,
                 country,
-                candidates
+                candidates: discovery.candidates,
+                diagnostics: discovery.diagnostics,
+                cache: {
+                    status: discovery.canCache ? 'stored' : 'skipped-empty',
+                    ttlSeconds: discovery.canCache ? META_CACHE_TTL.competitors : discovery.cacheTtlSeconds
+                }
             }
         });
     } catch (error) {

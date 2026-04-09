@@ -80,6 +80,24 @@ type SavedCompetitor = CompetitorCandidate & {
     status: 'ACTIVE' | 'ALL';
 };
 
+type DiscoveryDiagnostic = {
+    source: string;
+    status: 'ok' | 'empty' | 'failed';
+    hits?: number;
+    detail?: string;
+    successfulQueries?: number;
+    failedQueries?: number;
+    successfulVariants?: number;
+    failedVariants?: number;
+};
+
+type DiscoveryDiagnostics = {
+    cache?: DiscoveryDiagnostic;
+    webSearch?: DiscoveryDiagnostic;
+    metaPageSearch?: DiscoveryDiagnostic;
+    adsArchiveDiscovery?: DiscoveryDiagnostic;
+};
+
 function formatDateTime(value?: string | null) {
     if (!value) return 'Live now';
     const date = new Date(value);
@@ -516,6 +534,8 @@ export default function AdsPage() {
     };
 
     const competitorCandidates = competitorSearchData?.data?.candidates || [];
+    const competitorDiagnostics = (competitorSearchData?.data?.diagnostics || {}) as DiscoveryDiagnostics;
+    const competitorCacheState = competitorSearchData?.data?.cache;
     const competitorIntel = competitorIntelData?.data || null;
 
     // Extract data from insights
@@ -2667,6 +2687,80 @@ export default function AdsPage() {
                                     </div>
                                 </div>
 
+                                {!!submittedCompetitorQuery && (
+                                    <div style={{ display: 'grid', gap: 10 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Discovery Status</div>
+                                            {competitorCacheState && (
+                                                <span style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: 999,
+                                                    fontSize: 11,
+                                                    fontWeight: 700,
+                                                    background: competitorCacheState.status === 'hit' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                                    color: competitorCacheState.status === 'hit' ? '#10b981' : '#f59e0b'
+                                                }}>
+                                                    Cache: {competitorCacheState.status}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                                            {[
+                                                competitorDiagnostics.cache,
+                                                competitorDiagnostics.webSearch,
+                                                competitorDiagnostics.metaPageSearch,
+                                                competitorDiagnostics.adsArchiveDiscovery
+                                            ].filter(Boolean).map((diag) => {
+                                                const statusColor = diag?.status === 'ok'
+                                                    ? '#10b981'
+                                                    : diag?.status === 'failed'
+                                                        ? '#ef4444'
+                                                        : '#f59e0b';
+                                                const statusBg = diag?.status === 'ok'
+                                                    ? 'rgba(16, 185, 129, 0.08)'
+                                                    : diag?.status === 'failed'
+                                                        ? 'rgba(239, 68, 68, 0.08)'
+                                                        : 'rgba(245, 158, 11, 0.08)';
+
+                                                return (
+                                                    <div
+                                                        key={diag?.source}
+                                                        style={{
+                                                            padding: 12,
+                                                            borderRadius: 12,
+                                                            border: `1px solid ${statusColor}33`,
+                                                            background: statusBg
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                                            <div style={{ fontSize: 12, fontWeight: 700 }}>
+                                                                {diag?.source === 'saved-competitor-cache'
+                                                                    ? 'Saved cache'
+                                                                    : diag?.source === 'public-web-search'
+                                                                        ? 'Public web'
+                                                                        : diag?.source === 'meta-page-search'
+                                                                            ? 'Meta pages'
+                                                                            : 'Ads archive'}
+                                                            </div>
+                                                            <span style={{ color: statusColor, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
+                                                                {diag?.status}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+                                                            {diag?.detail}
+                                                        </div>
+                                                        {typeof diag?.hits === 'number' && (
+                                                            <div style={{ fontSize: 11, marginTop: 8, color: statusColor, fontWeight: 700 }}>
+                                                                Hits: {diag.hits}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {competitorCandidates.length > 0 ? (
                                     competitorCandidates.map((candidate: CompetitorCandidate, index: number) => (
                                         <div
@@ -2754,7 +2848,7 @@ export default function AdsPage() {
                                     ))
                                 ) : (
                                     <p className="text-muted" style={{ fontSize: 13 }}>
-                                        No strong page matches came back yet. You can still analyze the brand term directly, but the resolver is now also checking Facebook page results plus public ads-based matches for the selected country.
+                                        No resolved competitor candidates came back yet. Check the discovery status cards above to see whether public web search, Meta page search, or ads archive discovery failed, returned empty, or actually found usable matches.
                                     </p>
                                 )}
                             </div>
