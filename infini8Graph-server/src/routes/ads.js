@@ -12,6 +12,8 @@ router.get('/test-permissions', adsController.testAdsPermissions);
 
 // Ad accounts
 router.get('/accounts', adsController.getAdAccounts);
+router.get('/competitors/search', adsController.searchCompetitorPages);
+router.get('/competitors/intelligence', adsController.getCompetitorIntelligence);
 
 // Detailed insights for an account
 router.get('/accounts/:adAccountId/insights', adsController.getAdInsights);
