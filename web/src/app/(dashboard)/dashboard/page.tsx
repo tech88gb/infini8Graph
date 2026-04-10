@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi, googleAdsApi, adsApi } from '@/lib/api';
 import Link from 'next/link';
@@ -295,6 +295,331 @@ function SectionCard({ title, subtitle, timePeriod, children }: {
     );
 }
 
+// ==================== OPERATOR CONSOLE ====================
+
+type OperatorPost = {
+    type?: string;
+    engagement?: number | string;
+};
+
+type DailyMetric = {
+    date?: string;
+    reach?: number | string;
+    impressions?: number | string;
+};
+
+type OperatorMetrics = {
+    totalReach?: number | string;
+    totalSaved?: number | string;
+    engagementRate?: number | string;
+};
+
+type CampaignInsight = {
+    spend?: number | string;
+    ctr?: number | string;
+    clicks?: number | string;
+};
+
+type MetaCampaign = {
+    name?: string;
+    insights?: { data?: CampaignInsight[] } | CampaignInsight[];
+};
+
+type GoogleCampaign = {
+    name?: string;
+    spend?: number | string;
+    ctr?: number | string;
+    conversions?: number | string;
+    roas?: number | string;
+};
+
+type OperatorOverview = {
+    recentPosts?: OperatorPost[];
+    metrics?: OperatorMetrics;
+    dailyMetrics?: DailyMetric[];
+};
+
+function toNumber(value: unknown) {
+    const parsed = typeof value === 'number' ? value : parseFloat(String(value || 0));
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function percentChange(current: number, previous: number) {
+    if (!previous) return current ? 100 : 0;
+    return Math.round(((current - previous) / previous) * 100);
+}
+
+function compactNumber(value: number) {
+    return value >= 1000 ? value.toLocaleString() : String(value);
+}
+
+function getPostFormatLabel(type?: string) {
+    const normalized = (type || '').toLowerCase();
+    if (normalized.includes('reel')) return 'Reel';
+    if (normalized.includes('video')) return 'Video';
+    if (normalized.includes('carousel')) return 'Carousel';
+    return 'Image post';
+}
+
+function buildPostRecommendation(recentPosts: OperatorPost[]) {
+    if (!recentPosts.length) {
+        return {
+            title: 'Publish one baseline post',
+            detail: 'There is not enough recent content to compare formats yet.',
+            action: 'Post one clear offer or proof point, then use the next 7 days of engagement to tune the format.',
+        };
+    }
+
+    const byFormat = recentPosts.reduce((acc: Record<string, { count: number; engagement: number }>, post) => {
+        const format = getPostFormatLabel(post.type);
+        if (!acc[format]) acc[format] = { count: 0, engagement: 0 };
+        acc[format].count += 1;
+        acc[format].engagement += toNumber(post.engagement);
+        return acc;
+    }, {});
+
+    const best = Object.entries(byFormat)
+        .map(([format, stats]) => ({
+            format,
+            count: stats.count,
+            avgEngagement: stats.engagement / Math.max(stats.count, 1),
+        }))
+        .sort((a, b) => b.avgEngagement - a.avgEngagement)[0];
+
+    const topPost = [...recentPosts].sort((a, b) => toNumber(b.engagement) - toNumber(a.engagement))[0];
+
+    return {
+        title: `Post a ${best.format.toLowerCase()} next`,
+        detail: `${best.format}s are leading your recent content with ${Math.round(best.avgEngagement).toLocaleString()} average engagements.`,
+        action: `Use the same direction as your top recent ${getPostFormatLabel(topPost?.type).toLowerCase()} and make the first line more direct.`,
+    };
+}
+
+function buildWeekChange(dailyMetrics: DailyMetric[], metrics: OperatorMetrics) {
+    if (dailyMetrics.length >= 8) {
+        const sorted = [...dailyMetrics].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const current = sorted.slice(-7);
+        const previous = sorted.slice(-14, -7);
+        const sum = (rows: DailyMetric[], key: 'reach' | 'impressions') => rows.reduce((total, row) => total + toNumber(row[key]), 0);
+        const currentReach = sum(current, 'reach');
+        const previousReach = sum(previous, 'reach');
+        const currentImpressions = sum(current, 'impressions');
+        const previousImpressions = sum(previous, 'impressions');
+        const reachChange = percentChange(currentReach, previousReach);
+        const impressionChange = percentChange(currentImpressions, previousImpressions);
+
+        return {
+            title: `Reach is ${reachChange >= 0 ? 'up' : 'down'} ${Math.abs(reachChange)}% this week`,
+            detail: `Impressions are ${impressionChange >= 0 ? 'up' : 'down'} ${Math.abs(impressionChange)}% across the same window.`,
+            action: reachChange >= 0
+                ? 'Double down on the format that drove the newest reach before changing the content direction.'
+                : 'Use a stronger opening hook and repeat the format from your best recent post.',
+        };
+    }
+
+    return {
+        title: `${compactNumber(toNumber(metrics.totalReach))} total reach in this view`,
+        detail: `${compactNumber(toNumber(metrics.totalSaved))} saves and ${metrics.engagementRate || 0}% engagement rate are your current quality signals.`,
+        action: 'Keep the same date range for a few refreshes so the weekly comparison becomes more useful.',
+    };
+}
+
+function getCampaignInsight(campaign: MetaCampaign): CampaignInsight {
+    if (Array.isArray(campaign.insights)) return campaign.insights[0] || {};
+    return campaign.insights?.data?.[0] || {};
+}
+
+function buildWasteSignal(metaCampaigns: MetaCampaign[], googleCampaigns: GoogleCampaign[]) {
+    const googleWaste = googleCampaigns
+        .map((campaign) => ({
+            platform: 'Google Ads',
+            name: campaign.name || 'Unnamed campaign',
+            spend: toNumber(campaign.spend),
+            ctr: toNumber(campaign.ctr),
+            conversions: toNumber(campaign.conversions),
+            roas: toNumber(campaign.roas),
+        }))
+        .filter((campaign) => campaign.spend > 0 && (campaign.conversions === 0 || campaign.roas < 1 || campaign.ctr < 1))
+        .sort((a, b) => b.spend - a.spend)[0];
+
+    if (googleWaste) {
+        return {
+            platform: googleWaste.platform,
+            title: `${googleWaste.name} needs a budget check`,
+            detail: `${googleWaste.platform} spent ₹${googleWaste.spend.toLocaleString()} with ${googleWaste.conversions} conversions and ${googleWaste.ctr}% CTR.`,
+            action: googleWaste.conversions === 0
+                ? 'Pause it or rewrite the landing intent before adding more budget.'
+                : 'Tighten targeting or rewrite the creative before scaling it.',
+        };
+    }
+
+    const metaWaste = metaCampaigns
+        .map((campaign) => {
+            const insight = getCampaignInsight(campaign);
+            return {
+                platform: 'Meta Ads',
+                name: campaign.name || 'Unnamed campaign',
+                spend: toNumber(insight.spend),
+                ctr: toNumber(insight.ctr),
+                clicks: toNumber(insight.clicks),
+            };
+        })
+        .filter((campaign) => campaign.spend > 0 && (campaign.clicks === 0 || campaign.ctr < 0.8))
+        .sort((a, b) => b.spend - a.spend)[0];
+
+    if (metaWaste) {
+        return {
+            platform: metaWaste.platform,
+            title: `${metaWaste.name} is the weakest spend signal`,
+            detail: `${metaWaste.platform} spent ₹${metaWaste.spend.toLocaleString()} with ${metaWaste.clicks} clicks and ${metaWaste.ctr}% CTR.`,
+            action: 'Refresh the creative or narrow the audience before increasing spend.',
+        };
+    }
+
+    if (!metaCampaigns.length && !googleCampaigns.length) {
+        return {
+            platform: null,
+            title: 'Connect ad data to see waste alerts',
+            detail: 'No campaign-level spend signal is available in this view yet.',
+            action: 'Use the ads tabs once Meta Ads or Google Ads is connected.',
+        };
+    }
+
+    return {
+        platform: null,
+        title: 'No obvious wasted spend found',
+        detail: 'The connected campaigns did not trigger the low CTR or low conversion rules.',
+        action: 'Keep watching high-spend campaigns and only scale the ones with clear downstream actions.',
+    };
+}
+
+function OperatorConsole({ overview }: { overview: OperatorOverview }) {
+    const recentPosts = overview?.recentPosts || [];
+    const metrics = overview?.metrics || {};
+    const dailyMetrics = overview?.dailyMetrics || [];
+
+    const { data: metaAccountsData } = useQuery({
+        queryKey: ['operator-meta-ad-accounts'],
+        queryFn: async () => {
+            const res = await adsApi.getAdAccounts();
+            return res.data;
+        },
+        staleTime: 60_000,
+    });
+
+    const metaAdAccounts = metaAccountsData?.data?.adAccounts || [];
+    const metaAccountId = metaAccountsData?.data?.defaultAccountId || metaAdAccounts[0]?.account_id;
+
+    const { data: metaCampaignsData } = useQuery({
+        queryKey: ['operator-meta-campaigns', metaAccountId],
+        queryFn: async () => {
+            const res = await adsApi.getCampaigns(metaAccountId);
+            return res.data;
+        },
+        enabled: !!metaAccountId,
+        staleTime: 5 * 60_000,
+    });
+
+    const { data: googleCampaignsData } = useQuery({
+        queryKey: ['operator-google-campaigns', '30d'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getCampaigns('30d');
+            return res.data;
+        },
+        staleTime: 5 * 60_000,
+    });
+
+    const weekChange = buildWeekChange(dailyMetrics, metrics);
+    const postNext = buildPostRecommendation(recentPosts);
+    const wasteSignal = buildWasteSignal(
+        metaCampaignsData?.data?.campaigns || [],
+        googleCampaignsData?.data?.campaigns || []
+    );
+
+    const priority = wasteSignal.title !== 'No obvious wasted spend found' && wasteSignal.title !== 'Connect ad data to see waste alerts'
+        ? {
+            title: wasteSignal.title,
+            detail: wasteSignal.detail,
+            action: wasteSignal.action,
+            href: wasteSignal.platform === 'Google Ads' ? '/google-ads' : '/ads',
+        }
+        : {
+            title: postNext.title,
+            detail: postNext.detail,
+            action: postNext.action,
+            href: '/insights',
+        };
+
+    const cards = [
+        { label: "Today's Priority", icon: Zap, color: '#f59e0b', ...priority },
+        { label: 'What Changed This Week', icon: TrendingUp, color: '#10b981', ...weekChange, href: '/growth' },
+        { label: 'What Should I Post Next?', icon: Image, color: '#ec4899', ...postNext, href: '/insights' },
+        { label: 'Where Am I Wasting Money?', icon: DollarSign, color: '#ef4444', ...wasteSignal, href: wasteSignal.platform === 'Google Ads' ? '/google-ads' : '/ads' },
+    ];
+
+    return (
+        <div style={{
+            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), rgba(16,17,26,0.96)',
+            borderRadius: 12,
+            padding: 20,
+            marginBottom: 24,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Operator Console</h2>
+                    <p className="text-muted" style={{ fontSize: 13 }}>The decisions to make before you open the deeper reports.</p>
+                </div>
+                <span className="badge badge-info">Rule-based</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+                {cards.map((card) => (
+                    <div key={card.label} style={{
+                        minHeight: 220,
+                        padding: 16,
+                        borderRadius: 8,
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        background: 'rgba(3,4,11,0.55)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 14,
+                    }}>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                <div style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: 8,
+                                    background: `${card.color}18`,
+                                    color: card.color,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}>
+                                    <card.icon size={16} />
+                                </div>
+                                <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                                    {card.label}
+                                </span>
+                            </div>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, marginBottom: 8 }}>{card.title}</h3>
+                            <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.55 }}>{card.detail}</p>
+                        </div>
+                        <div>
+                            <p style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>{card.action}</p>
+                            <Link href={card.href} style={{ color: card.color, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                                Open report
+                            </Link>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // ==================== POST ROW ====================
 
 function PostRow({ post }: { post: any }) {
@@ -470,7 +795,7 @@ function MetaAdsWidget() {
                     <div>
                         <h3 style={{ fontSize: 14, fontWeight: 600 }}>Meta Ads — Last 30 days</h3>
                         <p className="text-muted" style={{ fontSize: 11 }}>
-                             {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
+                            {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
                         </p>
                     </div>
                 </div>
@@ -538,7 +863,7 @@ export default function DashboardPage() {
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
-    
+
     const [dateRange, setDateRange] = useState({
         startDate: defaultStart.toISOString().split('T')[0],
         endDate: defaultEnd.toISOString().split('T')[0]
@@ -659,6 +984,8 @@ export default function DashboardPage() {
                 </div>
             </div>
 
+            <OperatorConsole overview={data} />
+
             {/* SOCIAL MEDIA WIDGET (Instagram) */}
             <div style={{
                 background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
@@ -682,277 +1009,277 @@ export default function DashboardPage() {
                 {/* Core Metrics */}
                 <div className="grid-metrics" style={{ marginBottom: 24 }}>
                     <MetricCard
-                    label="Total Followers"
-                    value={metrics.followers || 0}
-                    icon={Users}
-                    color="#6366f1"
-                    tooltip="Overall number of accounts following you"
-                />
-                <MetricCard
-                    label="Engagement Rate"
-                    value={`${metrics.engagementRate || 0}%`}
-                    icon={Heart}
-                    color="#ec4899"
-                    tooltip="Average engagement (likes + comments) divided by followers"
-                />
-                <MetricCard
-                    label="Avg Likes"
-                    value={metrics.avgLikes || 0}
-                    icon={Heart}
-                    color="#ef4444"
-                    tooltip="Average likes per post across your recent content"
-                />
-                <MetricCard
-                    label="Total Reach"
-                    value={metrics.totalReach || 0}
-                    icon={Eye}
-                    color="#0ea5e9"
-                    tooltip="Total unique accounts that saw your content"
-                />
-                <MetricCard
-                    label="Total Saved"
-                    value={metrics.totalSaved || 0}
-                    icon={Bookmark}
-                    color="#10b981"
-                    tooltip="Number of times your content was saved - a high-intent engagement signal"
-                />
-                <MetricCard
-                    label="Posts"
-                    value={metrics.posts || 0}
-                    icon={Image}
-                    color="#f59e0b"
-                    tooltip="Total number of posts on your account"
-                />
-            </div>
-
-            {/* Calculated Insights */}
-            <SectionCard title="Calculated Insights" subtitle="Advanced metrics calculated from your data">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>Viral Score</span>
-                            <InfoTooltip text="(Saves ÷ Reach) × 100. Higher score means content is more share-worthy and bookmark-worthy." />
-                        </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{viralScore}%</div>
-                    </div>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>True Engagement Rate</span>
-                            <InfoTooltip text="(Likes + Comments) ÷ Reach × 100. More accurate than follower-based engagement rate." />
-                        </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{trueEngagementRate}%</div>
-                    </div>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>Save-to-Like Ratio</span>
-                            <InfoTooltip text="Saves ÷ Likes. Higher ratio indicates valuable, reference-worthy content." />
-                        </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>
-                            {metrics.totalSaved && metrics.avgLikes
-                                ? ((metrics.totalSaved / (metrics.avgLikes * recentPosts.length)) * 100).toFixed(1)
-                                : '0'}%
-                        </div>
-                    </div>
-                </div>
-            </SectionCard>
-            {/* Daily Metrics Chart */}
-            {dailyChartData.length > 0 && (
-                <div className="chart-container" style={{ marginBottom: 24 }}>
-                    <div className="card-header">
-                        <h3 className="card-title">Daily Audience Metrics</h3>
-                        <p className="text-muted" style={{ fontSize: 12 }}>Follower count, impressions, and reach per day</p>
-                    </div>
-                    <ResponsiveContainer width="100%" height={240}>
-                        <AreaChart data={dailyChartData}>
-                            <defs>
-                                <linearGradient id="followerGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                            <YAxis yAxisId="left" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={60} domain={['auto', 'auto']} />
-                            <YAxis yAxisId="right" orientation="right" stroke="#6366f1" fontSize={11} tickLine={false} axisLine={false} width={60} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: 'var(--card-raised)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 6,
-                                    fontSize: 13
-                                }}
-                            />
-                            <Area yAxisId="left" type="monotone" dataKey="followers" name="Followers" stroke="#10b981" strokeWidth={2} fill="url(#followerGrad)" />
-                            <Area yAxisId="right" type="monotone" dataKey="impressions" name="Impressions" stroke="#6366f1" strokeWidth={2} fill="none" />
-                            <Area yAxisId="right" type="monotone" dataKey="reach" name="Reach" stroke="#0ea5e9" strokeWidth={2} fill="none" />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
-            )}
-
-            {/* Engagement Charts */}
-            <div className="grid-charts" style={{ marginBottom: 24 }}>
-                <div className="chart-container">
-                    <div className="card-header">
-                        <h3 className="card-title">Engagement Trend</h3>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                        <AreaChart data={chartData}>
-                            <defs>
-                                <linearGradient id="engGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
-                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={40} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: 'var(--card-raised)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 6,
-                                    fontSize: 13
-                                }}
-                            />
-                            <Area type="monotone" dataKey="engagement" stroke="#6366f1" strokeWidth={2} fill="url(#engGrad)" />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                        label="Total Followers"
+                        value={metrics.followers || 0}
+                        icon={Users}
+                        color="#6366f1"
+                        tooltip="Overall number of accounts following you"
+                    />
+                    <MetricCard
+                        label="Engagement Rate"
+                        value={`${metrics.engagementRate || 0}%`}
+                        icon={Heart}
+                        color="#ec4899"
+                        tooltip="Average engagement (likes + comments) divided by followers"
+                    />
+                    <MetricCard
+                        label="Avg Likes"
+                        value={metrics.avgLikes || 0}
+                        icon={Heart}
+                        color="#ef4444"
+                        tooltip="Average likes per post across your recent content"
+                    />
+                    <MetricCard
+                        label="Total Reach"
+                        value={metrics.totalReach || 0}
+                        icon={Eye}
+                        color="#0ea5e9"
+                        tooltip="Total unique accounts that saw your content"
+                    />
+                    <MetricCard
+                        label="Total Saved"
+                        value={metrics.totalSaved || 0}
+                        icon={Bookmark}
+                        color="#10b981"
+                        tooltip="Number of times your content was saved - a high-intent engagement signal"
+                    />
+                    <MetricCard
+                        label="Posts"
+                        value={metrics.posts || 0}
+                        icon={Image}
+                        color="#f59e0b"
+                        tooltip="Total number of posts on your account"
+                    />
                 </div>
 
-                <div className="chart-container">
-                    <div className="card-header">
-                        <h3 className="card-title">Likes vs Comments</h3>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={chartData}>
-                            <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={40} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: 'var(--card-raised)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 6,
-                                    fontSize: 13
-                                }}
-                            />
-                            <Bar dataKey="likes" fill="#ec4899" radius={[3, 3, 0, 0]} />
-                            <Bar dataKey="comments" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Audience Demographics */}
-            {(countryData.length > 0 || cityData.length > 0 || genderAgeData.length > 0) && (
-                <SectionCard title="Audience Demographics" subtitle="Where your followers are located and who they are">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-                        {/* Top Countries */}
-                        {countryData.length > 0 && (
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                                    <Globe size={16} style={{ color: 'var(--muted)' }} />
-                                    <span style={{ fontSize: 13, fontWeight: 500 }}>Top Countries</span>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    {countryData.map((country: any, i: number) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: 13 }}>{country.name}</span>
-                                            <span style={{ fontWeight: 600, fontSize: 13 }}>{country.value.toLocaleString()}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                {/* Calculated Insights */}
+                <SectionCard title="Calculated Insights" subtitle="Advanced metrics calculated from your data">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Viral Score</span>
+                                <InfoTooltip text="(Saves ÷ Reach) × 100. Higher score means content is more share-worthy and bookmark-worthy." />
                             </div>
-                        )}
-
-                        {/* Top Cities */}
-                        {cityData.length > 0 && (
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                                    <MapPin size={16} style={{ color: 'var(--muted)' }} />
-                                    <span style={{ fontSize: 13, fontWeight: 500 }}>Top Cities</span>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    {cityData.map((city: any, i: number) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: 13 }}>{city.name}</span>
-                                            <span style={{ fontWeight: 600, fontSize: 13 }}>{city.value.toLocaleString()}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{viralScore}%</div>
+                        </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>True Engagement Rate</span>
+                                <InfoTooltip text="(Likes + Comments) ÷ Reach × 100. More accurate than follower-based engagement rate." />
                             </div>
-                        )}
-
-                        {/* Gender & Age */}
-                        {genderAgeData.length > 0 && (
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                                    <Users size={16} style={{ color: 'var(--muted)' }} />
-                                    <span style={{ fontSize: 13, fontWeight: 500 }}>Gender & Age</span>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    {genderAgeData.map((item: any, i: number) => {
-                                        const maxValue = Math.max(...genderAgeData.map((g: any) => g.value));
-                                        const percentage = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-                                        return (
-                                            <div key={i}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                    <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{item.shortName}</span>
-                                                    <span style={{ fontSize: 12, fontWeight: 600 }}>{item.value.toLocaleString()}</span>
-                                                </div>
-                                                <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                                                    <div style={{
-                                                        height: '100%',
-                                                        width: `${percentage}%`,
-                                                        background: COLORS[i % COLORS.length],
-                                                        borderRadius: 3,
-                                                        transition: 'width 0.3s ease'
-                                                    }} />
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{trueEngagementRate}%</div>
+                        </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Save-to-Like Ratio</span>
+                                <InfoTooltip text="Saves ÷ Likes. Higher ratio indicates valuable, reference-worthy content." />
                             </div>
-                        )}
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>
+                                {metrics.totalSaved && metrics.avgLikes
+                                    ? ((metrics.totalSaved / (metrics.avgLikes * recentPosts.length)) * 100).toFixed(1)
+                                    : '0'}%
+                            </div>
+                        </div>
                     </div>
                 </SectionCard>
-            )}
-
-            {/* Online Followers */}
-            {demographics.onlineFollowers && demographics.onlineFollowers.length > 0 && (
-                <SectionCard title="Best Time to Post" subtitle="Based on when your followers are most active">
-                    <OnlineFollowersHeatmap data={demographics.onlineFollowers} />
-                </SectionCard>
-            )}
-
-            {/* Recent Posts Table */}
-            <div className="card">
-                <div className="card-header">
-                    <h3 className="card-title">Recent Posts</h3>
-                    <span className="badge badge-info">{recentPosts.length} posts</span>
-                </div>
-                {recentPosts.length > 0 ? (
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Post</th>
-                                <th>Likes</th>
-                                <th>Comments</th>
-                                <th>Engagement</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {recentPosts.slice(0, 5).map((post: any, i: number) => (
-                                <PostRow key={post.id || i} post={post} />
-                            ))}
-                        </tbody>
-                    </table>
-                ) : (
-                    <div className="empty-state">
-                        <p>No posts found</p>
+                {/* Daily Metrics Chart */}
+                {dailyChartData.length > 0 && (
+                    <div className="chart-container" style={{ marginBottom: 24 }}>
+                        <div className="card-header">
+                            <h3 className="card-title">Daily Audience Metrics</h3>
+                            <p className="text-muted" style={{ fontSize: 12 }}>Follower count, impressions, and reach per day</p>
+                        </div>
+                        <ResponsiveContainer width="100%" height={240}>
+                            <AreaChart data={dailyChartData}>
+                                <defs>
+                                    <linearGradient id="followerGrad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                                <YAxis yAxisId="left" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={60} domain={['auto', 'auto']} />
+                                <YAxis yAxisId="right" orientation="right" stroke="#6366f1" fontSize={11} tickLine={false} axisLine={false} width={60} />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: 'var(--card-raised)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: 6,
+                                        fontSize: 13
+                                    }}
+                                />
+                                <Area yAxisId="left" type="monotone" dataKey="followers" name="Followers" stroke="#10b981" strokeWidth={2} fill="url(#followerGrad)" />
+                                <Area yAxisId="right" type="monotone" dataKey="impressions" name="Impressions" stroke="#6366f1" strokeWidth={2} fill="none" />
+                                <Area yAxisId="right" type="monotone" dataKey="reach" name="Reach" stroke="#0ea5e9" strokeWidth={2} fill="none" />
+                            </AreaChart>
+                        </ResponsiveContainer>
                     </div>
                 )}
-            </div>
-            
+
+                {/* Engagement Charts */}
+                <div className="grid-charts" style={{ marginBottom: 24 }}>
+                    <div className="chart-container">
+                        <div className="card-header">
+                            <h3 className="card-title">Engagement Trend</h3>
+                        </div>
+                        <ResponsiveContainer width="100%" height={200}>
+                            <AreaChart data={chartData}>
+                                <defs>
+                                    <linearGradient id="engGrad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={40} />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: 'var(--card-raised)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: 6,
+                                        fontSize: 13
+                                    }}
+                                />
+                                <Area type="monotone" dataKey="engagement" stroke="#6366f1" strokeWidth={2} fill="url(#engGrad)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    <div className="chart-container">
+                        <div className="card-header">
+                            <h3 className="card-title">Likes vs Comments</h3>
+                        </div>
+                        <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={chartData}>
+                                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} width={40} />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: 'var(--card-raised)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: 6,
+                                        fontSize: 13
+                                    }}
+                                />
+                                <Bar dataKey="likes" fill="#ec4899" radius={[3, 3, 0, 0]} />
+                                <Bar dataKey="comments" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Audience Demographics */}
+                {(countryData.length > 0 || cityData.length > 0 || genderAgeData.length > 0) && (
+                    <SectionCard title="Audience Demographics" subtitle="Where your followers are located and who they are">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+                            {/* Top Countries */}
+                            {countryData.length > 0 && (
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                                        <Globe size={16} style={{ color: 'var(--muted)' }} />
+                                        <span style={{ fontSize: 13, fontWeight: 500 }}>Top Countries</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        {countryData.map((country: any, i: number) => (
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: 13 }}>{country.name}</span>
+                                                <span style={{ fontWeight: 600, fontSize: 13 }}>{country.value.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Top Cities */}
+                            {cityData.length > 0 && (
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                                        <MapPin size={16} style={{ color: 'var(--muted)' }} />
+                                        <span style={{ fontSize: 13, fontWeight: 500 }}>Top Cities</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        {cityData.map((city: any, i: number) => (
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: 13 }}>{city.name}</span>
+                                                <span style={{ fontWeight: 600, fontSize: 13 }}>{city.value.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Gender & Age */}
+                            {genderAgeData.length > 0 && (
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                                        <Users size={16} style={{ color: 'var(--muted)' }} />
+                                        <span style={{ fontSize: 13, fontWeight: 500 }}>Gender & Age</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        {genderAgeData.map((item: any, i: number) => {
+                                            const maxValue = Math.max(...genderAgeData.map((g: any) => g.value));
+                                            const percentage = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+                                            return (
+                                                <div key={i}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                        <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{item.shortName}</span>
+                                                        <span style={{ fontSize: 12, fontWeight: 600 }}>{item.value.toLocaleString()}</span>
+                                                    </div>
+                                                    <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                                        <div style={{
+                                                            height: '100%',
+                                                            width: `${percentage}%`,
+                                                            background: COLORS[i % COLORS.length],
+                                                            borderRadius: 3,
+                                                            transition: 'width 0.3s ease'
+                                                        }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </SectionCard>
+                )}
+
+                {/* Online Followers */}
+                {demographics.onlineFollowers && demographics.onlineFollowers.length > 0 && (
+                    <SectionCard title="Best Time to Post" subtitle="Based on when your followers are most active">
+                        <OnlineFollowersHeatmap data={demographics.onlineFollowers} />
+                    </SectionCard>
+                )}
+
+                {/* Recent Posts Table */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Recent Posts</h3>
+                        <span className="badge badge-info">{recentPosts.length} posts</span>
+                    </div>
+                    {recentPosts.length > 0 ? (
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Post</th>
+                                    <th>Likes</th>
+                                    <th>Comments</th>
+                                    <th>Engagement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {recentPosts.slice(0, 5).map((post: any, i: number) => (
+                                    <PostRow key={post.id || i} post={post} />
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div className="empty-state">
+                            <p>No posts found</p>
+                        </div>
+                    )}
+                </div>
+
             </div> {/* END SOCIAL MEDIA WIDGET */}
 
             {/* PAID ADS WIDGETS */}
