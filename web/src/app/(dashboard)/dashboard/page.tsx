@@ -193,8 +193,11 @@ function GoogleAdsWidget() {
             )}
 
             {!adsLoading && adsData?.data?.hasAdAccounts === false && (
-                <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 13 }}>
-                    {adsData?.data?.message || 'No active Google Ads campaigns found.'}
+                <div style={{ textAlign: 'center', padding: '18px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    <p style={{ marginBottom: 12 }}>{adsData?.data?.message || 'No active Google Ads campaigns found.'}</p>
+                    <Link href="/google-ads" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
+                        Connect Google Ads
+                    </Link>
                 </div>
             )}
 
@@ -500,8 +503,11 @@ function MetaAdsWidget() {
             )}
 
             {!insightsLoading && !summary && (
-                <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 13 }}>
-                    No active Meta Ads campaigns found.
+                <div style={{ textAlign: 'center', padding: '18px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    <p style={{ marginBottom: 12 }}>No active Meta Ads campaigns found.</p>
+                    <Link href="/settings" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
+                        Open Meta Ads setup
+                    </Link>
                 </div>
             )}
 

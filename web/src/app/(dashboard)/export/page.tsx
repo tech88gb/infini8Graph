@@ -29,6 +29,8 @@ const exportOptions = [
     { id: 'contentIntelligence', label: 'Creative Intelligence', description: 'Format winners, quality scores, and content strategy signals.' },
 ];
 
+const recommendedExportMetrics = ['overview', 'growth', 'posts', 'contentIntelligence'];
+
 function formatDateForInput(date: Date) {
     return date.toISOString().split('T')[0];
 }
@@ -46,7 +48,7 @@ function parseFileName(header?: string | null) {
 }
 
 export default function ExportPage() {
-    const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['overview', 'growth', 'posts', 'contentIntelligence']);
+    const [selectedMetrics, setSelectedMetrics] = useState<string[]>(recommendedExportMetrics);
     const [format, setFormat] = useState<ExportFormat>('csv');
     const [loading, setLoading] = useState(false);
     const [startDate, setStartDate] = useState(defaultStartDate());
@@ -274,7 +276,16 @@ export default function ExportPage() {
                 </div>
 
                 <div className="text-sm text-[var(--muted)] leading-6">
-                    {selectedLabels.length > 0 ? selectedLabels.join(', ') : 'No datasets selected'}
+                    {selectedLabels.length > 0 ? (
+                        selectedLabels.join(', ')
+                    ) : (
+                        <div className="flex items-center justify-between gap-4 flex-wrap">
+                            <span>No datasets selected</span>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedMetrics(recommendedExportMetrics)}>
+                                Select recommended defaults
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 

@@ -28,6 +28,16 @@ import {
     BarChart2
 } from 'lucide-react';
 
+interface SidebarAccount {
+    id: string;
+    username: string;
+    name?: string | null;
+    profile_picture_url?: string | null;
+    followers_count?: number | null;
+    is_active?: boolean;
+    is_enabled?: boolean;
+}
+
 const navSections = [
     {
         title: 'Analytics',
@@ -74,8 +84,18 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     const { user, logout, accounts, activeAccountId, switchAccount, connectMeta } = useAuth();
     const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
     const [switching, setSwitching] = useState(false);
+    const [accountSearch, setAccountSearch] = useState('');
 
     const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts.find(a => a.is_active);
+    const filteredAccounts = accounts.filter((account: SidebarAccount) => {
+        const search = accountSearch.trim().toLowerCase();
+        if (!search) return true;
+        return [account.username, account.name]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(search);
+    });
 
     const handleSwitchAccount = async (accountId: string) => {
         if (accountId === activeAccountId || switching) return;
@@ -244,9 +264,31 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                 <div style={{ flexShrink: 0, fontSize: 11, color: 'var(--sidebar-muted)', padding: '6px 10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                     Switch Account
                                 </div>
+                                {accounts.length > 3 && (
+                                    <input
+                                        value={accountSearch}
+                                        onChange={(e) => setAccountSearch(e.target.value)}
+                                        placeholder="Search accounts..."
+                                        style={{
+                                            width: '100%',
+                                            margin: '4px 0 6px',
+                                            padding: '9px 10px',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--sidebar-border)',
+                                            background: 'rgba(255,255,255,0.04)',
+                                            color: 'white',
+                                            outline: 'none',
+                                            fontSize: 12,
+                                        }}
+                                    />
+                                )}
 
                                 <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px', margin: '4px 0' }}>
-                                    {accounts.map((account: any) => (
+                                    {filteredAccounts.length === 0 ? (
+                                        <div style={{ padding: '14px 10px', color: 'var(--sidebar-muted)', fontSize: 12 }}>
+                                            No accounts match that search.
+                                        </div>
+                                    ) : filteredAccounts.map((account: SidebarAccount) => (
                                     <button
                                         key={account.id}
                                         onClick={() => handleSwitchAccount(account.id)}
@@ -310,8 +352,10 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                             }}>
                                                 @{account.username}
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--sidebar-muted)' }}>
-                                                {account.followers_count ? `${account.followers_count.toLocaleString()} followers` : 'Instagram'}
+                                            <div style={{ fontSize: 11, color: 'var(--sidebar-muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                <span>{account.followers_count ? `${account.followers_count.toLocaleString()} followers` : 'Instagram'}</span>
+                                                {account.id === activeAccountId && <span style={{ color: '#818cf8', fontWeight: 700 }}>Active</span>}
+                                                {account.is_enabled === false && <span style={{ color: '#f59e0b', fontWeight: 700 }}>Hidden</span>}
                                             </div>
                                         </div>
                                         {account.id === activeAccountId && (

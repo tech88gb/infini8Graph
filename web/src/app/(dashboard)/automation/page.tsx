@@ -91,6 +91,7 @@ export default function AutomationPage() {
     const [ruleSearch, setRuleSearch] = useState('');
     const [ruleStatusFilter, setRuleStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
     const [showTip, setShowTip] = useState(false);
+    const [rulePendingDelete, setRulePendingDelete] = useState<AutomationRule | null>(null);
 
     const rulesQuery = useQuery({
         queryKey: AUTOMATION_RULES_QUERY_KEY,
@@ -273,11 +274,15 @@ export default function AutomationPage() {
     };
 
     const deleteRule = async (id: string) => {
-        if (!confirm('Delete this override?')) return;
         try {
             await automationApi.deleteRule(id);
+            notify('success', 'Override deleted.');
             await refreshRules();
-        } catch { }
+        } catch {
+            notify('error', 'Failed to delete override.');
+        } finally {
+            setRulePendingDelete(null);
+        }
     };
 
     const updateRule = async () => {
@@ -376,6 +381,40 @@ export default function AutomationPage() {
     return (
         <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
             {toast && <Toast type={toast.type} message={toast.message} />}
+            {rulePendingDelete && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 1000,
+                        background: 'rgba(0,0,0,0.62)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 20,
+                    }}
+                    onClick={() => setRulePendingDelete(null)}
+                >
+                    <div
+                        className="card"
+                        style={{ width: 'min(440px, 100%)', border: '1px solid rgba(239,68,68,0.25)' }}
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <CardBody style={{ padding: 'var(--space-6)' }}>
+                            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Delete this override?</div>
+                            <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
+                                This removes <strong>{rulePendingDelete.name}</strong>. Comments on the selected posts will fall back to your general response rule.
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <Button variant="ghost" onClick={() => setRulePendingDelete(null)}>Cancel</Button>
+                                <Button variant="danger" onClick={() => rulePendingDelete.id && deleteRule(rulePendingDelete.id)}>
+                                    Delete override
+                                </Button>
+                            </div>
+                        </CardBody>
+                    </div>
+                </div>
+            )}
             <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-8) var(--space-6)' }}>
                 <PageHeader
                     title="Auto-Reply"
@@ -686,6 +725,7 @@ export default function AutomationPage() {
                                             icon={<div style={{ padding: 16, background: 'var(--border-light)', borderRadius: '16px' }}><svg width="32" height="32" fill="none" stroke="var(--muted)" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16h16M4 12h16M4 8h16M4 20h16" /></svg></div>} 
                                             title="No custom rules active" 
                                             description="Custom rules let you automate specific responses for different posts." 
+                                            action={<Button variant="secondary" size="sm" onClick={() => setShowCreateOverride(true)}>Create first rule</Button>}
                                         />
                                     </div>
                                 ) : filteredSpecificRules.length === 0 ? (
@@ -846,7 +886,7 @@ export default function AutomationPage() {
                                                                 </div>
                                                                 <div className="mt-4 flex justify-end gap-2">
                                                                     <Button variant="secondary" size="sm" onClick={(e: React.MouseEvent) => { e.stopPropagation(); setEditingRule({ ...rule }); setEditKwInput(''); }} style={{ borderRadius: '10px' }}>Edit Rule</Button>
-                                                                    <Button variant="danger" size="sm" onClick={() => deleteRule(rule.id!)} style={{ borderRadius: '10px' }}>Remove Rule</Button>
+                                                                    <Button variant="danger" size="sm" onClick={() => setRulePendingDelete(rule)} style={{ borderRadius: '10px' }}>Remove Rule</Button>
                                                                 </div>
                                                             </>
                                                           )}

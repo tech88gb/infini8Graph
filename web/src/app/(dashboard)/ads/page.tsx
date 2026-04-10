@@ -841,7 +841,12 @@ export default function AdsPage() {
                             </table>
                         </div>
                     ) : (
-                        <p className="text-muted">No campaigns found for this account</p>
+                        <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                            <p className="text-muted" style={{ marginBottom: 12 }}>No campaigns found for this account</p>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => { window.location.href = '/settings'; }}>
+                                Open Meta Ads setup
+                            </button>
+                        </div>
                     )}
                 </SectionCard>
             )}

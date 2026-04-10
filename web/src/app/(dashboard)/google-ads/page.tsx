@@ -223,6 +223,16 @@ function OverviewTab({ preset }: { preset: string }) {
                 <p className="text-muted" style={{ fontSize: 13 }}>
                     {perf?.message || perf?.error || 'No active Google Ads campaigns were found on your connected Google Ads Manager / account.'}
                 </p>
+                <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: 16 }}
+                    onClick={() => {
+                        window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}/api/google/auth/login`;
+                    }}
+                >
+                    Connect Google Ads
+                </button>
             </div>
         );
     }
