@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { authApi, googleAdsApi, webhookApi } from '@/lib/api';
+import { Toast } from '@/components/ui';
 import { User, Shield, Palette, LogOut, RefreshCw, Instagram, Activity, CheckCircle2, AlertTriangle, Radio } from 'lucide-react';
 
 interface ManagedAccount {
@@ -76,6 +77,12 @@ export default function SettingsPage() {
     const [updatingAccountId, setUpdatingAccountId] = useState<string | null>(null);
     const [systemStatuses, setSystemStatuses] = useState<SystemStatusCard[]>([]);
     const [statusLoading, setStatusLoading] = useState(true);
+    const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+    const notify = (type: 'success' | 'error' | 'info', message: string) => {
+        setToast({ type, message });
+        setTimeout(() => setToast(null), 3000);
+    };
 
     const loadAccounts = async () => {
         setAccountsLoading(true);
@@ -169,7 +176,7 @@ export default function SettingsPage() {
             await connectMeta();
         } catch (err: unknown) {
             console.error('Reconnect error:', err);
-            alert(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+            notify('error', err instanceof Error ? err.message : 'Something went wrong. Please try again.');
             setIsReconnecting(false);
         }
     };
@@ -188,7 +195,7 @@ export default function SettingsPage() {
             await loadSystemStatuses();
         } catch (error: unknown) {
             console.error('Account toggle error:', error);
-            alert(error instanceof Error ? error.message : 'Failed to update this account.');
+            notify('error', error instanceof Error ? error.message : 'Failed to update this account.');
         } finally {
             setUpdatingAccountId(null);
         }
@@ -223,6 +230,7 @@ export default function SettingsPage() {
 
     return (
         <div className="space-y-8 max-w-4xl">
+            {toast && <Toast type={toast.type} message={toast.message} />}
             <div>
                 <h1 className="text-3xl font-bold mb-2">Settings</h1>
                 <p className="text-[var(--muted)]">Manage your account and preferences</p>
