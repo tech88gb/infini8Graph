@@ -167,9 +167,9 @@ export default function SettingsPage() {
         setIsReconnecting(true);
         try {
             await connectMeta();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Reconnect error:', err);
-            alert(err.message || 'Something went wrong. Please try again.');
+            alert(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
             setIsReconnecting(false);
         }
     };
@@ -182,16 +182,13 @@ export default function SettingsPage() {
                 throw new Error(response.data.error || 'Failed to update account');
             }
 
-            if (response.data.jwt) {
-                await syncSession(response.data.jwt);
-            }
-
+            await syncSession();
             await refreshAccounts();
             await loadAccounts();
             await loadSystemStatuses();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Account toggle error:', error);
-            alert(error.message || 'Failed to update this account.');
+            alert(error instanceof Error ? error.message : 'Failed to update this account.');
         } finally {
             setUpdatingAccountId(null);
         }

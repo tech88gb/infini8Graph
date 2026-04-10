@@ -1,5 +1,6 @@
 import * as authService from '../services/authService.js';
 import { generateToken } from '../utils/jwt.js';
+import { clearAuthCookie, setAuthCookie } from '../utils/authCookie.js';
 import supabase from '../config/database.js';
 import dotenv from 'dotenv';
 
@@ -79,16 +80,10 @@ export async function googleCallback(req, res) {
             username: activeAccount?.username || null,
         });
 
-        // Set HttpOnly cookie
-        res.cookie('auth_token', jwtToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setAuthCookie(res, jwtToken);
 
         // Redirect to frontend callback handler — it will check metaConnected and route accordingly
-        return res.redirect(`${FRONTEND_REDIRECT_URL}/auth/callback?token=${jwtToken}`);
+        return res.redirect(`${FRONTEND_REDIRECT_URL}/auth/callback`);
     } catch (error) {
         console.error('❌ Google callback error:', error);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=${encodeURIComponent(error.message)}`);
@@ -164,15 +159,10 @@ export async function callback(req, res) {
         const activeAccount = session.account || authorizedAccounts[0] || null;
         const jwtToken = session.jwt;
 
-        res.cookie('auth_token', jwtToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setAuthCookie(res, jwtToken);
 
         console.log(`✅ Meta setup complete for @${activeAccount?.username || 'unknown'}`);
-        return res.redirect(`${FRONTEND_REDIRECT_URL}/dashboard?token=${jwtToken}`);
+        return res.redirect(`${FRONTEND_REDIRECT_URL}/dashboard`);
     } catch (error) {
         console.error('❌ Meta callback error:', error);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/connect-meta?error=${encodeURIComponent(error.message)}`);
@@ -194,7 +184,7 @@ export async function getMe(req, res) {
 export async function logout(req, res) {
     try {
         await authService.logoutUser(req.user.userId, req.user.instagramAccountId || null);
-        res.clearCookie('auth_token', { httpOnly: true, secure: true, sameSite: 'none' });
+        clearAuthCookie(res);
         res.json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to logout' });
@@ -212,12 +202,7 @@ export async function refreshToken(req, res) {
             username: req.user.username,
         });
 
-        res.cookie('auth_token', jwtToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setAuthCookie(res, jwtToken);
 
         res.json({ success: true, message: 'Token refreshed' });
     } catch (error) {
@@ -250,17 +235,11 @@ export async function updateAccountEnabled(req, res) {
             return res.status(400).json({ success: false, error: result.error || 'Failed to update account selection' });
         }
 
-        res.cookie('auth_token', result.jwt, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setAuthCookie(res, result.jwt);
 
         res.json({
             success: true,
             enabled: result.enabled,
-            jwt: result.jwt,
             activeAccountId: result.activeAccount?.id || null,
         });
     } catch (error) {
@@ -277,14 +256,9 @@ export async function switchAccount(req, res) {
             return res.status(400).json({ success: false, error: result.error || 'Failed to switch account' });
         }
 
-        res.cookie('auth_token', result.jwt, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setAuthCookie(res, result.jwt);
 
-        res.json({ success: true, jwt: result.jwt, account: result.account });
+        res.json({ success: true, account: result.account });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to switch account' });
     }

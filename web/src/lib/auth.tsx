@@ -35,7 +35,7 @@ interface AuthContextType {
     checkAuth: () => Promise<void>;
     switchAccount: (accountId: string) => Promise<boolean>;
     refreshAccounts: () => Promise<void>;
-    syncSession: (jwt?: string) => Promise<void>;
+    syncSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,11 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
     const authChecked = useRef(false);
-
-    const persistAuthToken = useCallback((token: string) => {
-        Cookies.set('auth_token', token, { path: '/', sameSite: 'Lax' });
-        localStorage.setItem('auth_token', token);
-    }, []);
 
     const clearSessionState = useCallback(() => {
         setUser(null);
@@ -71,11 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const syncSession = useCallback(async (jwt?: string) => {
-        if (jwt) {
-            persistAuthToken(jwt);
-        }
-
+    const syncSession = useCallback(async () => {
         try {
             const response = await authApi.getMe();
 
@@ -99,36 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         await queryClient.invalidateQueries();
         await queryClient.refetchQueries({ type: 'active' });
-    }, [clearSessionState, persistAuthToken, queryClient, refreshAccounts]);
+    }, [clearSessionState, queryClient, refreshAccounts]);
 
-    const checkAuth = async () => {
-        // Check for token in URL (from OAuth redirect)
-        if (typeof window !== 'undefined') {
-            console.log('🔥 CURRENT URL:', window.location.href);
-            const params = new URLSearchParams(window.location.search);
-            const tokenFromUrl = params.get('token');
-
-            // Skip consuming the token on /auth/callback — that page handles it itself.
-            // If we strip it here first, the callback page sees no token and errors.
-            const isCallbackPage = window.location.pathname === '/auth/callback';
-
-            if (tokenFromUrl && !isCallbackPage) {
-                console.log('Got token from URL, saving...');
-                persistAuthToken(tokenFromUrl);
-
-                // Clean URL without refresh
-                window.history.replaceState({}, '', window.location.pathname);
-
-                // If this page is running inside the OAuth popup, notify the
-                // parent window and close — the parent will do a full reload.
-                if (window.opener && !window.opener.closed) {
-                    window.opener.postMessage({ type: 'OAUTH_SUCCESS' }, window.location.origin);
-                    window.close();
-                    return; // Don't continue auth check in the popup
-                }
-            }
-        }
-
+    const checkAuth = useCallback(async () => {
         // Only check auth once
         if (authChecked.current) return;
         authChecked.current = true;
@@ -156,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [clearSessionState, refreshAccounts]);
 
     const login = async () => {
         try {
@@ -192,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         clearSessionState();
         localStorage.removeItem('auth_token');
+        Cookies.remove('auth_token', { path: '/' });
         queryClient.clear();
         window.location.href = '/login';
     };
@@ -200,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             const response = await authApi.switchAccount(accountId);
             if (response.data.success) {
-                await syncSession(response.data.jwt);
+                await syncSession();
                 return true;
             }
             return false;
@@ -212,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         checkAuth();
-    }, []);
+    }, [checkAuth]);
 
     return (
         <AuthContext.Provider value={{

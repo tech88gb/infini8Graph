@@ -2,69 +2,54 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Cookies from 'js-cookie';
 import { CheckCircle, AlertCircle } from 'lucide-react';
-
-/** Decode JWT payload without verification (client-side display only) */
-function decodeJwt(token: string): Record<string, any> | null {
-    try {
-        const payload = token.split('.')[1];
-        return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-    } catch {
-        return null;
-    }
-}
+import { authApi } from '@/lib/api';
 
 function AuthCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
-    const [message, setMessage] = useState('Completing sign-in...');
+    const initialError = searchParams.get('error');
+    const [status, setStatus] = useState<'processing' | 'success' | 'error'>(initialError ? 'error' : 'processing');
+    const [message, setMessage] = useState(initialError ? decodeURIComponent(initialError) : 'Completing sign-in...');
 
     useEffect(() => {
-        // Read DIRECTLY from window.location.search first — before AuthProvider's
-        // checkAuth() can call window.history.replaceState() and wipe the params.
-        const rawParams = new URLSearchParams(window.location.search);
-        const token = rawParams.get('token') || searchParams.get('token');
-        const error = rawParams.get('error') || searchParams.get('error');
+        let isMounted = true;
+        const error = searchParams.get('error');
 
         if (error) {
-            setStatus('error');
-            setMessage(decodeURIComponent(error));
             setTimeout(() => router.push('/login?error=' + encodeURIComponent(error)), 3000);
             return;
         }
 
-        if (!token) {
-            setStatus('error');
-            setMessage('No authentication token received.');
-            setTimeout(() => router.push('/login'), 3000);
-            return;
-        }
+        authApi.getMe()
+            .then((response) => {
+                if (!isMounted) return;
 
-        // Save token to cookie + localStorage (dual storage for cross-env compat)
-        const isSecure = window.location.protocol === 'https:';
-        Cookies.set('auth_token', token, {
-            expires: 7,
-            secure: isSecure,
-            sameSite: 'Lax',
-            path: '/',
-        });
-        localStorage.setItem('auth_token', token);
+                if (!response.data.success || !response.data.user) {
+                    throw new Error('Session could not be verified.');
+                }
 
-        // Decode JWT to check if Meta is connected
-        const decoded = decodeJwt(token);
-        const metaConnected = decoded?.metaConnected === true;
+                const metaConnected = response.data.user.metaConnected === true;
+                setStatus('success');
 
-        setStatus('success');
+                if (!metaConnected) {
+                    setMessage('Identity verified. Preparing your workspace.');
+                    setTimeout(() => router.push('/connect-meta'), 1500);
+                } else {
+                    setMessage('Session restored. Taking you to your dashboard.');
+                    setTimeout(() => router.push('/dashboard'), 1200);
+                }
+            })
+            .catch((err) => {
+                if (!isMounted) return;
+                setStatus('error');
+                setMessage((err as Error)?.message || 'Session could not be verified.');
+                setTimeout(() => router.push('/login'), 3000);
+            });
 
-        if (!metaConnected) {
-            setMessage('Identity verified. Preparing your workspace.');
-            setTimeout(() => router.push('/connect-meta'), 1500);
-        } else {
-            setMessage('Session restored. Taking you to your dashboard.');
-            setTimeout(() => router.push('/dashboard'), 1200);
-        }
+        return () => {
+            isMounted = false;
+        };
     }, [searchParams, router]);
 
     return (

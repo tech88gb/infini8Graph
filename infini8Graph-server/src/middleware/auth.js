@@ -2,14 +2,7 @@ import { verifyToken } from '../utils/jwt.js';
 
 export function authenticate(req, res, next) {
     try {
-        let token = req.cookies?.auth_token;
-
-        if (!token) {
-            const authHeader = req.headers.authorization;
-            if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.substring(7);
-        }
-        if (!token) token = req.headers['x-auth-token'];
-        if (!token && req.query?.token) token = req.query.token;
+        const token = req.cookies?.auth_token;
 
         if (!token) {
             return res.status(401).json({ success: false, error: 'Authentication required', code: 'AUTH_REQUIRED' });
@@ -40,11 +33,7 @@ export function authenticate(req, res, next) {
 
 export function optionalAuth(req, res, next) {
     try {
-        let token = req.cookies?.auth_token;
-        if (!token) {
-            const authHeader = req.headers.authorization;
-            if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.substring(7);
-        }
+        const token = req.cookies?.auth_token;
         if (token) {
             const decoded = verifyToken(token);
             if (decoded) {
