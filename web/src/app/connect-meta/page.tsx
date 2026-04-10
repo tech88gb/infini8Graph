@@ -1,71 +1,57 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Instagram, ArrowRight, ShieldCheck, Zap, Globe, RefreshCw } from 'lucide-react';
-import Cookies from 'js-cookie';
-import { motion, AnimatePresence } from 'framer-motion';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-
-function getAuthToken(): string | null {
-    return localStorage.getItem('auth_token') || Cookies.get('auth_token') || null;
-}
-
-function decodeJwt(token: string): Record<string, any> | null {
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        return JSON.parse(window.atob(base64));
-    } catch (e) {
-        return null;
-    }
-}
+import { motion } from 'framer-motion';
+import { authApi } from '@/lib/api';
 
 function ConnectMetaContent() {
     const router = useRouter();
-    const searchParams = useSearchParams();
     const [loading, setLoading] = useState(false);
     const [userEmail, setUserEmail] = useState<string | null>(null);
 
     useEffect(() => {
-        const token = getAuthToken();
-        if (!token) {
-            router.push('/login');
-            return;
-        }
+        let isMounted = true;
 
-        const decoded = decodeJwt(token);
-        if (decoded?.googleEmail) {
-            setUserEmail(decoded.googleEmail);
-        }
+        authApi.getMe()
+            .then((response) => {
+                if (!isMounted) return;
 
-        // If already connected, skip to dashboard
-        if (decoded?.metaConnected) {
-            router.push('/dashboard');
-        }
+                if (!response.data.success || !response.data.user) {
+                    router.push('/login');
+                    return;
+                }
+
+                setUserEmail(response.data.user.googleEmail || null);
+
+                if (response.data.user.metaConnected) {
+                    router.push('/dashboard');
+                }
+            })
+            .catch(() => {
+                if (isMounted) router.push('/login');
+            });
+
+        return () => {
+            isMounted = false;
+        };
     }, [router]);
 
     const handleConnect = async () => {
         setLoading(true);
         try {
-            const token = getAuthToken();
-            const response = await fetch(`${API_URL}/api/auth/meta/connect`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'ngrok-skip-browser-warning': 'true'
-                }
-            });
-            const data = await response.json();
+            const response = await authApi.connectMeta();
+            const data = response.data;
 
             if (data.success && data.loginUrl) {
                 window.location.href = data.loginUrl;
             } else {
                 throw new Error(data.error || 'Failed to initiate connection');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Connection error:', error);
-            alert(error.message || 'Failed to connect. Please try again.');
+            alert(error instanceof Error ? error.message : 'Failed to connect. Please try again.');
             setLoading(false);
         }
     };

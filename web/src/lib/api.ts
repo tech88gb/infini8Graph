@@ -12,20 +12,6 @@ const api = axios.create({
     }
 });
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-    // FALLBACK: Use localStorage directly to avoid any Cookie library issues
-    let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-        config.headers['X-Auth-Token'] = token; // Redundant backup
-    }
-    return config;
-}, (error) => {
-    return Promise.reject(error);
-});
-
 // Simple error interceptor - NO automatic redirects
 api.interceptors.response.use(
     (response) => response,
@@ -152,16 +138,6 @@ const googleApi = axios.create({
         'ngrok-skip-browser-warning': 'true'
     }
 });
-
-// Reuse the same auth interceptor for Google requests
-googleApi.interceptors.request.use((config) => {
-    let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-        config.headers['X-Auth-Token'] = token;
-    }
-    return config;
-}, (error) => Promise.reject(error));
 
 googleApi.interceptors.response.use(
     (response) => response,

@@ -39,13 +39,19 @@ const allowedOrigins = [
     'http://localhost:3000',
     'https://graph.infini8.org',
     'https://infini8graph.vercel.app',
-    process.env.FRONTEND_URL
+    process.env.FRONTEND_URL,
+    process.env.FRONTEND_REDIRECT_URL
 ].filter(Boolean);
 
 app.use(cors({
-    origin: allowedOrigins,
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin) || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token', 'ngrok-skip-browser-warning']
+    allowedHeaders: ['Content-Type', 'ngrok-skip-browser-warning']
 }));
 
 // Rate limiting (increased for development)
