@@ -446,34 +446,16 @@ class InstagramService {
 
         while (fetched < count) {
             const batchSize = Math.min(25, count - fetched);
-            const response = await this.getMedia(batchSize, cursor);
-            const rawMedia = response?.data || [];
+            const response = await this.getMediaPageWithInsights(batchSize, cursor, {
+                includeDetailedVideoInsights,
+                detailedInsightConcurrency
+            });
+            const batch = response?.data || [];
 
-            if (rawMedia.length === 0) break;
+            if (batch.length === 0) break;
 
-            const normalisedBatch = rawMedia.map((media) => this.normaliseMediaNode(media));
-
-            if (includeDetailedVideoInsights) {
-                const videoItems = normalisedBatch
-                    .map((media, index) => ({ media, index }))
-                    .filter(({ media }) => media.mediaType === 'REEL' || media.mediaType === 'VIDEO');
-
-                await settleWithConcurrency(videoItems, detailedInsightConcurrency, async ({ media, index }) => {
-                    try {
-                        const detailed = await this.getMediaInsights(media.id, media.mediaType);
-                        const detailedInsights = this.extractInsightsMap(detailed?.data);
-                        normalisedBatch[index] = {
-                            ...media,
-                            ...this.normaliseMediaNode(rawMedia[index], detailedInsights),
-                        };
-                    } catch (error) {
-                        console.warn(`Detailed insights unavailable for media ${media.id}:`, error.message);
-                    }
-                });
-            }
-
-            allMedia.push(...normalisedBatch);
-            fetched += rawMedia.length;
+            allMedia.push(...batch);
+            fetched += batch.length;
 
             if (response?.paging?.cursors?.after) {
                 cursor = response.paging.cursors.after;
@@ -483,6 +465,49 @@ class InstagramService {
         }
 
         return allMedia;
+    }
+
+    async getMediaPageWithInsights(limit = 25, after = null, options = {}) {
+        const {
+            includeDetailedVideoInsights = false,
+            detailedInsightConcurrency = 4
+        } = options;
+
+        const response = await this.getMedia(limit, after);
+        const rawMedia = response?.data || [];
+
+        if (rawMedia.length === 0) {
+            return {
+                data: [],
+                paging: response?.paging || null
+            };
+        }
+
+        const normalisedBatch = rawMedia.map((media) => this.normaliseMediaNode(media));
+
+        if (includeDetailedVideoInsights) {
+            const videoItems = normalisedBatch
+                .map((media, index) => ({ media, index }))
+                .filter(({ media }) => media.mediaType === 'REEL' || media.mediaType === 'VIDEO');
+
+            await settleWithConcurrency(videoItems, detailedInsightConcurrency, async ({ media, index }) => {
+                try {
+                    const detailed = await this.getMediaInsights(media.id, media.mediaType);
+                    const detailedInsights = this.extractInsightsMap(detailed?.data);
+                    normalisedBatch[index] = {
+                        ...media,
+                        ...this.normaliseMediaNode(rawMedia[index], detailedInsights),
+                    };
+                } catch (error) {
+                    console.warn(`Detailed insights unavailable for media ${media.id}:`, error.message);
+                }
+            });
+        }
+
+        return {
+            data: normalisedBatch,
+            paging: response?.paging || null
+        };
     }
 
     async getActiveStoriesWithInsights() {

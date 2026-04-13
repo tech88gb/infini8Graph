@@ -186,13 +186,10 @@ class AnalyticsService {
         let media = [];
         let demographics = {};
         let dailyMetrics = [];
-        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        const fetchLimit = (startDate || endDate) ? 80 : 60;
         const overviewTasks = [
             async () => {
-                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
-                    includeDetailedVideoInsights: true,
-                    detailedInsightConcurrency: 3
-                });
+                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit);
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
             async () => this.instagram.getFollowerDemographics(),
@@ -353,7 +350,7 @@ class AnalyticsService {
 
         const profile = await this.instagram.getProfile();
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        const fetchLimit = (startDate || endDate) ? 80 : 60;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
         media = this.filterMediaByDate(media, startDate, endDate);
         const accountMetrics = await this.getDailyAccountMetrics(startDate, endDate);
@@ -480,7 +477,7 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        const fetchLimit = (startDate || endDate) ? 80 : 60;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
         media = this.filterMediaByDate(media, startDate, endDate);
 
@@ -588,7 +585,7 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        const fetchLimit = (startDate || endDate) ? 100 : 80;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
         media = this.filterMediaByDate(media, startDate, endDate);
 
@@ -721,7 +718,7 @@ class AnalyticsService {
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        const fetchLimit = (startDate || endDate) ? 80 : 60;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
             includeDetailedVideoInsights: true,
             detailedInsightConcurrency: 4
@@ -942,22 +939,47 @@ class AnalyticsService {
     /**
      * Get reels-specific analytics
      */
-    async getReelsAnalytics(startDate = null, endDate = null) {
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+    async getReelsAnalytics(startDate = null, endDate = null, options = {}) {
+        const requestedLimit = Number.parseInt(options.limit, 10);
+        const targetReels = Number.isFinite(requestedLimit)
+            ? Math.min(Math.max(requestedLimit, 6), 24)
+            : 12;
+        const after = options.after || null;
+        const dateKey = `${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}`;
         const cached = await this.checkCache('reels', dateKey);
         if (cached) return cached;
 
-        // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 100 : 60;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
-            includeDetailedVideoInsights: true,
-            detailedInsightConcurrency: 4
-        });
-        media = this.filterMediaByDate(media, startDate, endDate);
+        const reels = [];
+        const nonReels = [];
+        const batchSize = Math.min(Math.max(targetReels, 12), 18);
+        const maxPagesToScan = 4;
+        let nextCursor = after;
+        let pagesScanned = 0;
 
-        // Filter for reels only
-        const reels = media.filter(m => m.mediaType === 'REEL' || m.mediaType === 'VIDEO');
-        const nonReels = media.filter(m => m.mediaType !== 'REEL' && m.mediaType !== 'VIDEO');
+        while (pagesScanned < maxPagesToScan && reels.length < targetReels) {
+            const response = await this.instagram.getMediaPageWithInsights(batchSize, nextCursor, {
+                includeDetailedVideoInsights: true,
+                detailedInsightConcurrency: 2
+            });
+            const batch = this.filterMediaByDate(response?.data || [], startDate, endDate);
+
+            if (batch.length > 0) {
+                batch.forEach((item) => {
+                    if (item.mediaType === 'REEL' || item.mediaType === 'VIDEO') {
+                        reels.push(item);
+                    } else {
+                        nonReels.push(item);
+                    }
+                });
+            }
+
+            pagesScanned += 1;
+            nextCursor = response?.paging?.cursors?.after || null;
+
+            if (!nextCursor || (response?.data || []).length === 0) {
+                break;
+            }
+        }
 
         // Calculate reel-specific metrics
         const reelStats = {
@@ -1062,6 +1084,13 @@ class AnalyticsService {
                         interactionRate: this.toPercent(reel.totalInteractions || reel.engagement, reel.reach)
                     }))
             },
+            pagination: {
+                returned: reels.length,
+                target: targetReels,
+                pagesScanned,
+                nextCursor,
+                hasNextPage: Boolean(nextCursor)
+            },
             lastUpdated: new Date().toISOString()
         };
 
@@ -1078,7 +1107,7 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        const fetchLimit = (startDate || endDate) ? 80 : 60;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
             includeDetailedVideoInsights: true,
             detailedInsightConcurrency: 4

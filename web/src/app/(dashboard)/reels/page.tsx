@@ -1,13 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { Film, Heart, MessageCircle, Eye, TrendingUp, Bookmark, Share2, HelpCircle, Play, Users, Zap, Flame, ArrowUpRight, RefreshCw } from 'lucide-react';
+import { Film, Heart, MessageCircle, Eye, TrendingUp, Bookmark, Share2, HelpCircle, Users, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
-    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-    LineChart, Line, AreaChart, Area
+    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
@@ -86,19 +85,29 @@ function MetricCard({ label, value, icon: Icon, color, tooltip }: {
 
 export default function ReelsPage() {
     const { activeAccountId } = useAuth();
-    const [page, setPage] = useState(1);
-    const REELS_PER_PAGE = 24;
+    const REELS_PER_PAGE = 12;
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
+    const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([null]);
     const [dateRange, setDateRange] = useState({
         startDate: defaultStart.toISOString().split('T')[0],
         endDate: defaultEnd.toISOString().split('T')[0]
     });
+    const currentCursor = cursorHistory[cursorHistory.length - 1] || undefined;
+    const currentPage = cursorHistory.length;
+
+    useEffect(() => {
+        setCursorHistory([null]);
+    }, [activeAccountId, dateRange.startDate, dateRange.endDate]);
+
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['reels', activeAccountId, dateRange.startDate, dateRange.endDate],
+        queryKey: ['reels', activeAccountId, dateRange.startDate, dateRange.endDate, currentCursor, REELS_PER_PAGE],
         queryFn: async () => {
-            const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate);
+            const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate, {
+                after: currentCursor,
+                limit: REELS_PER_PAGE
+            });
             return res.data.data;
         }
     });
@@ -117,6 +126,7 @@ export default function ReelsPage() {
     const reels = data?.reels || [];
     const summary = data?.summary || {};
     const comparison = data?.comparison || {};
+    const pagination = data?.pagination || {};
     const playsAvailable = reels.some((reel: any) => (reel.plays || 0) > 0);
     const diagnosticReels = [...reels]
         .sort((a: any, b: any) => (b.reach || 0) - (a.reach || 0))
@@ -159,11 +169,11 @@ export default function ReelsPage() {
             {/* Summary Metrics */}
             <div className="grid-metrics" style={{ marginBottom: 24, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
                 <MetricCard
-                    label="Total Reels"
+                    label="Reels In Page"
                     value={summary.totalReels || 0}
                     icon={Film}
                     color="#6366f1"
-                    tooltip="Number of reels/videos on your account"
+                    tooltip="Number of reels returned in this server-fetched page"
                 />
                 <MetricCard
                     label="Total Reach"
@@ -205,7 +215,7 @@ export default function ReelsPage() {
             {/* Comparison Banner */}
             <SectionCard
                 title="Reels vs Posts Performance"
-                subtitle="How your video content compares to static posts"
+                subtitle="Comparison using the current analyzed page instead of your full library"
             >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
@@ -322,7 +332,7 @@ export default function ReelsPage() {
 
             <SectionCard
                 title="Real Reel Diagnostics"
-                subtitle="Top reels ranked by actual reach, plays, saves, and engagement efficiency"
+                subtitle={`Top reels from page ${currentPage}, ranked by actual reach, plays, saves, and engagement efficiency`}
             >
                 {diagnosticReels.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -388,9 +398,12 @@ export default function ReelsPage() {
             </SectionCard>
 
             {/* Reels Grid */}
-            <SectionCard title="Your Reels" subtitle={`${Math.min(page * REELS_PER_PAGE, reels.length)} of ${reels.length} video${reels.length !== 1 ? 's' : ''} shown`}>
+            <SectionCard
+                title="Your Reels"
+                subtitle={`${reels.length} video${reels.length !== 1 ? 's' : ''} returned on page ${currentPage}${pagination.pagesScanned ? ` after scanning ${pagination.pagesScanned} media batch${pagination.pagesScanned !== 1 ? 'es' : ''}` : ''}`}
+            >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
-                    {reels.slice(0, page * REELS_PER_PAGE).map((reel: any, idx: number) => (
+                    {reels.map((reel: any, idx: number) => (
                         <div
                             key={reel.id || idx}
                             style={{
@@ -431,15 +444,36 @@ export default function ReelsPage() {
                     ))}
                 </div>
             </SectionCard>
-            {reels.length > page * REELS_PER_PAGE && (
-                <div style={{ textAlign: 'center', marginTop: -10, marginBottom: 20 }}>
-                    <button
-                        onClick={() => setPage((p) => p + 1)}
-                        className="btn btn-secondary"
-                        style={{ padding: '8px 24px', borderRadius: 20 }}
-                    >
-                        Load More
-                    </button>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: -10, marginBottom: 20 }}>
+                <button
+                    onClick={() => setCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 18px', borderRadius: 20 }}
+                    disabled={cursorHistory.length === 1 || isFetching}
+                >
+                    <ChevronLeft size={16} /> Previous Page
+                </button>
+                <span className="text-muted" style={{ fontSize: 13 }}>
+                    Page {currentPage}
+                </span>
+                <button
+                    onClick={() => {
+                        if (pagination.nextCursor) {
+                            setCursorHistory((history) => [...history, pagination.nextCursor]);
+                        }
+                    }}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 18px', borderRadius: 20 }}
+                    disabled={!pagination.hasNextPage || isFetching}
+                >
+                    Next Page <ChevronRight size={16} />
+                </button>
+            </div>
+            {!pagination.hasNextPage && reels.length > 0 && (
+                <div style={{ textAlign: 'center', marginTop: -8, marginBottom: 20 }}>
+                    <p className="text-muted" style={{ fontSize: 12 }}>
+                        You&apos;ve reached the end of the currently available reels for this date range.
+                    </p>
                 </div>
             )}
         </div>

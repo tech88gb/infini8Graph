@@ -55,6 +55,25 @@ api.interceptors.response.use(
     }
 );
 
+const instagramApiClient = axios.create({
+    baseURL: `${API_URL}/api`,
+    withCredentials: true,
+    timeout: 60000,
+    headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+    }
+});
+
+instagramApiClient.interceptors.request.use(attachBearerToken);
+instagramApiClient.interceptors.response.use(
+    persistTokenFromResponse,
+    (error) => {
+        console.error('Instagram API Error:', error.response?.status, error.message);
+        return Promise.reject(error);
+    }
+);
+
 export const authApi = {
     getLoginUrl: () => api.get('/auth/login'),
     connectMeta: () => api.get('/auth/meta/connect'),
@@ -72,31 +91,44 @@ export const authApi = {
 };
 
 export const instagramApi = (() => {
-    const buildParams = (startDate?: string, endDate?: string) => {
+    const buildParams = (startDate?: string, endDate?: string, extraParams?: Record<string, string | number | undefined | null>) => {
         const params = new URLSearchParams();
         if (startDate) params.append('startDate', startDate);
         if (endDate) params.append('endDate', endDate);
+        if (extraParams) {
+            Object.entries(extraParams).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.append(key, String(value));
+                }
+            });
+        }
         const query = params.toString();
         return query ? `?${query}` : '';
     };
 
     return {
-        getOverview: (startDate?: string, endDate?: string) => api.get(`/instagram/overview${buildParams(startDate, endDate)}`),
+        getOverview: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/overview${buildParams(startDate, endDate)}`),
         getGrowth: (startDate?: string, endDate?: string, period = '30d') => {
             const params = new URLSearchParams({ period });
             if (startDate) params.append('startDate', startDate);
             if (endDate) params.append('endDate', endDate);
-            return api.get(`/instagram/growth?${params.toString()}`);
+            return instagramApiClient.get(`/instagram/growth?${params.toString()}`);
         },
-        getBestTime: (startDate?: string, endDate?: string) => api.get(`/instagram/best-time${buildParams(startDate, endDate)}`),
-        getHashtags: (startDate?: string, endDate?: string) => api.get(`/instagram/hashtags${buildParams(startDate, endDate)}`),
-        getReels: (startDate?: string, endDate?: string) => api.get(`/instagram/reels${buildParams(startDate, endDate)}`),
+        getBestTime: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/best-time${buildParams(startDate, endDate)}`),
+        getHashtags: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/hashtags${buildParams(startDate, endDate)}`),
+        getReels: (startDate?: string, endDate?: string, options?: { after?: string; limit?: number }) =>
+            instagramApiClient.get(
+                `/instagram/reels${buildParams(startDate, endDate, {
+                    after: options?.after,
+                    limit: options?.limit
+                })}`
+            ),
         getPosts: (limit = 50, startDate?: string, endDate?: string, includeCollabs = false) => {
             const p = new URLSearchParams({ limit: String(limit) });
             if (startDate) p.append('startDate', startDate);
             if (endDate) p.append('endDate', endDate);
             if (includeCollabs) p.append('includeCollabs', 'true');
-            return api.get(`/instagram/posts?${p.toString()}`);
+            return instagramApiClient.get(`/instagram/posts?${p.toString()}`);
         },
         exportData: (
             format: 'json' | 'csv' | 'tsv' | 'md' | 'html' = 'json',
@@ -107,12 +139,12 @@ export const instagramApi = (() => {
             const params = new URLSearchParams({ format, metrics });
             if (startDate) params.append('startDate', startDate);
             if (endDate) params.append('endDate', endDate);
-            return api.get(`/instagram/export?${params.toString()}`, {
+            return instagramApiClient.get(`/instagram/export?${params.toString()}`, {
                 responseType: format === 'json' ? 'json' : 'blob',
             });
         },
-        getContentIntelligence: (startDate?: string, endDate?: string) => api.get(`/instagram/content-intelligence${buildParams(startDate, endDate)}`),
-        getUnifiedOverview: (startDate?: string, endDate?: string) => api.get(`/instagram/unified-overview${buildParams(startDate, endDate)}`)
+        getContentIntelligence: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/content-intelligence${buildParams(startDate, endDate)}`),
+        getUnifiedOverview: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/unified-overview${buildParams(startDate, endDate)}`)
     };
 })();
 
