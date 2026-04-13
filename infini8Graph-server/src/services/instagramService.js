@@ -230,6 +230,8 @@ class InstagramService {
      */
     async getMedia(limit = 25, after = null) {
         const basicFields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
+        // shares is a valid per-media insight but only returned by the /insights edge,
+        // NOT via inline insights on the media list endpoint. We fetch it separately.
         const params = {
             fields: `${basicFields},insights.metric(impressions,reach,saved)`,
             limit: limit
@@ -262,6 +264,26 @@ class InstagramService {
 
             throw error;
         }
+    }
+
+    /**
+     * Get shares for a single media item via its /insights edge.
+     * Works for IMAGE, VIDEO, CAROUSEL_ALBUM, and REEL.
+     * Returns 0 if the metric is unsupported (older posts, pre-business-account, etc.)
+     */
+    async getMediaShares(mediaId, mediaType = 'IMAGE') {
+        // Reels already get shares via getMediaInsights; call this for non-reels
+        const metricSets = ['shares', 'impressions,reach,saved,shares'];
+        for (const metrics of metricSets) {
+            try {
+                const result = await this.apiRequest(`/${mediaId}/insights`, { metric: metrics });
+                const map = this.extractInsightsMap(result?.data);
+                return typeof map.shares === 'number' ? map.shares : 0;
+            } catch {
+                // unsupported metric for this post — continue
+            }
+        }
+        return 0;
     }
 
     /**
@@ -344,9 +366,14 @@ class InstagramService {
         const metricSets = (mediaType === 'REEL' || mediaType === 'VIDEO')
             ? [
                 'impressions,reach,saved,shares,plays,total_interactions',
+                'impressions,reach,saved,shares,plays',
+                'impressions,reach,saved,shares,views,total_interactions',
+                'impressions,reach,saved,shares,views',
+                'impressions,reach,saved,shares',
                 'impressions,reach,saved,plays,total_interactions',
                 'impressions,reach,saved,views,total_interactions',
                 'impressions,reach,saved,plays',
+                'impressions,reach,saved,views',
                 'impressions,reach,saved'
             ]
             : ['impressions,reach,saved'];
@@ -388,9 +415,34 @@ class InstagramService {
      * @param {string} storyId - The story media ID
      */
     async getStoryInsights(storyId) {
-        return this.apiRequest(`/${storyId}/insights`, {
-            metric: 'impressions,reach,replies,taps_forward,taps_back,exits'
-        });
+        const metricSets = [
+            'impressions,reach,replies,taps_forward,taps_back,exits',
+            'impressions,reach,taps_forward,taps_back,exits',
+            'impressions,reach,replies',
+            'impressions,reach'
+        ];
+
+        let lastError = null;
+
+        for (const metrics of metricSets) {
+            try {
+                return await this.apiRequest(`/${storyId}/insights`, { metric: metrics });
+            } catch (error) {
+                lastError = error;
+                const message = String(error.message || '').toLowerCase();
+                const canRetry =
+                    message.includes('invalid parameter') ||
+                    message.includes('unsupported') ||
+                    message.includes('metric');
+
+                if (!canRetry) {
+                    throw error;
+                }
+            }
+        }
+
+        if (lastError) throw lastError;
+        return { data: [] };
     }
 
     /**
@@ -470,7 +522,8 @@ class InstagramService {
     async getMediaPageWithInsights(limit = 25, after = null, options = {}) {
         const {
             includeDetailedVideoInsights = false,
-            detailedInsightConcurrency = 4
+            detailedInsightConcurrency = 4,
+            fetchShares = true  // always fetch shares via /insights unless disabled
         } = options;
 
         const response = await this.getMedia(limit, after);
@@ -486,6 +539,7 @@ class InstagramService {
         const normalisedBatch = rawMedia.map((media) => this.normaliseMediaNode(media));
 
         if (includeDetailedVideoInsights) {
+            // For REELs/VIDEO: full getMediaInsights already returns shares
             const videoItems = normalisedBatch
                 .map((media, index) => ({ media, index }))
                 .filter(({ media }) => media.mediaType === 'REEL' || media.mediaType === 'VIDEO');
@@ -501,6 +555,30 @@ class InstagramService {
                 } catch (error) {
                     console.warn(`Detailed insights unavailable for media ${media.id}:`, error.message);
                 }
+            });
+
+            // For non-video posts in this batch, fetch shares separately
+            if (fetchShares) {
+                const nonVideoItems = normalisedBatch
+                    .map((media, index) => ({ media, index }))
+                    .filter(({ media }) => media.mediaType !== 'REEL' && media.mediaType !== 'VIDEO');
+                await settleWithConcurrency(nonVideoItems, detailedInsightConcurrency, async ({ media, index }) => {
+                    try {
+                        const shares = await this.getMediaShares(media.id, media.mediaType);
+                        if (shares > 0) normalisedBatch[index] = { ...normalisedBatch[index], shares };
+                    } catch { /* non-fatal */ }
+                });
+            }
+        } else if (fetchShares) {
+            // shares is NEVER returned in the inline media list response.
+            // It must be fetched from /{media_id}/insights for every post.
+            // This is the root cause of shares always being 0 on overview/growth.
+            const allItems = normalisedBatch.map((media, index) => ({ media, index }));
+            await settleWithConcurrency(allItems, 4, async ({ media, index }) => {
+                try {
+                    const shares = await this.getMediaShares(media.id, media.mediaType);
+                    if (shares > 0) normalisedBatch[index] = { ...normalisedBatch[index], shares };
+                } catch { /* non-fatal — leave shares as 0 */ }
             });
         }
 

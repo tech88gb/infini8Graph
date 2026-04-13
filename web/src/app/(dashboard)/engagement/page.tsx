@@ -253,7 +253,7 @@ export default function EngagementPage() {
         startDate: defaultStart.toISOString().split('T')[0],
         endDate: defaultEnd.toISOString().split('T')[0]
     });
-    const { data, isLoading, refetch, isFetching } = useQuery({
+    const { data, isLoading, error, refetch, isFetching } = useQuery({
         queryKey: ['posts', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getPosts(50, dateRange.startDate, dateRange.endDate);
@@ -267,6 +267,22 @@ export default function EngagementPage() {
                 <div style={{ textAlign: 'center' }}>
                     <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
                     <p className="text-muted">Loading engagement data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
+                <div style={{ textAlign: 'center', maxWidth: 460 }}>
+                    <p style={{ color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>Engagement analytics failed to load</p>
+                    <p className="text-muted" style={{ marginBottom: 16 }}>
+                        The posts or story insights request failed, so this page no longer pretends the metrics are zero.
+                    </p>
+                    <button onClick={() => refetch()} className="btn btn-primary">
+                        Try Again
+                    </button>
                 </div>
             </div>
         );

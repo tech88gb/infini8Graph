@@ -119,7 +119,7 @@ export default function GrowthPage() {
         endDate: defaultEnd.toISOString().split('T')[0]
     });
 
-    const { data, isLoading, refetch, isFetching } = useQuery({
+    const { data, isLoading, error, refetch, isFetching } = useQuery({
         queryKey: ['growth', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getGrowth(dateRange.startDate, dateRange.endDate);
@@ -133,6 +133,22 @@ export default function GrowthPage() {
                 <div style={{ textAlign: 'center' }}>
                     <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
                     <p className="text-muted">Loading growth data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
+                <div style={{ textAlign: 'center', maxWidth: 460 }}>
+                    <p style={{ color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>Growth analytics failed to load</p>
+                    <p className="text-muted" style={{ marginBottom: 16 }}>
+                        The request did not return valid account metrics. This now shows as an error instead of fake zeroes.
+                    </p>
+                    <button onClick={() => refetch()} className="btn btn-primary">
+                        Try Again
+                    </button>
                 </div>
             </div>
         );

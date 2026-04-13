@@ -101,7 +101,7 @@ export default function ReelsPage() {
         setCursorHistory([null]);
     }, [activeAccountId, dateRange.startDate, dateRange.endDate]);
 
-    const { data, isLoading, refetch, isFetching } = useQuery({
+    const { data, isLoading, error, refetch, isFetching } = useQuery({
         queryKey: ['reels', activeAccountId, dateRange.startDate, dateRange.endDate, currentCursor, REELS_PER_PAGE],
         queryFn: async () => {
             const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate, {
@@ -118,6 +118,22 @@ export default function ReelsPage() {
                 <div style={{ textAlign: 'center' }}>
                     <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
                     <p className="text-muted">Loading reels analytics...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
+                <div style={{ textAlign: 'center', maxWidth: 460 }}>
+                    <p style={{ color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>Reels analytics failed to load</p>
+                    <p className="text-muted" style={{ marginBottom: 16 }}>
+                        The request did not return a usable reel page. This now surfaces as an error instead of silently showing empty analytics.
+                    </p>
+                    <button onClick={() => refetch()} className="btn btn-primary">
+                        Try Again
+                    </button>
                 </div>
             </div>
         );

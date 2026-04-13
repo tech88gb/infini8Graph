@@ -124,6 +124,19 @@ class AnalyticsService {
         return Number((total / values.length).toFixed(decimals));
     }
 
+    parseInsightMetricValue(value) {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+        if (value && typeof value === 'object') {
+            if (typeof value.value === 'number') return value.value;
+            if (typeof value.count === 'number') return value.count;
+        }
+        return 0;
+    }
+
     normaliseSeries(values = []) {
         const numericValues = values.map((value) => Number(value || 0));
         const max = Math.max(...numericValues, 0);
@@ -168,7 +181,7 @@ class AnalyticsService {
      */
     async getOverview(startDate = null, endDate = null) {
         // Build a cache key that includes the dates
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
         
         // Check cache first
         const cached = await this.checkCache('overview', dateKey);
@@ -189,7 +202,11 @@ class AnalyticsService {
         const fetchLimit = (startDate || endDate) ? 80 : 60;
         const overviewTasks = [
             async () => {
-                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit);
+                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+                    includeDetailedVideoInsights: true,
+                    detailedInsightConcurrency: 3,
+                    fetchShares: true
+                });
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
             async () => this.instagram.getFollowerDemographics(),
@@ -344,16 +361,39 @@ class AnalyticsService {
      * Get growth analytics
      */
     async getGrowth(startDate = null, endDate = null) {
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('growth', dateKey);
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        // Fetch more to ensure we have enough after filtering
         const fetchLimit = (startDate || endDate) ? 80 : 60;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-        media = this.filterMediaByDate(media, startDate, endDate);
-        const accountMetrics = await this.getDailyAccountMetrics(startDate, endDate);
+        let media = [];
+        let accountMetrics = [];
+        const growthTasks = [
+            async () => {
+                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+                    includeDetailedVideoInsights: true,
+                    detailedInsightConcurrency: 3,
+                    fetchShares: true
+                });
+                return this.filterMediaByDate(fetchedMedia, startDate, endDate);
+            },
+            async () => this.getDailyAccountMetrics(startDate, endDate)
+        ];
+
+        const [mediaResult, metricsResult] = await runWithConcurrency(growthTasks, 2);
+
+        if (mediaResult.status === 'fulfilled') {
+            media = mediaResult.value || [];
+        } else {
+            console.warn('Growth media fetch failed:', mediaResult.reason?.message || mediaResult.reason);
+        }
+
+        if (metricsResult.status === 'fulfilled') {
+            accountMetrics = metricsResult.value || [];
+        } else {
+            console.warn('Growth account insights fetch failed:', metricsResult.reason?.message || metricsResult.reason);
+        }
 
         // Group posts by date for growth analysis
         const postsByDate = {};
@@ -945,7 +985,7 @@ class AnalyticsService {
             ? Math.min(Math.max(requestedLimit, 6), 24)
             : 12;
         const after = options.after || null;
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}`;
+        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}`;
         const cached = await this.checkCache('reels', dateKey);
         if (cached) return cached;
 
@@ -1102,7 +1142,7 @@ class AnalyticsService {
      * Get detailed post analytics
      */
     async getPostsAnalytics(limit = 50, startDate = null, endDate = null) {
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('posts', dateKey);
         if (cached) return cached;
 
@@ -1645,23 +1685,45 @@ class AnalyticsService {
             until = Math.floor(end.getTime() / 1000);
         }
 
-        const insightsRes = await this.instagram.getAccountInsights(
-            'day',
-            ['follower_count', 'impressions', 'reach', 'profile_views'],
-            since,
-            until
+        const dailyData = {};
+        // follower_count does NOT support since/until ranges on all API versions;
+        // profile_views, impressions, reach all support period=day with since/until.
+        const metricNames = ['follower_count', 'impressions', 'reach', 'profile_views'];
+
+        const settled = await Promise.allSettled(
+            metricNames.map((metricName) =>
+                this.instagram.getAccountInsights('day', [metricName], since, until)
+            )
         );
 
-        if (!insightsRes?.data) return [];
+        settled.forEach((result, index) => {
+            const metricName = metricNames[index];
 
-        const dailyData = {};
-        insightsRes.data.forEach((metric) => {
-            if (!Array.isArray(metric.values)) return;
-            metric.values.forEach((val) => {
-                const date = (val.end_time || '').split('T')[0];
-                if (!date) return;
-                if (!dailyData[date]) dailyData[date] = { date };
-                dailyData[date][metric.name] = val.value || 0;
+            if (result.status !== 'fulfilled') {
+                console.warn(`Account insight metric unavailable for ${metricName}:`, result.reason?.message || result.reason);
+                return;
+            }
+
+            const metricRows = result.value?.data || [];
+            metricRows.forEach((metric) => {
+                // Meta returns insights in two formats:
+                // 1. Legacy format: metric.values = [{ value, end_time }, ...]
+                // 2. Newer format: metric.total_value = { value, breakdowns: [...] }
+                //    (often used for lifetime/aggregated metrics or when a date range gives one bucket)
+                if (Array.isArray(metric.values) && metric.values.length > 0) {
+                    // Per-day breakdown — the normal case for period=day + since/until
+                    metric.values.forEach((val) => {
+                        const date = (val.end_time || '').split('T')[0];
+                        if (!date) return;
+                        if (!dailyData[date]) dailyData[date] = { date };
+                        dailyData[date][metric.name] = this.parseInsightMetricValue(val.value);
+                    });
+                } else if (metric.total_value !== undefined && metric.total_value !== null) {
+                    // Aggregate total — attribute to end date (best we can do)
+                    const dateKey = endDate || new Date().toISOString().split('T')[0];
+                    if (!dailyData[dateKey]) dailyData[dateKey] = { date: dateKey };
+                    dailyData[dateKey][metric.name] = this.parseInsightMetricValue(metric.total_value?.value ?? metric.total_value);
+                }
             });
         });
 
@@ -1669,7 +1731,7 @@ class AnalyticsService {
     }
 
     async getStoryAnalytics() {
-        const cached = await this.checkCache('stories', 'current');
+        const cached = await this.checkCache('stories', 'current_v3');
         if (cached) return cached;
 
         let stories = [];
@@ -1692,7 +1754,7 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('stories', 'current', analytics);
+        await this.updateCache('stories', 'current_v3', analytics);
         return analytics;
     }
 }
