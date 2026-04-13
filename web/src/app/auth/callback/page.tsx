@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 import { authApi } from '@/lib/api';
@@ -11,8 +11,12 @@ function AuthCallbackContent() {
     const initialError = searchParams.get('error');
     const [status, setStatus] = useState<'processing' | 'success' | 'error'>(initialError ? 'error' : 'processing');
     const [message, setMessage] = useState(initialError ? decodeURIComponent(initialError) : 'Completing sign-in...');
+    const handledRef = useRef(false);
 
     useEffect(() => {
+        if (handledRef.current) return;
+        handledRef.current = true;
+
         let isMounted = true;
         const error = searchParams.get('error');
         const code = searchParams.get('code');
@@ -37,8 +41,6 @@ function AuthCallbackContent() {
                 if (token) {
                     localStorage.setItem('auth_token', token);
                 }
-
-                window.history.replaceState(null, '', '/auth/callback');
                 return authApi.getMe();
             })
             .then((response) => {

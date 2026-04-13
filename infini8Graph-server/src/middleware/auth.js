@@ -1,37 +1,47 @@
 import { verifyToken } from '../utils/jwt.js';
 
-function getTokenFromRequest(req) {
+function buildUserFromDecoded(decoded) {
+    return {
+        userId: decoded.userId,
+        // Google identity
+        googleEmail: decoded.googleEmail || null,
+        metaConnected: decoded.metaConnected || false,
+        // Active Instagram account (populated after Meta setup)
+        instagramUserId: decoded.instagramUserId || null,
+        instagramAccountId: decoded.instagramAccountId || null,
+        username: decoded.username || null,
+    };
+}
+
+function getDecodedAuth(req) {
+    const cookieToken = req.cookies?.auth_token || null;
     const authorization = req.headers.authorization || '';
-    if (authorization.startsWith('Bearer ')) {
-        return authorization.slice(7).trim();
+    const bearerToken = authorization.startsWith('Bearer ')
+        ? authorization.slice(7).trim()
+        : null;
+
+    if (cookieToken) {
+        const decodedFromCookie = verifyToken(cookieToken);
+        if (decodedFromCookie) return decodedFromCookie;
     }
 
-    return req.cookies?.auth_token || null;
+    if (bearerToken) {
+        const decodedFromBearer = verifyToken(bearerToken);
+        if (decodedFromBearer) return decodedFromBearer;
+    }
+
+    return null;
 }
 
 export function authenticate(req, res, next) {
     try {
-        const token = getTokenFromRequest(req);
+        const decoded = getDecodedAuth(req);
 
-        if (!token) {
+        if (!decoded) {
             return res.status(401).json({ success: false, error: 'Authentication required', code: 'AUTH_REQUIRED' });
         }
 
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ success: false, error: 'Invalid or expired token', code: 'INVALID_TOKEN' });
-        }
-
-        req.user = {
-            userId: decoded.userId,
-            // Google identity
-            googleEmail: decoded.googleEmail || null,
-            metaConnected: decoded.metaConnected || false,
-            // Active Instagram account (populated after Meta setup)
-            instagramUserId: decoded.instagramUserId || null,
-            instagramAccountId: decoded.instagramAccountId || null,
-            username: decoded.username || null,
-        };
+        req.user = buildUserFromDecoded(decoded);
 
         next();
     } catch (error) {
@@ -42,19 +52,9 @@ export function authenticate(req, res, next) {
 
 export function optionalAuth(req, res, next) {
     try {
-        const token = getTokenFromRequest(req);
-        if (token) {
-            const decoded = verifyToken(token);
-            if (decoded) {
-                req.user = {
-                    userId: decoded.userId,
-                    googleEmail: decoded.googleEmail || null,
-                    metaConnected: decoded.metaConnected || false,
-                    instagramUserId: decoded.instagramUserId || null,
-                    instagramAccountId: decoded.instagramAccountId || null,
-                    username: decoded.username || null,
-                };
-            }
+        const decoded = getDecodedAuth(req);
+        if (decoded) {
+            req.user = buildUserFromDecoded(decoded);
         }
         next();
     } catch (error) {

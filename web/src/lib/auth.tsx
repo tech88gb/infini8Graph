@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { useQueryClient } from '@tanstack/react-query';
 import { authApi } from './api';
@@ -41,6 +42,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+    const pathname = usePathname();
     const queryClient = useQueryClient();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
@@ -176,8 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     useEffect(() => {
+        if (pathname === '/auth/callback') return;
         checkAuth();
-    }, [checkAuth]);
+    }, [checkAuth, pathname]);
 
     return (
         <AuthContext.Provider value={{
