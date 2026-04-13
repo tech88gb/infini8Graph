@@ -19,6 +19,7 @@ const PORT = process.env.PORT || 3005;
 
 // Trust proxy for ngrok/load balancers
 app.set('trust proxy', 1);
+app.set('etag', false);
 
 
 if (process.env.NODE_ENV === 'development') {
@@ -53,6 +54,13 @@ app.use(cors({
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning']
 }));
+
+app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
 
 // Rate limiting (increased for development)
 const limiter = rateLimit({

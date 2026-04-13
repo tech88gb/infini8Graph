@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
+function withNoCache(path: string) {
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}_=${Date.now()}`;
+}
+
 const api = axios.create({
     baseURL: `${API_URL}/api`,
     withCredentials: true,
@@ -55,12 +60,12 @@ export const authApi = {
     connectMeta: () => api.get('/auth/meta/connect'),
     reconnectMeta: () => api.post('/auth/meta/reconnect'),
     exchangeCode: (code: string) => api.post('/auth/exchange', { code }),
-    getMe: () => api.get('/auth/me'),
+    getMe: () => api.get(withNoCache('/auth/me')),
     logout: () => api.post('/auth/logout'),
     refresh: () => api.post('/auth/refresh'),
     // Multi-account support
     getAccounts: (includeDisabled = false) =>
-        api.get(`/auth/accounts${includeDisabled ? '?includeDisabled=true' : ''}`),
+        api.get(withNoCache(`/auth/accounts${includeDisabled ? '?includeDisabled=true' : ''}`)),
     updateAccountEnabled: (accountId: string, isEnabled: boolean) =>
         api.patch(`/auth/accounts/${accountId}/enabled`, { is_enabled: isEnabled }),
     switchAccount: (accountId: string) => api.post(`/auth/switch/${accountId}`)
