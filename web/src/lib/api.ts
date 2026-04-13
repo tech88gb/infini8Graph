@@ -12,9 +12,34 @@ const api = axios.create({
     }
 });
 
+function readStoredToken() {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('auth_token');
+}
+
+function writeStoredToken(token?: string | null) {
+    if (typeof window === 'undefined' || !token) return;
+    localStorage.setItem('auth_token', token);
+}
+
+function attachBearerToken(config: import('axios').InternalAxiosRequestConfig) {
+    const token = readStoredToken();
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+}
+
+function persistTokenFromResponse(response: import('axios').AxiosResponse) {
+    writeStoredToken(response.data?.token);
+    return response;
+}
+
+api.interceptors.request.use(attachBearerToken);
+
 // Simple error interceptor - NO automatic redirects
 api.interceptors.response.use(
-    (response) => response,
+    persistTokenFromResponse,
     (error) => {
         // Don't log 401s on auth/me — expected when not logged in
         const is401OnMe = error.response?.status === 401 && error.config?.url?.includes('/auth/me');
@@ -29,6 +54,7 @@ export const authApi = {
     getLoginUrl: () => api.get('/auth/login'),
     connectMeta: () => api.get('/auth/meta/connect'),
     reconnectMeta: () => api.post('/auth/meta/reconnect'),
+    exchangeCode: (code: string) => api.post('/auth/exchange', { code }),
     getMe: () => api.get('/auth/me'),
     logout: () => api.post('/auth/logout'),
     refresh: () => api.post('/auth/refresh'),
@@ -139,8 +165,10 @@ const googleApi = axios.create({
     }
 });
 
+googleApi.interceptors.request.use(attachBearerToken);
+
 googleApi.interceptors.response.use(
-    (response) => response,
+    persistTokenFromResponse,
     (error) => {
         console.error('Google API Error:', error.response?.status, error.message);
         return Promise.reject(error);

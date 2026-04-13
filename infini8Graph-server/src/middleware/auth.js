@@ -1,8 +1,17 @@
 import { verifyToken } from '../utils/jwt.js';
 
+function getTokenFromRequest(req) {
+    const authorization = req.headers.authorization || '';
+    if (authorization.startsWith('Bearer ')) {
+        return authorization.slice(7).trim();
+    }
+
+    return req.cookies?.auth_token || null;
+}
+
 export function authenticate(req, res, next) {
     try {
-        const token = req.cookies?.auth_token;
+        const token = getTokenFromRequest(req);
 
         if (!token) {
             return res.status(401).json({ success: false, error: 'Authentication required', code: 'AUTH_REQUIRED' });
@@ -33,7 +42,7 @@ export function authenticate(req, res, next) {
 
 export function optionalAuth(req, res, next) {
     try {
-        const token = req.cookies?.auth_token;
+        const token = getTokenFromRequest(req);
         if (token) {
             const decoded = verifyToken(token);
             if (decoded) {

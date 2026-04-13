@@ -15,15 +15,34 @@ function AuthCallbackContent() {
     useEffect(() => {
         let isMounted = true;
         const error = searchParams.get('error');
+        const code = searchParams.get('code');
 
         if (error) {
             setTimeout(() => router.push('/login?error=' + encodeURIComponent(error)), 3000);
             return;
         }
 
-        authApi.getMe()
+        if (!code) {
+            setStatus('error');
+            setMessage('Login session could not be resumed.');
+            setTimeout(() => router.push('/login'), 3000);
+            return;
+        }
+
+        authApi.exchangeCode(code)
+            .then((exchangeResponse) => {
+                if (!isMounted) return null;
+
+                const token = exchangeResponse.data?.token;
+                if (token) {
+                    localStorage.setItem('auth_token', token);
+                }
+
+                window.history.replaceState(null, '', '/auth/callback');
+                return authApi.getMe();
+            })
             .then((response) => {
-                if (!isMounted) return;
+                if (!isMounted || !response) return;
 
                 if (!response.data.success || !response.data.user) {
                     throw new Error('Session could not be verified.');
@@ -34,10 +53,10 @@ function AuthCallbackContent() {
 
                 if (!metaConnected) {
                     setMessage('Identity verified. Preparing your workspace.');
-                    setTimeout(() => router.push('/connect-meta'), 1500);
+                    setTimeout(() => window.location.assign('/connect-meta'), 1500);
                 } else {
                     setMessage('Session restored. Taking you to your dashboard.');
-                    setTimeout(() => router.push('/dashboard'), 1200);
+                    setTimeout(() => window.location.assign('/dashboard'), 1200);
                 }
             })
             .catch((err) => {

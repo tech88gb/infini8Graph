@@ -1,12 +1,18 @@
 import * as authService from '../services/authService.js';
 import { generateToken } from '../utils/jwt.js';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie.js';
+import { createAuthExchangeCode, consumeAuthExchangeCode } from '../utils/authExchangeStore.js';
 import supabase from '../config/database.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const FRONTEND_REDIRECT_URL = process.env.FRONTEND_REDIRECT_URL || 'http://localhost:3000';
+
+function buildExchangeRedirect(path, token) {
+    const code = createAuthExchangeCode(token);
+    return `${FRONTEND_REDIRECT_URL}${path}?code=${encodeURIComponent(code)}`;
+}
 
 // ============================================================
 // GOOGLE LOGIN (Primary identity — replaces Meta login)
@@ -82,8 +88,8 @@ export async function googleCallback(req, res) {
 
         setAuthCookie(res, jwtToken);
 
-        // Redirect to frontend callback handler — it will check metaConnected and route accordingly
-        return res.redirect(`${FRONTEND_REDIRECT_URL}/auth/callback`);
+        // Redirect to frontend callback handler with a short-lived one-time code.
+        return res.redirect(buildExchangeRedirect('/auth/callback', jwtToken));
     } catch (error) {
         console.error('❌ Google callback error:', error);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=${encodeURIComponent(error.message)}`);
@@ -162,7 +168,7 @@ export async function callback(req, res) {
         setAuthCookie(res, jwtToken);
 
         console.log(`✅ Meta setup complete for @${activeAccount?.username || 'unknown'}`);
-        return res.redirect(`${FRONTEND_REDIRECT_URL}/dashboard`);
+        return res.redirect(buildExchangeRedirect('/auth/callback', jwtToken));
     } catch (error) {
         console.error('❌ Meta callback error:', error);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/connect-meta?error=${encodeURIComponent(error.message)}`);
@@ -172,6 +178,26 @@ export async function callback(req, res) {
 // ============================================================
 // SHARED ENDPOINTS (unchanged behavior, updated internals)
 // ============================================================
+
+export async function exchangeCode(req, res) {
+    try {
+        const { code } = req.body || {};
+
+        if (!code || typeof code !== 'string') {
+            return res.status(400).json({ success: false, error: 'Exchange code is required' });
+        }
+
+        const token = consumeAuthExchangeCode(code);
+        if (!token) {
+            return res.status(400).json({ success: false, error: 'Exchange code is invalid or expired' });
+        }
+
+        setAuthCookie(res, token);
+        return res.json({ success: true, token });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: 'Failed to exchange login code' });
+    }
+}
 
 export async function getMe(req, res) {
     try {
@@ -204,7 +230,7 @@ export async function refreshToken(req, res) {
 
         setAuthCookie(res, jwtToken);
 
-        res.json({ success: true, message: 'Token refreshed' });
+        res.json({ success: true, message: 'Token refreshed', token: jwtToken });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to refresh token' });
     }
@@ -241,6 +267,7 @@ export async function updateAccountEnabled(req, res) {
             success: true,
             enabled: result.enabled,
             activeAccountId: result.activeAccount?.id || null,
+            token: result.jwt,
         });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to update account selection' });
@@ -258,7 +285,7 @@ export async function switchAccount(req, res) {
 
         setAuthCookie(res, result.jwt);
 
-        res.json({ success: true, account: result.account });
+        res.json({ success: true, account: result.account, token: result.jwt });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to switch account' });
     }
@@ -285,6 +312,7 @@ export default {
     metaConnect,
     metaReconnect,
     callback,
+    exchangeCode,
     getMe,
     logout,
     refreshToken,

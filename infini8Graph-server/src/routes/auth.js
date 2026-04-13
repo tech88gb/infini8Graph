@@ -19,6 +19,7 @@ router.post('/meta/reconnect', authenticate, authController.metaReconnect);
 router.get('/callback', authController.callback);
 
 // ── Session management ────────────────────────────────────────
+router.post('/exchange', authController.exchangeCode);
 router.get('/me', authenticate, authController.getMe);
 router.post('/logout', authenticate, authController.logout);
 router.post('/refresh', authenticate, authController.refreshToken);
