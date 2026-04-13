@@ -1,7 +1,6 @@
 import * as authService from '../services/authService.js';
-import { generateToken } from '../utils/jwt.js';
+import { generateExchangeToken, generateToken, verifyExchangeToken } from '../utils/jwt.js';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie.js';
-import { createAuthExchangeCode, consumeAuthExchangeCode } from '../utils/authExchangeStore.js';
 import supabase from '../config/database.js';
 import dotenv from 'dotenv';
 
@@ -9,8 +8,8 @@ dotenv.config();
 
 const FRONTEND_REDIRECT_URL = process.env.FRONTEND_REDIRECT_URL || 'http://localhost:3000';
 
-function buildExchangeRedirect(path, token) {
-    const code = createAuthExchangeCode(token);
+function buildExchangeRedirect(path, payload) {
+    const code = generateExchangeToken(payload);
     return `${FRONTEND_REDIRECT_URL}${path}?code=${encodeURIComponent(code)}`;
 }
 
@@ -76,20 +75,20 @@ export async function googleCallback(req, res) {
                 .eq('id', user.id);
         }
 
-        // Issue JWT
-        const jwtToken = generateToken({
+        const sessionPayload = {
             userId: user.id,
             googleEmail: googleUserInfo.email,
             metaConnected: isMetaConnected,
             instagramUserId: activeAccount?.instagram_user_id || null,
             instagramAccountId: activeAccount?.id || null,
             username: activeAccount?.username || null,
-        });
+        };
+        const jwtToken = generateToken(sessionPayload);
 
         setAuthCookie(res, jwtToken);
 
         // Redirect to frontend callback handler with a short-lived one-time code.
-        return res.redirect(buildExchangeRedirect('/auth/callback', jwtToken));
+        return res.redirect(buildExchangeRedirect('/auth/callback', sessionPayload));
     } catch (error) {
         console.error('❌ Google callback error:', error);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=${encodeURIComponent(error.message)}`);
@@ -168,7 +167,7 @@ export async function callback(req, res) {
         setAuthCookie(res, jwtToken);
 
         console.log(`✅ Meta setup complete for @${activeAccount?.username || 'unknown'}`);
-        return res.redirect(buildExchangeRedirect('/auth/callback', jwtToken));
+        return res.redirect(buildExchangeRedirect('/auth/callback', session.payload));
     } catch (error) {
         console.error('❌ Meta callback error:', error);
         return res.redirect(`${FRONTEND_REDIRECT_URL}/connect-meta?error=${encodeURIComponent(error.message)}`);
@@ -187,11 +186,12 @@ export async function exchangeCode(req, res) {
             return res.status(400).json({ success: false, error: 'Exchange code is required' });
         }
 
-        const token = consumeAuthExchangeCode(code);
-        if (!token) {
+        const payload = verifyExchangeToken(code);
+        if (!payload) {
             return res.status(400).json({ success: false, error: 'Exchange code is invalid or expired' });
         }
 
+        const token = generateToken(payload);
         setAuthCookie(res, token);
         return res.json({ success: true, token });
     } catch (error) {

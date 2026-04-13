@@ -5,6 +5,7 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const AUTH_EXCHANGE_EXPIRES_IN = '60s';
 
 if (!JWT_SECRET) {
     throw new Error('JWT_SECRET is not defined in environment variables');
@@ -19,6 +20,17 @@ export function generateToken(payload) {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
+export function generateExchangeToken(payload) {
+    return jwt.sign(
+        {
+            type: 'auth_exchange',
+            payload,
+        },
+        JWT_SECRET,
+        { expiresIn: AUTH_EXCHANGE_EXPIRES_IN }
+    );
+}
+
 /**
  * Verify and decode a JWT token
  * @param {string} token - The JWT token to verify
@@ -27,6 +39,19 @@ export function generateToken(payload) {
 export function verifyToken(token) {
     try {
         return jwt.verify(token, JWT_SECRET);
+    } catch (error) {
+        return null;
+    }
+}
+
+export function verifyExchangeToken(token) {
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded?.type !== 'auth_exchange' || !decoded?.payload) {
+            return null;
+        }
+
+        return decoded.payload;
     } catch (error) {
         return null;
     }
@@ -45,4 +70,4 @@ export function decodeToken(token) {
     }
 }
 
-export default { generateToken, verifyToken, decodeToken };
+export default { generateToken, generateExchangeToken, verifyToken, verifyExchangeToken, decodeToken };
