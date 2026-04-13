@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi, googleAdsApi, adsApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import {
     Users, Heart, Eye, Bookmark, TrendingUp, TrendingDown, Image, RefreshCw, Instagram,
@@ -541,6 +542,7 @@ function MetaAdsWidget() {
 // ==================== MAIN PAGE ====================
 
 export default function DashboardPage() {
+    const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -551,7 +553,7 @@ export default function DashboardPage() {
     });
 
     const { data, isLoading, error, refetch, isFetching } = useQuery({
-        queryKey: ['overview', dateRange.startDate, dateRange.endDate],
+        queryKey: ['overview', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getOverview(dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -587,6 +589,7 @@ export default function DashboardPage() {
     const profile = data?.profile || {};
     const recentPosts = data?.recentPosts || [];
     const demographics = data?.demographics || {};
+    const audienceInsights = data?.audienceInsights || {};
 
     const chartData = recentPosts.slice(0, 10).reverse().map((post: any) => ({
         name: new Date(post.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -600,6 +603,7 @@ export default function DashboardPage() {
         followers: day.follower_count || 0,
         reach: day.reach || 0,
         impressions: day.impressions || 0,
+        profileViews: day.profile_views || 0,
     }));
 
     const countryData = [...(demographics.countries || [])]
@@ -636,6 +640,9 @@ export default function DashboardPage() {
     const trueEngagementRate = metrics.avgLikes && metrics.avgComments && metrics.totalReach
         ? (((metrics.avgLikes + metrics.avgComments) / (metrics.totalReach / recentPosts.length || 1)) * 100).toFixed(2)
         : metrics.engagementRate || '0';
+    const profileViewRate = metrics.totalProfileViews && metrics.totalReach
+        ? ((metrics.totalProfileViews / metrics.totalReach) * 100).toFixed(2)
+        : '0';
 
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -702,11 +709,11 @@ export default function DashboardPage() {
                         tooltip="Average engagement (likes + comments) divided by followers"
                     />
                     <MetricCard
-                        label="Avg Likes"
-                        value={metrics.avgLikes || 0}
-                        icon={Heart}
+                        label="Profile Views"
+                        value={metrics.totalProfileViews || 0}
+                        icon={ExternalLink}
                         color="#ef4444"
-                        tooltip="Average likes per post across your recent content"
+                        tooltip="Account-level profile views returned by Meta for the selected date range"
                     />
                     <MetricCard
                         label="Total Reach"
@@ -723,11 +730,18 @@ export default function DashboardPage() {
                         tooltip="Number of times your content was saved - a high-intent engagement signal"
                     />
                     <MetricCard
-                        label="Posts"
-                        value={metrics.posts || 0}
-                        icon={Image}
+                        label="Total Shares"
+                        value={metrics.totalShares || 0}
+                        icon={TrendingUp}
                         color="#f59e0b"
-                        tooltip="Total number of posts on your account"
+                        tooltip="Shares returned from supported media insights, primarily video/reel content"
+                    />
+                    <MetricCard
+                        label="Follower Delta"
+                        value={`${metrics.followerDelta >= 0 ? '+' : ''}${metrics.followerDelta || 0}`}
+                        icon={metrics.followerDelta >= 0 ? TrendingUp : TrendingDown}
+                        color={metrics.followerDelta >= 0 ? '#10b981' : '#ef4444'}
+                        tooltip="Net follower movement across the selected daily insight window"
                     />
                 </div>
 
@@ -759,14 +773,52 @@ export default function DashboardPage() {
                                     : '0'}%
                             </div>
                         </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Profile View Rate</span>
+                                <InfoTooltip text="Profile Views ÷ Reach. Useful for spotting whether attention is moving into account intent." />
+                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>{profileViewRate}%</div>
+                        </div>
                     </div>
                 </SectionCard>
+
+                {(audienceInsights.topCountry || audienceInsights.topCity || audienceInsights.topGenderAge || audienceInsights.peakFollowerHours?.length > 0) && (
+                    <SectionCard title="Audience Snapshot" subtitle="Fast read on where your audience is and when they are active">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                                <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Top Country</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>{audienceInsights.topCountry?.label || '—'}</div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{audienceInsights.topCountry?.value?.toLocaleString?.() || 0} followers</div>
+                            </div>
+                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                                <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Top City</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>{audienceInsights.topCity?.label?.split(',')[0] || '—'}</div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{audienceInsights.topCity?.value?.toLocaleString?.() || 0} followers</div>
+                            </div>
+                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                                <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Top Demographic</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                                    {audienceInsights.topGenderAge ? `${audienceInsights.topGenderAge.gender} ${audienceInsights.topGenderAge.age}` : '—'}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{audienceInsights.topGenderAge?.value?.toLocaleString?.() || 0} followers</div>
+                            </div>
+                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                                <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Peak Follower Hours</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                                    {(audienceInsights.peakFollowerHours || []).slice(0, 2).map((item: any) => item.label).join(' • ') || '—'}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>from follower activity insights</div>
+                            </div>
+                        </div>
+                    </SectionCard>
+                )}
                 {/* Daily Metrics Chart */}
                 {dailyChartData.length > 0 && (
                     <div className="chart-container" style={{ marginBottom: 24 }}>
                         <div className="card-header">
                             <h3 className="card-title">Daily Audience Metrics</h3>
-                            <p className="text-muted" style={{ fontSize: 12 }}>Follower count, impressions, and reach per day</p>
+                            <p className="text-muted" style={{ fontSize: 12 }}>Follower count, reach, impressions, and profile views per day</p>
                         </div>
                         <ResponsiveContainer width="100%" height={240}>
                             <AreaChart data={dailyChartData}>
@@ -790,6 +842,7 @@ export default function DashboardPage() {
                                 <Area yAxisId="left" type="monotone" dataKey="followers" name="Followers" stroke="#10b981" strokeWidth={2} fill="url(#followerGrad)" />
                                 <Area yAxisId="right" type="monotone" dataKey="impressions" name="Impressions" stroke="#6366f1" strokeWidth={2} fill="none" />
                                 <Area yAxisId="right" type="monotone" dataKey="reach" name="Reach" stroke="#0ea5e9" strokeWidth={2} fill="none" />
+                                <Area yAxisId="right" type="monotone" dataKey="profileViews" name="Profile Views" stroke="#ef4444" strokeWidth={2} fill="none" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>

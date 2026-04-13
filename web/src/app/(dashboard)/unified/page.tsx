@@ -248,6 +248,13 @@ export default function UnifiedDashboardPage() {
                     tooltip="Combined impressions for all accounts in the last 30 days"
                 />
                 <MetricCard
+                    label="Profile Views"
+                    value={metrics.totalProfileViews || 0}
+                    icon={LayoutDashboard}
+                    color="#ef4444"
+                    tooltip="Combined profile views across all linked accounts"
+                />
+                <MetricCard
                     label="Total Reach"
                     value={metrics.totalReach || 0}
                     icon={TrendingUp}
@@ -260,6 +267,20 @@ export default function UnifiedDashboardPage() {
                     icon={Bookmark}
                     color="#f59e0b"
                     tooltip="Total post saves across all accounts"
+                />
+                <MetricCard
+                    label="Total Shares"
+                    value={metrics.totalShares || 0}
+                    icon={BarChart3}
+                    color="#8b5cf6"
+                    tooltip="Total supported media shares across all accounts"
+                />
+                <MetricCard
+                    label="Follower Delta"
+                    value={`${metrics.totalFollowerDelta >= 0 ? '+' : ''}${metrics.totalFollowerDelta || 0}`}
+                    icon={metrics.totalFollowerDelta >= 0 ? TrendingUp : Heart}
+                    color={metrics.totalFollowerDelta >= 0 ? '#10b981' : '#ef4444'}
+                    tooltip="Net follower movement summed across all linked accounts"
                 />
                 <MetricCard
                     label="Total Posts"

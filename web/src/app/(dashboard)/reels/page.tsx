@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Film, Heart, MessageCircle, Eye, TrendingUp, Bookmark, Share2, HelpCircle, Play, Users, Zap, Flame, ArrowUpRight, RefreshCw } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -84,6 +85,7 @@ function MetricCard({ label, value, icon: Icon, color, tooltip }: {
 // ==================== MAIN PAGE ====================
 
 export default function ReelsPage() {
+    const { activeAccountId } = useAuth();
     const [page, setPage] = useState(1);
     const REELS_PER_PAGE = 24;
     const defaultEnd = new Date();
@@ -94,7 +96,7 @@ export default function ReelsPage() {
         endDate: defaultEnd.toISOString().split('T')[0]
     });
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['reels', dateRange.startDate, dateRange.endDate],
+        queryKey: ['reels', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -164,32 +166,39 @@ export default function ReelsPage() {
                     tooltip="Number of reels/videos on your account"
                 />
                 <MetricCard
-                    label="Avg Likes"
-                    value={summary.avgLikes?.toLocaleString() || 0}
-                    icon={Heart}
-                    color="#ec4899"
-                    tooltip="Average likes per reel"
-                />
-                <MetricCard
-                    label="Avg Comments"
-                    value={summary.avgComments?.toLocaleString() || 0}
-                    icon={MessageCircle}
-                    color="#0ea5e9"
-                    tooltip="Average comments per reel"
-                />
-                <MetricCard
                     label="Total Reach"
                     value={summary.totalReach?.toLocaleString() || 0}
                     icon={Eye}
-                    color="#10b981"
-                    tooltip="Total unique accounts that saw your reels"
+                    color="#ec4899"
+                    tooltip="Total unique accounts reached by your reels"
                 />
                 <MetricCard
-                    label="vs Posts"
-                    value={`${comparison.reelMultiplier || 0}x`}
-                    icon={TrendingUp}
+                    label="Impressions"
+                    value={summary.totalImpressions?.toLocaleString() || 0}
+                    icon={Users}
+                    color="#0ea5e9"
+                    tooltip="Total impressions returned across the analyzed reel set"
+                />
+                <MetricCard
+                    label="Total Saves"
+                    value={summary.totalSaved?.toLocaleString() || 0}
+                    icon={Bookmark}
+                    color="#10b981"
+                    tooltip="Total saves across your reels"
+                />
+                <MetricCard
+                    label="Total Shares"
+                    value={summary.totalShares?.toLocaleString() || 0}
+                    icon={Share2}
                     color="#f59e0b"
-                    tooltip="How much more engagement reels get compared to regular posts"
+                    tooltip="Total shares returned by supported reel insights"
+                />
+                <MetricCard
+                    label="Interactions"
+                    value={summary.totalInteractions?.toLocaleString() || 0}
+                    icon={TrendingUp}
+                    color="#6366f1"
+                    tooltip="Total interactions returned by supported reel insights"
                 />
             </div>
 
@@ -226,12 +235,12 @@ export default function ReelsPage() {
             </SectionCard>
 
             {/* Calculated Insights */}
-            <SectionCard title="Calculated Insights" subtitle="Advanced metrics calculated from your reel data">
+            <SectionCard title="Rate Diagnostics" subtitle="Real rates calculated directly from fetched reel reach and interactions">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>Viral Score</span>
-                            <InfoTooltip text="(Engagement ÷ Reach) × 100. Higher score means your reels are more engaging relative to views." />
+                            <span className="text-muted" style={{ fontSize: 12 }}>Engagement Rate</span>
+                            <InfoTooltip text="Engagement divided by reach across the analyzed reel set." />
                         </div>
                         <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{viralScore}%</div>
                     </div>
@@ -244,10 +253,10 @@ export default function ReelsPage() {
                     </div>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Engagement/Reel</span>
-                            <InfoTooltip text="Average total interactions (likes + comments + shares + saves) per reel." />
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Share Rate</span>
+                            <InfoTooltip text="Average shares divided by reach across the analyzed reel set." />
                         </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{summary.avgEngagement || 0}</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{summary.avgShareRate || 0}%</div>
                     </div>
                 </div>
             </SectionCard>
@@ -286,11 +295,11 @@ export default function ReelsPage() {
                         <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>Saves divided by reach</div>
                     </div>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Engagement Rate</div>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Interaction Rate</div>
                         <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>
                             {summary.avgEngagementRate || 0}%
                         </div>
-                        <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>Engagement divided by reach</div>
+                        <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>Interactions divided by reach</div>
                     </div>
                 </div>
             </SectionCard>
@@ -343,7 +352,7 @@ export default function ReelsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: playsAvailable ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 12 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: playsAvailable ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)', gap: 12 }}>
                                     <div>
                                         <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Engagement Rate</div>
                                         <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{reel.engagementRate || 0}%</div>
@@ -358,6 +367,10 @@ export default function ReelsPage() {
                                             <div style={{ fontSize: 16, fontWeight: 700, color: '#ec4899' }}>{reel.playRate || 0}%</div>
                                         </div>
                                     )}
+                                    <div>
+                                        <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Share Rate</div>
+                                        <div style={{ fontSize: 16, fontWeight: 700, color: '#0ea5e9' }}>{reel.shareRate || 0}%</div>
+                                    </div>
                                     <div>
                                         <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Saves</div>
                                         <div style={{ fontSize: 16, fontWeight: 700, color: '#6366f1' }}>{reel.saved || 0}</div>

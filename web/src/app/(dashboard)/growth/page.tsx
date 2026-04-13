@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { TrendingUp, TrendingDown, Users, Activity, HelpCircle, Eye, UserPlus, Target, RefreshCw } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -109,6 +110,7 @@ function MetricCard({ label, value, icon: Icon, color, tooltip, trend, trendLabe
 // ==================== MAIN PAGE ====================
 
 export default function GrowthPage() {
+    const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -118,7 +120,7 @@ export default function GrowthPage() {
     });
 
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['growth', dateRange.startDate, dateRange.endDate],
+        queryKey: ['growth', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getGrowth(dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -141,6 +143,7 @@ export default function GrowthPage() {
     const weeklyStats = growth.weeklyStats || {};
     const accountSummary = growth.accountSummary || {};
     const accountMetrics = growth.accountMetrics || [];
+    const comparisonSummary = growth.comparisonSummary || {};
 
     // Calculate follower acquisition rate
     const followerAcquisitionRate = growth.currentFollowers && weeklyStats.engagementThisWeek
@@ -262,17 +265,19 @@ export default function GrowthPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                <span className="text-muted" style={{ fontSize: 12 }}>Follower Engagement Rate</span>
-                                <InfoTooltip text="(Weekly Engagement ÷ Followers) × 100. Shows how engaged your followers are with your content." />
+                                <span className="text-muted" style={{ fontSize: 12 }}>Follower Trend</span>
+                                <InfoTooltip text="Net follower movement across the selected date range, based on daily follower_count insights." />
                             </div>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{followerAcquisitionRate}%</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: accountSummary.followerDelta >= 0 ? '#10b981' : '#ef4444' }}>
+                                {accountSummary.followerDelta >= 0 ? '+' : ''}{accountSummary.followerDelta || 0}
+                            </div>
                         </div>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                <span className="text-muted" style={{ fontSize: 12 }}>Post Frequency</span>
-                                <InfoTooltip text="Average number of posts per week" />
+                                <span className="text-muted" style={{ fontSize: 12 }}>Profile View Rate</span>
+                                <InfoTooltip text="Profile Views ÷ Reach. Useful for understanding how efficiently visibility turns into account intent." />
                             </div>
-                            <div style={{ fontSize: 24, fontWeight: 700 }}>{weeklyStats.postsThisWeek || 0}/week</div>
+                            <div style={{ fontSize: 24, fontWeight: 700 }}>{comparisonSummary.profileViewRateFromReach || 0}%</div>
                         </div>
                     </div>
 
@@ -302,6 +307,49 @@ export default function GrowthPage() {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </SectionCard>
+
+            {growthData.some((day: any) => (day.followerCount || 0) > 0) && (
+                <SectionCard title="Follower Trend" subtitle="Daily follower_count returned by Meta account insights">
+                    <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={growthData.slice(-30)}>
+                            <XAxis
+                                dataKey="date"
+                                stroke="#9ca3af"
+                                fontSize={11}
+                                tickLine={false}
+                                tickFormatter={(val) => new Date(val).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                            />
+                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                            <Tooltip
+                                contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
+                                labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                            />
+                            <Line type="monotone" dataKey="followerCount" stroke="#6366f1" strokeWidth={2} dot={false} name="Followers" />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </SectionCard>
+            )}
+
+            <SectionCard title="Reach vs Intent vs Publishing" subtitle="How visibility and profile intent compare with your posting output">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Reach / Post</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{comparisonSummary.avgReachPerPost || 0}</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Profile Views / Post</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{comparisonSummary.avgProfileViewsPerPost || 0}</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Posts / Active Day</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#0ea5e9' }}>{comparisonSummary.avgPostsPerActiveDay || 0}</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Impressions / Reach</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>{comparisonSummary.impressionsPerReach || 0}</div>
                     </div>
                 </div>
             </SectionCard>

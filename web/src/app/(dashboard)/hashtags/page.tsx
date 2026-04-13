@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Hash, Heart, BarChart3, HelpCircle, Star, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
@@ -107,6 +108,7 @@ function HashtagTag({ tag, engagement, color = 'primary' }: { tag: string; engag
 // ==================== MAIN PAGE ====================
 
 export default function HashtagsPage() {
+    const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -115,7 +117,7 @@ export default function HashtagsPage() {
         endDate: defaultEnd.toISOString().split('T')[0]
     });
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['hashtags', dateRange.startDate, dateRange.endDate],
+        queryKey: ['hashtags', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getHashtags(dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -135,6 +137,9 @@ export default function HashtagsPage() {
 
     const topPerforming = data?.topPerforming || [];
     const mostUsed = data?.mostUsed || [];
+    const consistencyLeaders = data?.consistencyLeaders || [];
+    const fatigueSignals = data?.fatigueSignals || [];
+    const reachExpanders = data?.reachExpanders || [];
 
     const chartData = topPerforming.slice(0, 10).map((h: any) => ({
         name: h.tag.replace('#', ''),
@@ -144,7 +149,9 @@ export default function HashtagsPage() {
 
     // Find underperforming hashtags (high usage, low engagement)
     const avgEngagement = topPerforming.reduce((sum: number, h: any) => sum + h.avgEngagement, 0) / topPerforming.length || 0;
-    const underperforming = mostUsed.filter((h: any) => h.avgEngagement < avgEngagement * 0.5).slice(0, 5);
+    const underperforming = fatigueSignals.length > 0
+        ? fatigueSignals.slice(0, 5)
+        : mostUsed.filter((h: any) => h.avgEngagement < avgEngagement * 0.5).slice(0, 5);
 
     // Calculate hashtag efficiency score
     const efficiencyScore = topPerforming.length > 0
@@ -229,6 +236,26 @@ export default function HashtagsPage() {
                 </div>
             </SectionCard>
 
+            <SectionCard title="Reach & Consistency Signals" subtitle="Useful hashtag signals beyond raw attributed engagement">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Best Reach Lift</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#0ea5e9' }}>{reachExpanders[0]?.reachLift || 0}%</div>
+                        <div className="text-muted" style={{ fontSize: 11 }}>vs account reach baseline</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Best Consistency</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{consistencyLeaders[0]?.consistencyScore || 0}%</div>
+                        <div className="text-muted" style={{ fontSize: 11 }}>posts above baseline</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Fatigue Flags</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: fatigueSignals.length > 0 ? '#ef4444' : '#10b981' }}>{fatigueSignals.length}</div>
+                        <div className="text-muted" style={{ fontSize: 11 }}>hashtags with declining returns</div>
+                    </div>
+                </div>
+            </SectionCard>
+
             {/* Top Performing Hashtags Cloud */}
             <SectionCard title="Top Performing Hashtags" subtitle="Weighted average engagement attributed to each hashtag">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -268,7 +295,7 @@ export default function HashtagsPage() {
             {underperforming.length > 0 && (
                 <SectionCard
                     title="Consider Replacing"
-                    subtitle="Frequently used hashtags with weak weighted engagement compared with your other tags"
+                    subtitle="Hashtags showing weak weighted engagement or clear diminishing returns"
                 >
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {underperforming.map((h: any) => (
@@ -286,7 +313,7 @@ export default function HashtagsPage() {
                             >
                                 <span style={{ color: '#991b1b', fontWeight: 500 }}>{h.tag}</span>
                                 <span style={{ fontSize: 11, color: '#b91c1c' }}>
-                                    {h.usageCount} uses · {h.avgEngagement} avg
+                                    {h.usageCount} uses · {h.avgEngagement} avg · {h.diminishingReturn || 0}% trend
                                 </span>
                             </div>
                         ))}
@@ -306,6 +333,8 @@ export default function HashtagsPage() {
                                     <th>Uses</th>
                                     <th>Avg Engagement</th>
                                     <th>Lift</th>
+                                    <th>Reach Lift</th>
+                                    <th>Consistency</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -333,6 +362,10 @@ export default function HashtagsPage() {
                                         <td style={{ color: (h.engagementLift || 0) >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
                                             {(h.engagementLift || 0) >= 0 ? '+' : ''}{h.engagementLift || 0}%
                                         </td>
+                                        <td style={{ color: (h.reachLift || 0) >= 0 ? '#0ea5e9' : '#ef4444', fontWeight: 600 }}>
+                                            {(h.reachLift || 0) >= 0 ? '+' : ''}{h.reachLift || 0}%
+                                        </td>
+                                        <td>{h.consistencyScore || 0}%</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -349,6 +382,7 @@ export default function HashtagsPage() {
                                     <th>Hashtag</th>
                                     <th>Uses</th>
                                     <th>Avg Engagement</th>
+                                    <th>Diminishing Return</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -358,6 +392,9 @@ export default function HashtagsPage() {
                                         <td style={{ fontWeight: 500, color: '#0ea5e9' }}>{h.tag}</td>
                                         <td style={{ fontWeight: 600 }}>{h.usageCount}</td>
                                         <td>{h.avgEngagement.toLocaleString()}</td>
+                                        <td style={{ color: (h.diminishingReturn || 0) >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                            {(h.diminishingReturn || 0) >= 0 ? '+' : ''}{h.diminishingReturn || 0}%
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

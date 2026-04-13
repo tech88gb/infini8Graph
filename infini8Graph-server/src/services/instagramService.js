@@ -6,6 +6,25 @@ dotenv.config();
 const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v18.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 
+async function settleWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let cursor = 0;
+
+    const runner = async () => {
+        while (cursor < items.length) {
+            const index = cursor++;
+            try {
+                results[index] = { status: 'fulfilled', value: await worker(items[index], index) };
+            } catch (error) {
+                results[index] = { status: 'rejected', reason: error };
+            }
+        }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner));
+    return results;
+}
+
 /**
  * Instagram Graph API Service
  * Handles all communication with the Instagram Graph API
@@ -417,7 +436,10 @@ class InstagramService {
     }
 
     async getAllMediaWithInsights(count = 50, options = {}) {
-        const { includeDetailedVideoInsights = false } = options;
+        const {
+            includeDetailedVideoInsights = false,
+            detailedInsightConcurrency = 4
+        } = options;
         const allMedia = [];
         let cursor = null;
         let fetched = 0;
@@ -432,11 +454,11 @@ class InstagramService {
             const normalisedBatch = rawMedia.map((media) => this.normaliseMediaNode(media));
 
             if (includeDetailedVideoInsights) {
-                const detailedTasks = normalisedBatch.map(async (media, index) => {
-                    if (media.mediaType !== 'REEL' && media.mediaType !== 'VIDEO') {
-                        return;
-                    }
+                const videoItems = normalisedBatch
+                    .map((media, index) => ({ media, index }))
+                    .filter(({ media }) => media.mediaType === 'REEL' || media.mediaType === 'VIDEO');
 
+                await settleWithConcurrency(videoItems, detailedInsightConcurrency, async ({ media, index }) => {
                     try {
                         const detailed = await this.getMediaInsights(media.id, media.mediaType);
                         const detailedInsights = this.extractInsightsMap(detailed?.data);
@@ -448,8 +470,6 @@ class InstagramService {
                         console.warn(`Detailed insights unavailable for media ${media.id}:`, error.message);
                     }
                 });
-
-                await Promise.allSettled(detailedTasks);
             }
 
             allMedia.push(...normalisedBatch);

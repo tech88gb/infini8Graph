@@ -113,6 +113,56 @@ class AnalyticsService {
         }
     }
 
+    toPercent(numerator, denominator, decimals = 2) {
+        if (!denominator || denominator <= 0) return 0;
+        return Number(((numerator / denominator) * 100).toFixed(decimals));
+    }
+
+    averageValue(values = [], decimals = 2) {
+        if (!Array.isArray(values) || values.length === 0) return 0;
+        const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
+        return Number((total / values.length).toFixed(decimals));
+    }
+
+    normaliseSeries(values = []) {
+        const numericValues = values.map((value) => Number(value || 0));
+        const max = Math.max(...numericValues, 0);
+        if (max <= 0) return numericValues.map(() => 0);
+        return numericValues.map((value) => value / max);
+    }
+
+    buildOnlineFollowersSummary(onlineFollowers = []) {
+        if (!Array.isArray(onlineFollowers) || onlineFollowers.length === 0) {
+            return { peakHours: [], averageValue: 0 };
+        }
+
+        const hourly = onlineFollowers.map((entry, index) => {
+            const rawValue = typeof entry?.value === 'number'
+                ? entry.value
+                : typeof entry === 'number'
+                    ? entry
+                    : 0;
+
+            const endTime = entry?.end_time ? new Date(entry.end_time) : null;
+            const hour = endTime && !Number.isNaN(endTime.getTime()) ? endTime.getHours() : index;
+
+            return {
+                hour,
+                label: `${String(hour).padStart(2, '0')}:00`,
+                value: Number(rawValue || 0)
+            };
+        });
+
+        const peakHours = [...hourly]
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 3);
+
+        return {
+            peakHours,
+            averageValue: this.averageValue(hourly.map((entry) => entry.value))
+        };
+    }
+
     /**
      * Get overview analytics (dashboard main metrics)
      */
@@ -136,10 +186,13 @@ class AnalyticsService {
         let media = [];
         let demographics = {};
         let dailyMetrics = [];
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        const fetchLimit = (startDate || endDate) ? 120 : 80;
         const overviewTasks = [
             async () => {
-                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit);
+                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+                    includeDetailedVideoInsights: true,
+                    detailedInsightConcurrency: 3
+                });
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
             async () => this.instagram.getFollowerDemographics(),
@@ -179,14 +232,69 @@ class AnalyticsService {
         const totalLikes = media.reduce((sum, post) => sum + post.likeCount, 0);
         const totalComments = media.reduce((sum, post) => sum + post.commentsCount, 0);
         const totalSaved = media.reduce((sum, post) => sum + post.saved, 0);
+        const totalShares = media.reduce((sum, post) => sum + (post.shares || 0), 0);
+        const totalProfileViews = dailyMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0);
+        const avgShares = Math.round(totalShares / Math.max(media.length, 1));
+
+        const followerSeries = dailyMetrics
+            .filter((day) => typeof day.follower_count === 'number')
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        const followerTrend = followerSeries.length > 0
+            ? {
+                start: followerSeries[0].follower_count || 0,
+                end: followerSeries[followerSeries.length - 1].follower_count || 0,
+                delta: (followerSeries[followerSeries.length - 1].follower_count || 0) - (followerSeries[0].follower_count || 0),
+                deltaPercent: this.toPercent(
+                    (followerSeries[followerSeries.length - 1].follower_count || 0) - (followerSeries[0].follower_count || 0),
+                    followerSeries[0].follower_count || 0
+                )
+            }
+            : {
+                start: profile.followers_count || 0,
+                end: profile.followers_count || 0,
+                delta: 0,
+                deltaPercent: 0
+            };
+
+        const onlineFollowerSummary = this.buildOnlineFollowersSummary(demographics.onlineFollowers || []);
+
+        const topCountry = demographics.countries?.[0]
+            ? {
+                label: demographics.countries[0].dimension_values?.[0] || 'Unknown',
+                value: demographics.countries[0].value || 0
+            }
+            : null;
+
+        const topCity = demographics.cities?.[0]
+            ? {
+                label: demographics.cities[0].dimension_values?.[0] || 'Unknown',
+                value: demographics.cities[0].value || 0
+            }
+            : null;
+
+        const topGenderAge = demographics.genderAge?.[0]
+            ? {
+                gender: demographics.genderAge[0].dimension_values?.[0] || '',
+                age: demographics.genderAge[0].dimension_values?.[1] || '',
+                value: demographics.genderAge[0].value || 0
+            }
+            : null;
 
         // Get recent posts performance
         const recentPosts = media.slice(0, 10).map(post => ({
             id: post.id,
             type: post.mediaType,
+            caption: post.caption || '',
             likes: post.likeCount,
             comments: post.commentsCount,
             engagement: post.engagement,
+            saved: post.saved,
+            shares: post.shares || 0,
+            reach: post.reach,
+            impressions: post.impressions,
+            saveRate: this.toPercent(post.saved, post.reach),
+            engagementRate: this.toPercent(post.engagement, post.reach),
             timestamp: post.timestamp,
             thumbnailUrl: post.thumbnailUrl || post.mediaUrl
         }));
@@ -206,11 +314,24 @@ class AnalyticsService {
                 engagementRate: parseFloat(engagementRate),
                 avgLikes: Math.round(totalLikes / Math.max(media.length, 1)),
                 avgComments: Math.round(totalComments / Math.max(media.length, 1)),
+                avgShares,
                 totalImpressions,
                 totalReach,
-                totalSaved
+                totalSaved,
+                totalShares,
+                totalProfileViews,
+                followerDelta: followerTrend.delta,
+                followerDeltaPercent: followerTrend.deltaPercent
             },
             demographics: demographics || {},
+            audienceInsights: {
+                topCountry,
+                topCity,
+                topGenderAge,
+                peakFollowerHours: onlineFollowerSummary.peakHours,
+                onlineFollowerAverage: onlineFollowerSummary.averageValue
+            },
+            followerTrend,
             recentPosts,
             dailyMetrics, // <-- Exposing daily metrics here
             lastUpdated: new Date().toISOString()
@@ -232,7 +353,7 @@ class AnalyticsService {
 
         const profile = await this.instagram.getProfile();
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        const fetchLimit = (startDate || endDate) ? 120 : 80;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
         media = this.filterMediaByDate(media, startDate, endDate);
         const accountMetrics = await this.getDailyAccountMetrics(startDate, endDate);
@@ -253,14 +374,18 @@ class AnalyticsService {
             engagementByDate[date].total += post.engagement;
         });
 
-        // Calculate growth trends
-        const dates = Object.keys(postsByDate).sort();
+        const accountMetricsByDate = Object.fromEntries(accountMetrics.map((day) => [day.date, day]));
+        const dates = [...new Set([...Object.keys(postsByDate), ...accountMetrics.map((day) => day.date)])].sort();
         const growthData = dates.map(date => ({
             date,
-            posts: postsByDate[date],
-            engagement: engagementByDate[date].total,
-            likes: engagementByDate[date].likes,
-            comments: engagementByDate[date].comments
+            posts: postsByDate[date] || 0,
+            engagement: engagementByDate[date]?.total || 0,
+            likes: engagementByDate[date]?.likes || 0,
+            comments: engagementByDate[date]?.comments || 0,
+            followerCount: Number(accountMetricsByDate[date]?.follower_count || 0),
+            reach: Number(accountMetricsByDate[date]?.reach || 0),
+            impressions: Number(accountMetricsByDate[date]?.impressions || 0),
+            profileViews: Number(accountMetricsByDate[date]?.profile_views || 0)
         }));
 
         // Calculate week-over-week changes
@@ -286,6 +411,18 @@ class AnalyticsService {
             ? ((thisWeekEngagement - lastWeekEngagement) / lastWeekEngagement * 100).toFixed(1)
             : 0;
 
+        const followerSeries = accountMetrics
+            .filter((day) => typeof day.follower_count === 'number')
+            .sort((a, b) => a.date.localeCompare(b.date));
+        const followerStart = followerSeries[0]?.follower_count || profile.followers_count || 0;
+        const followerEnd = followerSeries[followerSeries.length - 1]?.follower_count || profile.followers_count || 0;
+        const followerDelta = followerEnd - followerStart;
+
+        const totalPostsInWindow = media.length;
+        const totalReach = accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0);
+        const totalImpressions = accountMetrics.reduce((sum, day) => sum + Number(day.impressions || 0), 0);
+        const totalProfileViews = accountMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0);
+
         const growth = {
             currentFollowers: profile.followers_count,
             currentFollowing: profile.follows_count,
@@ -293,18 +430,31 @@ class AnalyticsService {
             growthData,
             accountMetrics,
             accountSummary: {
-                totalReach: accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0),
-                totalImpressions: accountMetrics.reduce((sum, day) => sum + Number(day.impressions || 0), 0),
-                totalProfileViews: accountMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0),
+                totalReach,
+                totalImpressions,
+                totalProfileViews,
                 avgDailyReach: accountMetrics.length > 0
-                    ? Math.round(accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0) / accountMetrics.length)
+                    ? Math.round(totalReach / accountMetrics.length)
                     : 0,
                 avgDailyImpressions: accountMetrics.length > 0
-                    ? Math.round(accountMetrics.reduce((sum, day) => sum + Number(day.impressions || 0), 0) / accountMetrics.length)
+                    ? Math.round(totalImpressions / accountMetrics.length)
                     : 0,
                 avgDailyProfileViews: accountMetrics.length > 0
-                    ? Math.round(accountMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0) / accountMetrics.length)
+                    ? Math.round(totalProfileViews / accountMetrics.length)
                     : 0,
+                followerStart,
+                followerEnd,
+                followerDelta,
+                followerDeltaPercent: this.toPercent(followerDelta, followerStart)
+            },
+            comparisonSummary: {
+                avgPostsPerActiveDay: growthData.filter((day) => day.posts > 0).length > 0
+                    ? Number((totalPostsInWindow / growthData.filter((day) => day.posts > 0).length).toFixed(2))
+                    : 0,
+                avgReachPerPost: totalPostsInWindow > 0 ? Math.round(totalReach / totalPostsInWindow) : 0,
+                avgProfileViewsPerPost: totalPostsInWindow > 0 ? Math.round(totalProfileViews / totalPostsInWindow) : 0,
+                profileViewRateFromReach: this.toPercent(totalProfileViews, totalReach),
+                impressionsPerReach: totalReach > 0 ? Number((totalImpressions / totalReach).toFixed(2)) : 0
             },
             weeklyStats: {
                 postsThisWeek: thisWeekPosts.length,
@@ -330,69 +480,76 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
+        const fetchLimit = (startDate || endDate) ? 120 : 80;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
+        media = this.filterMediaByDate(media, startDate, endDate);
 
-        // Filter by date range
-        if (startDate || endDate) {
-            const startStr = startDate ? startDate : '0000-00-00';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-            media = media.filter(post => {
-                const postDateStr = (post.timestamp || "").split('T')[0];
-                return postDateStr >= startStr && postDateStr <= endStr;
-            });
-        }
-
-        // Analyze by hour and day of week
-        const hourlyEngagement = {};
-        const dailyEngagement = {};
-        const hourlyCount = {};
-        const dailyCount = {};
-
+        const hourlyStats = {};
+        const dailyStats = {};
         for (let i = 0; i < 24; i++) {
-            hourlyEngagement[i] = 0;
-            hourlyCount[i] = 0;
+            hourlyStats[i] = { hour: i, postCount: 0, totalEngagement: 0, totalReach: 0, totalSaved: 0, totalComments: 0, totalShares: 0 };
         }
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        days.forEach(day => {
-            dailyEngagement[day] = 0;
-            dailyCount[day] = 0;
+        days.forEach((day) => {
+            dailyStats[day] = { day, postCount: 0, totalEngagement: 0, totalReach: 0, totalSaved: 0, totalComments: 0, totalShares: 0 };
         });
 
-        media.forEach(post => {
-            const date = new Date(post.timestamp);
-            const hour = date.getHours();
-            const day = days[date.getDay()];
+        media.forEach((post) => {
+            const timestamp = new Date(post.timestamp);
+            const hour = timestamp.getHours();
+            const day = days[timestamp.getDay()];
 
-            hourlyEngagement[hour] += post.engagement;
-            hourlyCount[hour]++;
-            dailyEngagement[day] += post.engagement;
-            dailyCount[day]++;
+            hourlyStats[hour].postCount += 1;
+            hourlyStats[hour].totalEngagement += post.engagement || 0;
+            hourlyStats[hour].totalReach += post.reach || 0;
+            hourlyStats[hour].totalSaved += post.saved || 0;
+            hourlyStats[hour].totalComments += post.commentsCount || 0;
+            hourlyStats[hour].totalShares += post.shares || 0;
+
+            dailyStats[day].postCount += 1;
+            dailyStats[day].totalEngagement += post.engagement || 0;
+            dailyStats[day].totalReach += post.reach || 0;
+            dailyStats[day].totalSaved += post.saved || 0;
+            dailyStats[day].totalComments += post.commentsCount || 0;
+            dailyStats[day].totalShares += post.shares || 0;
         });
 
-        // Calculate averages
-        const hourlyAvg = Object.keys(hourlyEngagement).map(hour => ({
-            hour: parseInt(hour),
-            avgEngagement: hourlyCount[hour] > 0
-                ? Math.round(hourlyEngagement[hour] / hourlyCount[hour])
-                : 0,
-            postCount: hourlyCount[hour]
-        }));
+        const buildPerformanceRows = (rows, keyField) => {
+            const baseRows = rows.map((row) => ({
+                ...row,
+                avgEngagement: row.postCount > 0 ? Math.round(row.totalEngagement / row.postCount) : 0,
+                avgReach: row.postCount > 0 ? Math.round(row.totalReach / row.postCount) : 0,
+                avgSaveRate: this.toPercent(row.totalSaved, row.totalReach),
+                avgCommentRate: this.toPercent(row.totalComments, row.totalReach),
+                avgShareRate: this.toPercent(row.totalShares, row.totalReach),
+                avgEngagementRate: this.toPercent(row.totalEngagement, row.totalReach),
+            }));
 
-        const dailyAvg = days.map(day => ({
-            day,
-            avgEngagement: dailyCount[day] > 0
-                ? Math.round(dailyEngagement[day] / dailyCount[day])
-                : 0,
-            postCount: dailyCount[day]
-        }));
+            const engagementNorm = this.normaliseSeries(baseRows.map((row) => row.avgEngagement));
+            const reachNorm = this.normaliseSeries(baseRows.map((row) => row.avgReach));
+            const saveNorm = this.normaliseSeries(baseRows.map((row) => row.avgSaveRate));
+            const commentNorm = this.normaliseSeries(baseRows.map((row) => row.avgCommentRate));
+            const shareNorm = this.normaliseSeries(baseRows.map((row) => row.avgShareRate));
 
-        // Find best times
-        const sortedHours = [...hourlyAvg].sort((a, b) => b.avgEngagement - a.avgEngagement);
-        const sortedDays = [...dailyAvg].sort((a, b) => b.avgEngagement - a.avgEngagement);
+            return baseRows.map((row, index) => ({
+                ...row,
+                performanceScore: Math.round(
+                    (engagementNorm[index] * 35) +
+                    (reachNorm[index] * 20) +
+                    (saveNorm[index] * 20) +
+                    (commentNorm[index] * 15) +
+                    (shareNorm[index] * 10)
+                ),
+                [keyField]: row[keyField]
+            }));
+        };
+
+        const hourlyAvg = buildPerformanceRows(Object.values(hourlyStats), 'hour');
+        const dailyAvg = buildPerformanceRows(days.map((day) => dailyStats[day]), 'day');
+
+        const sortedHours = [...hourlyAvg].sort((a, b) => b.performanceScore - a.performanceScore);
+        const sortedDays = [...dailyAvg].sort((a, b) => b.performanceScore - a.performanceScore);
 
         const bestTime = {
             hourlyAnalysis: hourlyAvg,
@@ -402,9 +559,17 @@ class AnalyticsService {
                 bestDays: sortedDays.slice(0, 3).map(d => d.day),
                 optimalPostingTimes: sortedHours.slice(0, 3).map(h => ({
                     hour: h.hour,
+                    score: h.performanceScore,
                     engagement: h.avgEngagement,
+                    reach: h.avgReach,
+                    saveRate: h.avgSaveRate,
                     formatted: `${h.hour.toString().padStart(2, '0')}:00`
                 }))
+            },
+            insights: {
+                strongestHour: sortedHours[0] || null,
+                weakestHour: sortedHours[sortedHours.length - 1] || null,
+                strongestDay: sortedDays[0] || null
             },
             postsAnalyzed: media.length,
             lastUpdated: new Date().toISOString()
@@ -462,40 +627,78 @@ class AnalyticsService {
             });
         });
 
+        const overallAvgReach = media.length > 0
+            ? media.reduce((sum, post) => sum + post.reach, 0) / media.length
+            : 0;
+
         // Calculate averages and sort
         const hashtagList = Object.values(hashtagStats)
             .map(h => ({
-                ...h,
-                avgEngagement: Math.round(h.totalAttributedEngagement / h.usageCount),
-                avgLikes: Math.round(h.totalAttributedLikes / h.usageCount),
-                avgComments: Math.round(h.totalAttributedComments / h.usageCount),
-                engagementLift: overallAvgEngagement > 0
-                    ? Number((((h.totalAttributedEngagement / h.usageCount) / overallAvgEngagement - 1) * 100).toFixed(1))
-                    : 0
+                ...h
             }))
+            .map((h) => {
+                const postsWithTag = media
+                    .filter((post) => (post.caption || '').toLowerCase().includes(h.tag))
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+                const avgReach = postsWithTag.length > 0
+                    ? postsWithTag.reduce((sum, post) => sum + post.reach, 0) / postsWithTag.length
+                    : 0;
+                const aboveAverageCount = postsWithTag.filter((post) => post.engagement >= overallAvgEngagement).length;
+                const splitIndex = Math.ceil(postsWithTag.length / 2);
+                const earlyPosts = postsWithTag.slice(0, splitIndex);
+                const recentPosts = postsWithTag.slice(splitIndex);
+                const earlyAvgEngagement = earlyPosts.length > 0
+                    ? earlyPosts.reduce((sum, post) => sum + post.engagement, 0) / earlyPosts.length
+                    : 0;
+                const recentAvgEngagement = recentPosts.length > 0
+                    ? recentPosts.reduce((sum, post) => sum + post.engagement, 0) / recentPosts.length
+                    : earlyAvgEngagement;
+
+                return {
+                    ...h,
+                    avgEngagement: Math.round(h.totalAttributedEngagement / h.usageCount),
+                    avgLikes: Math.round(h.totalAttributedLikes / h.usageCount),
+                    avgComments: Math.round(h.totalAttributedComments / h.usageCount),
+                    engagementLift: overallAvgEngagement > 0
+                        ? Number((((h.totalAttributedEngagement / h.usageCount) / overallAvgEngagement - 1) * 100).toFixed(1))
+                        : 0,
+                    avgReach: Math.round(avgReach),
+                    reachLift: overallAvgReach > 0
+                        ? Number((((avgReach / overallAvgReach) - 1) * 100).toFixed(1))
+                        : 0,
+                    reachMultiplier: overallAvgReach > 0 ? Number((avgReach / overallAvgReach).toFixed(2)) : 0,
+                    consistencyScore: postsWithTag.length > 0
+                        ? Number(((aboveAverageCount / postsWithTag.length) * 100).toFixed(1))
+                        : 0,
+                    earlyAvgEngagement: Math.round(earlyAvgEngagement),
+                    recentAvgEngagement: Math.round(recentAvgEngagement),
+                    diminishingReturn: earlyAvgEngagement > 0
+                        ? Number((((recentAvgEngagement - earlyAvgEngagement) / earlyAvgEngagement) * 100).toFixed(1))
+                        : 0
+                };
+            })
             .sort((a, b) => b.avgEngagement - a.avgEngagement);
 
-        // Calculate reach attribution per hashtag (which hashtags expand reach)
-        const hashtagReachAttribution = hashtagList.map(h => {
-            const postsWithTag = media.filter(p => (p.caption || '').toLowerCase().includes(h.tag));
-            const avgReach = postsWithTag.length > 0
-                ? postsWithTag.reduce((sum, p) => sum + p.reach, 0) / postsWithTag.length
-                : 0;
-            const overallAvgReach = media.length > 0
-                ? media.reduce((sum, p) => sum + p.reach, 0) / media.length
-                : 0;
-            return {
+        const hashtagReachAttribution = hashtagList.map(h => ({
                 tag: h.tag,
-                avgReach: Math.round(avgReach),
-                reachMultiplier: overallAvgReach > 0 ? (avgReach / overallAvgReach).toFixed(2) : 0,
-                usageCount: h.usageCount
-            };
-        }).sort((a, b) => parseFloat(b.reachMultiplier) - parseFloat(a.reachMultiplier));
+                avgReach: h.avgReach,
+                reachMultiplier: h.reachMultiplier,
+                reachLift: h.reachLift,
+                usageCount: h.usageCount,
+                consistencyScore: h.consistencyScore
+            }))
+            .sort((a, b) => b.reachMultiplier - a.reachMultiplier);
 
         const hashtags = {
             topPerforming: hashtagList.slice(0, 20),
             mostUsed: [...hashtagList].sort((a, b) => b.usageCount - a.usageCount).slice(0, 20),
-            reachExpanders: hashtagReachAttribution.filter(h => parseFloat(h.reachMultiplier) > 1).slice(0, 10),
+            reachExpanders: hashtagReachAttribution.filter(h => h.reachMultiplier > 1).slice(0, 10),
+            consistencyLeaders: [...hashtagList].sort((a, b) => b.consistencyScore - a.consistencyScore).slice(0, 10),
+            fatigueSignals: [...hashtagList]
+                .filter((tag) => tag.usageCount >= 3 && tag.diminishingReturn < 0)
+                .sort((a, b) => a.diminishingReturn - b.diminishingReturn)
+                .slice(0, 10),
             totalHashtagsUsed: hashtagList.length,
             avgHashtagsPerPost: media.length > 0
                 ? (hashtagList.reduce((sum, h) => sum + h.usageCount, 0) / media.length).toFixed(1)
@@ -518,162 +721,57 @@ class AnalyticsService {
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-
-        // Filter by date range
-        if (startDate || endDate) {
-            const startStr = startDate ? startDate : '0000-00-00';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-            media = media.filter(post => {
-                const postDateStr = (post.timestamp || "").split('T')[0];
-                return postDateStr >= startStr && postDateStr <= endStr;
-            });
-        }
-
-        // ============ 1. CONTENT FORMAT BATTLE ============
-        const formatStats = {};
-        const formats = ['IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', 'REEL'];
-
-        formats.forEach(format => {
-            const posts = media.filter(p => p.mediaType === format);
-            if (posts.length === 0) {
-                formatStats[format] = null;
-                return;
-            }
-
-            const totalEngagement = posts.reduce((s, p) => s + p.engagement, 0);
-            const totalReach = posts.reduce((s, p) => s + p.reach, 0);
-            const totalSaved = posts.reduce((s, p) => s + p.saved, 0);
-
-            formatStats[format] = {
-                count: posts.length,
-                totalEngagement,
-                avgEngagement: Math.round(totalEngagement / posts.length),
-                avgReach: Math.round(totalReach / posts.length),
-                avgSaved: Math.round(totalSaved / posts.length),
-                engagementRate: profile.followers_count > 0
-                    ? ((totalEngagement / posts.length) / profile.followers_count * 100).toFixed(2)
-                    : 0
-            };
+        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+            includeDetailedVideoInsights: true,
+            detailedInsightConcurrency: 4
         });
+        media = this.filterMediaByDate(media, startDate, endDate);
 
-        // Determine winning format
-        const formatRanking = Object.entries(formatStats)
-            .filter(([_, stats]) => stats !== null)
-            .sort((a, b) => b[1].avgEngagement - a[1].avgEngagement)
-            .map(([format, stats], idx) => ({ format, ...stats, rank: idx + 1 }));
-
-        // ============ 2. CAPTION LENGTH ANALYSIS ============
-        const captionBuckets = {
-            'short': { min: 0, max: 50, posts: [], label: '0-50 chars' },
-            'medium': { min: 51, max: 150, posts: [], label: '51-150 chars' },
-            'long': { min: 151, max: 300, posts: [], label: '151-300 chars' },
-            'veryLong': { min: 301, max: Infinity, posts: [], label: '300+ chars' }
-        };
-
-        media.forEach(post => {
-            const len = (post.caption || '').length;
-            if (len <= 50) captionBuckets.short.posts.push(post);
-            else if (len <= 150) captionBuckets.medium.posts.push(post);
-            else if (len <= 300) captionBuckets.long.posts.push(post);
-            else captionBuckets.veryLong.posts.push(post);
-        });
-
-        const captionAnalysis = Object.entries(captionBuckets).map(([key, bucket]) => ({
-            bucket: key,
-            label: bucket.label,
-            count: bucket.posts.length,
-            avgEngagement: bucket.posts.length > 0
-                ? Math.round(bucket.posts.reduce((s, p) => s + p.engagement, 0) / bucket.posts.length)
-                : 0,
-            avgReach: bucket.posts.length > 0
-                ? Math.round(bucket.posts.reduce((s, p) => s + p.reach, 0) / bucket.posts.length)
-                : 0
-        })).sort((a, b) => b.avgEngagement - a.avgEngagement);
-
-        const optimalCaptionLength = captionAnalysis.length > 0 ? captionAnalysis[0].label : 'N/A';
-
-        // ============ 3. VIRAL COEFFICIENT (Shares/Reach) ============
-        // Note: Instagram API doesn't provide shares for all post types, use saves as proxy
-        const viralPosts = media.map(post => ({
-            id: post.id,
-            viralCoefficient: post.reach > 0 ? (post.saved / post.reach).toFixed(4) : 0,
-            shareability: post.reach > 0 ? ((post.saved + post.commentsCount) / post.reach * 100).toFixed(2) : 0,
-            saved: post.saved,
-            reach: post.reach,
-            type: post.mediaType
-        })).sort((a, b) => parseFloat(b.viralCoefficient) - parseFloat(a.viralCoefficient));
-
-        const avgViralCoefficient = media.length > 0
-            ? (viralPosts.reduce((s, p) => s + parseFloat(p.viralCoefficient), 0) / media.length).toFixed(4)
-            : 0;
-
-        // ============ 4. SAVE-TO-LIKE RATIO ============
-        const saveToLikeAnalysis = media.map(post => ({
-            id: post.id,
-            saveToLikeRatio: post.likeCount > 0 ? (post.saved / post.likeCount).toFixed(3) : 0,
-            saved: post.saved,
-            likes: post.likeCount,
-            type: post.mediaType,
-            isHighValue: post.likeCount > 0 && (post.saved / post.likeCount) > 0.05 // 5%+ is high value
-        })).sort((a, b) => parseFloat(b.saveToLikeRatio) - parseFloat(a.saveToLikeRatio));
-
-        const avgSaveToLikeRatio = media.length > 0
-            ? (saveToLikeAnalysis.reduce((s, p) => s + parseFloat(p.saveToLikeRatio), 0) / media.length).toFixed(3)
-            : 0;
-
-        const highValueContentCount = saveToLikeAnalysis.filter(p => p.isHighValue).length;
-
-        // ============ 5. FIRST HOUR PERFORMANCE / ENGAGEMENT VELOCITY ============
-        // Calculate hours since post and engagement velocity
-        const now = new Date();
-        const velocityAnalysis = media.map(post => {
-            const postDate = new Date(post.timestamp);
-            const hoursSincePost = Math.max(1, (now - postDate) / (1000 * 60 * 60));
-            const engagementVelocity = post.engagement / hoursSincePost;
-
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const enrichedPosts = media.map((post) => {
+            const timestamp = new Date(post.timestamp);
             return {
-                id: post.id,
-                hoursSincePost: Math.round(hoursSincePost),
-                engagement: post.engagement,
-                engagementVelocity: engagementVelocity.toFixed(2),
+                ...post,
                 type: post.mediaType,
-                timestamp: post.timestamp
+                captionLength: (post.caption || '').length,
+                postingHour: timestamp.getHours(),
+                postingDay: days[timestamp.getDay()],
+                engagementRate: this.toPercent(post.engagement, post.reach),
+                saveRate: this.toPercent(post.saved, post.reach),
+                shareRate: this.toPercent(post.shares || 0, post.reach),
+                commentRate: this.toPercent(post.commentsCount, post.reach),
+                reachEfficiency: this.toPercent(post.reach, profile.followers_count)
             };
-        }).sort((a, b) => parseFloat(b.engagementVelocity) - parseFloat(a.engagementVelocity));
+        });
 
-        // Identify "fast starters" (high velocity in first 24 hours)
-        const recentPosts = velocityAnalysis.filter(p => p.hoursSincePost <= 24);
-        const fastStarters = recentPosts.filter(p => parseFloat(p.engagementVelocity) > 10);
+        const engagementRateNorm = this.normaliseSeries(enrichedPosts.map((post) => post.engagementRate));
+        const saveRateNorm = this.normaliseSeries(enrichedPosts.map((post) => post.saveRate));
+        const shareRateNorm = this.normaliseSeries(enrichedPosts.map((post) => post.shareRate));
+        const commentRateNorm = this.normaliseSeries(enrichedPosts.map((post) => post.commentRate));
+        const reachEfficiencyNorm = this.normaliseSeries(enrichedPosts.map((post) => post.reachEfficiency));
 
-        // ============ 6. CONTENT QUALITY SCORE ============
-        // Composite score based on all metrics with detailed breakdown
-        const contentScores = media.map(post => {
-            const engagementScore = post.engagement / Math.max(profile.followers_count, 1) * 1000;
-            const reachScore = post.reach / Math.max(profile.followers_count, 1) * 100;
-            const saveScore = post.saved * 10; // Saves are valuable
-            const viralScore = post.reach > 0 ? (post.saved / post.reach) * 1000 : 0;
-            const commentScore = post.commentsCount * 20; // Comments indicate deeper engagement
-
-            const totalScore = (engagementScore * 0.25) + (reachScore * 0.25) + (saveScore * 0.2) + (viralScore * 0.15) + (commentScore * 0.15);
-
-            // Determine strongest factor
-            const factors = [
-                { name: 'High Engagement', score: engagementScore, threshold: 50 },
-                { name: 'Wide Reach', score: reachScore, threshold: 50 },
-                { name: 'High Saves', score: saveScore, threshold: 30 },
-                { name: 'Viral Potential', score: viralScore, threshold: 20 },
-                { name: 'Discussion Driver', score: commentScore, threshold: 20 }
-            ];
-            const topFactors = factors.filter(f => f.score >= f.threshold).sort((a, b) => b.score - a.score).slice(0, 2);
+        const contentScores = enrichedPosts.map((post, index) => {
+            const topFactors = [
+                { name: 'High engagement rate', score: post.engagementRate },
+                { name: 'Strong save rate', score: post.saveRate },
+                { name: 'Strong share rate', score: post.shareRate },
+                { name: 'Strong comment rate', score: post.commentRate },
+                { name: 'Efficient reach', score: post.reachEfficiency }
+            ]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3)
+                .filter((factor) => factor.score > 0);
 
             return {
                 id: post.id,
-                qualityScore: Math.round(totalScore),
+                qualityScore: Math.round(
+                    (engagementRateNorm[index] * 35) +
+                    (saveRateNorm[index] * 25) +
+                    (shareRateNorm[index] * 15) +
+                    (commentRateNorm[index] * 10) +
+                    (reachEfficiencyNorm[index] * 15)
+                ),
                 type: post.mediaType,
                 thumbnail: post.thumbnailUrl || post.mediaUrl,
                 caption: (post.caption || '').substring(0, 100) + ((post.caption?.length > 100) ? '...' : ''),
@@ -683,66 +781,155 @@ class AnalyticsService {
                 likes: post.likeCount,
                 comments: post.commentsCount,
                 reach: post.reach,
+                impressions: post.impressions,
                 saved: post.saved,
-                // Why it scored well
-                scoreBreakdown: {
-                    engagementScore: Math.round(engagementScore),
-                    reachScore: Math.round(reachScore),
-                    saveScore: Math.round(saveScore),
-                    viralScore: Math.round(viralScore),
-                    commentScore: Math.round(commentScore)
-                },
-                topFactors: topFactors.map(f => f.name),
-                insight: topFactors.length > 0
-                    ? `Strong: ${topFactors.map(f => f.name).join(', ')}`
-                    : 'Average performer'
+                shares: post.shares || 0,
+                engagementRate: post.engagementRate,
+                saveRate: post.saveRate,
+                shareRate: post.shareRate,
+                commentRate: post.commentRate,
+                reachEfficiency: post.reachEfficiency,
+                topFactors: topFactors.map((factor) => factor.name),
+                insight: topFactors.length > 0 ? topFactors.map((factor) => factor.name).join(' • ') : 'Low signal volume'
             };
         }).sort((a, b) => b.qualityScore - a.qualityScore);
 
-        const avgQualityScore = media.length > 0
-            ? Math.round(contentScores.reduce((s, p) => s + p.qualityScore, 0) / media.length)
+        const avgQualityScore = contentScores.length > 0
+            ? Math.round(contentScores.reduce((sum, post) => sum + post.qualityScore, 0) / contentScores.length)
             : 0;
+
+        const buildAggregateRows = (groups, labelKey) => {
+            const rows = groups.map((group) => ({
+                ...group,
+                avgEngagement: group.posts.length > 0 ? Math.round(group.posts.reduce((sum, post) => sum + post.engagement, 0) / group.posts.length) : 0,
+                avgReach: group.posts.length > 0 ? Math.round(group.posts.reduce((sum, post) => sum + post.reach, 0) / group.posts.length) : 0,
+                avgEngagementRate: this.averageValue(group.posts.map((post) => post.engagementRate)),
+                avgSaveRate: this.averageValue(group.posts.map((post) => post.saveRate)),
+                avgShareRate: this.averageValue(group.posts.map((post) => post.shareRate)),
+                avgCommentRate: this.averageValue(group.posts.map((post) => post.commentRate)),
+                avgReachEfficiency: this.averageValue(group.posts.map((post) => post.reachEfficiency)),
+                [labelKey]: group[labelKey]
+            }));
+
+            const engagementNorm = this.normaliseSeries(rows.map((row) => row.avgEngagementRate));
+            const saveNorm = this.normaliseSeries(rows.map((row) => row.avgSaveRate));
+            const shareNorm = this.normaliseSeries(rows.map((row) => row.avgShareRate));
+            const reachNorm = this.normaliseSeries(rows.map((row) => row.avgReachEfficiency));
+
+            return rows.map((row, index) => ({
+                ...row,
+                performanceScore: Math.round(
+                    (engagementNorm[index] * 40) +
+                    (saveNorm[index] * 25) +
+                    (shareNorm[index] * 15) +
+                    (reachNorm[index] * 20)
+                )
+            }));
+        };
+
+        const formats = ['IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', 'REEL'];
+        const formatRanking = buildAggregateRows(
+            formats
+                .map((format) => ({ format, count: enrichedPosts.filter((post) => post.mediaType === format).length, posts: enrichedPosts.filter((post) => post.mediaType === format) }))
+                .filter((group) => group.posts.length > 0),
+            'format'
+        )
+            .sort((a, b) => b.performanceScore - a.performanceScore)
+            .map((row, index) => ({ ...row, rank: index + 1 }));
+
+        const captionBuckets = [
+            { bucket: 'short', label: '0-50 chars', posts: enrichedPosts.filter((post) => post.captionLength <= 50) },
+            { bucket: 'medium', label: '51-150 chars', posts: enrichedPosts.filter((post) => post.captionLength > 50 && post.captionLength <= 150) },
+            { bucket: 'long', label: '151-300 chars', posts: enrichedPosts.filter((post) => post.captionLength > 150 && post.captionLength <= 300) },
+            { bucket: 'veryLong', label: '300+ chars', posts: enrichedPosts.filter((post) => post.captionLength > 300) }
+        ];
+
+        const captionAnalysis = buildAggregateRows(
+            captionBuckets.filter((bucket) => bucket.posts.length > 0),
+            'label'
+        ).sort((a, b) => b.performanceScore - a.performanceScore);
+
+        const postingHours = buildAggregateRows(
+            Array.from({ length: 24 }, (_, hour) => ({
+                hour,
+                posts: enrichedPosts.filter((post) => post.postingHour === hour)
+            })).filter((bucket) => bucket.posts.length > 0),
+            'hour'
+        ).sort((a, b) => b.performanceScore - a.performanceScore);
+
+        const postingDays = buildAggregateRows(
+            days.map((day) => ({
+                day,
+                posts: enrichedPosts.filter((post) => post.postingDay === day)
+            })).filter((bucket) => bucket.posts.length > 0),
+            'day'
+        ).sort((a, b) => b.performanceScore - a.performanceScore);
+
+        const interactionQuality = {
+            avgSaveRate: this.averageValue(enrichedPosts.map((post) => post.saveRate)),
+            avgShareRate: this.averageValue(enrichedPosts.map((post) => post.shareRate)),
+            avgCommentRate: this.averageValue(enrichedPosts.map((post) => post.commentRate)),
+            topSavers: [...contentScores].sort((a, b) => b.saveRate - a.saveRate).slice(0, 5),
+            topShared: [...contentScores].sort((a, b) => b.shareRate - a.shareRate).slice(0, 5),
+            insight: enrichedPosts.length > 0
+                ? `Average save rate ${this.averageValue(enrichedPosts.map((post) => post.saveRate))}% with share rate ${this.averageValue(enrichedPosts.map((post) => post.shareRate))}%`
+                : 'Not enough data'
+        };
+
+        const reachEfficiency = {
+            average: this.averageValue(enrichedPosts.map((post) => post.reachEfficiency)),
+            topPosts: [...contentScores].sort((a, b) => b.reachEfficiency - a.reachEfficiency).slice(0, 5),
+            insight: enrichedPosts.length > 0
+                ? `${[...contentScores].sort((a, b) => b.reachEfficiency - a.reachEfficiency)[0]?.type || 'Content'} reaches followers most efficiently`
+                : 'Not enough data'
+        };
 
         const intelligence = {
             formatBattle: {
-                stats: formatStats,
                 ranking: formatRanking,
-                winner: formatRanking.length > 0 ? formatRanking[0].format : null,
-                insight: formatRanking.length > 0
-                    ? `${formatRanking[0].format} outperforms other formats with ${formatRanking[0].avgEngagement} avg engagement`
+                winner: formatRanking[0]?.format || null,
+                insight: formatRanking[0]
+                    ? `${formatRanking[0].format} leads on performance score with ${formatRanking[0].avgSaveRate}% save rate and ${formatRanking[0].avgReachEfficiency}% reach efficiency`
                     : 'Not enough data'
             },
             captionAnalysis: {
                 buckets: captionAnalysis,
-                optimalLength: optimalCaptionLength,
-                insight: `Posts with ${optimalCaptionLength} captions perform best`
+                optimalLength: captionAnalysis[0]?.label || null,
+                insight: captionAnalysis[0]
+                    ? `${captionAnalysis[0].label} captions currently produce your best combined quality score`
+                    : 'Not enough data'
             },
-            viralCoefficient: {
-                average: parseFloat(avgViralCoefficient),
-                topViral: viralPosts.slice(0, 5),
-                insight: parseFloat(avgViralCoefficient) > 0.01 ? 'Good shareability' : 'Consider creating more shareable content'
+            postingTime: {
+                bestHours: postingHours.slice(0, 3).map((row) => ({
+                    hour: row.hour,
+                    formatted: `${String(row.hour).padStart(2, '0')}:00`,
+                    performanceScore: row.performanceScore,
+                    avgReach: row.avgReach,
+                    avgSaveRate: row.avgSaveRate
+                })),
+                bestDays: postingDays.slice(0, 3).map((row) => ({
+                    day: row.day,
+                    performanceScore: row.performanceScore,
+                    avgReach: row.avgReach,
+                    avgSaveRate: row.avgSaveRate
+                })),
+                insight: postingHours[0]
+                    ? `${String(postingHours[0].hour).padStart(2, '0')}:00 is your strongest recent posting hour by combined reach and interaction quality`
+                    : 'Not enough data'
             },
-            saveToLike: {
-                average: parseFloat(avgSaveToLikeRatio),
-                highValueCount: highValueContentCount,
-                topHighValue: saveToLikeAnalysis.slice(0, 5),
-                insight: `${highValueContentCount} posts are high-value reference content (5%+ save rate)`
-            },
-            engagementVelocity: {
-                topPerformers: velocityAnalysis.slice(0, 5),
-                fastStarters: fastStarters.length,
-                insight: `${fastStarters.length} recent posts gained traction quickly`
-            },
+            interactionQuality,
+            reachEfficiency,
             contentQuality: {
                 averageScore: avgQualityScore,
                 topContent: contentScores.slice(0, 5),
-                bottomContent: contentScores.slice(-3),
+                bottomContent: [...contentScores].slice(-3).reverse(),
                 distribution: {
-                    excellent: contentScores.filter(p => p.qualityScore >= 80).length,
-                    good: contentScores.filter(p => p.qualityScore >= 50 && p.qualityScore < 80).length,
-                    average: contentScores.filter(p => p.qualityScore >= 20 && p.qualityScore < 50).length,
-                    poor: contentScores.filter(p => p.qualityScore < 20).length
-                }
+                    excellent: contentScores.filter((post) => post.qualityScore >= 80).length,
+                    good: contentScores.filter((post) => post.qualityScore >= 60 && post.qualityScore < 80).length,
+                    average: contentScores.filter((post) => post.qualityScore >= 40 && post.qualityScore < 60).length,
+                    poor: contentScores.filter((post) => post.qualityScore < 40).length
+                },
+                postsAnalyzed: contentScores.length
             },
             postsAnalyzed: media.length,
             lastUpdated: new Date().toISOString()
@@ -761,8 +948,11 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, { includeDetailedVideoInsights: true });
+        const fetchLimit = (startDate || endDate) ? 100 : 60;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+            includeDetailedVideoInsights: true,
+            detailedInsightConcurrency: 4
+        });
         media = this.filterMediaByDate(media, startDate, endDate);
 
         // Filter for reels only
@@ -777,7 +967,10 @@ class AnalyticsService {
             totalComments: reels.reduce((sum, r) => sum + r.commentsCount, 0),
             totalImpressions: reels.reduce((sum, r) => sum + r.impressions, 0),
             totalReach: reels.reduce((sum, r) => sum + r.reach, 0),
-            totalPlays: reels.reduce((sum, r) => sum + (r.plays || 0), 0)
+            totalPlays: reels.reduce((sum, r) => sum + (r.plays || 0), 0),
+            totalSaved: reels.reduce((sum, r) => sum + (r.saved || 0), 0),
+            totalShares: reels.reduce((sum, r) => sum + (r.shares || 0), 0),
+            totalInteractions: reels.reduce((sum, r) => sum + (r.totalInteractions || r.engagement), 0)
         };
 
         const nonReelStats = {
@@ -791,6 +984,7 @@ class AnalyticsService {
             reels: reels.map(r => ({
                 id: r.id,
                 thumbnail: r.thumbnailUrl || r.mediaUrl,
+                caption: r.caption || '',
                 likes: r.likeCount,
                 comments: r.commentsCount,
                 engagement: r.engagement,
@@ -802,6 +996,9 @@ class AnalyticsService {
                 totalInteractions: r.totalInteractions || r.engagement,
                 engagementRate: r.reach > 0 ? Number(((r.engagement / r.reach) * 100).toFixed(2)) : 0,
                 saveRate: r.reach > 0 ? Number((((r.saved || 0) / r.reach) * 100).toFixed(2)) : 0,
+                shareRate: r.reach > 0 ? Number((((r.shares || 0) / r.reach) * 100).toFixed(2)) : 0,
+                commentRate: r.reach > 0 ? Number(((r.commentsCount / r.reach) * 100).toFixed(2)) : 0,
+                interactionRate: r.reach > 0 ? Number((((r.totalInteractions || r.engagement) / r.reach) * 100).toFixed(2)) : 0,
                 playRate: r.reach > 0 && (r.plays || 0) > 0 ? Number((((r.plays || 0) / r.reach) * 100).toFixed(2)) : 0,
                 timestamp: r.timestamp
             })),
@@ -825,6 +1022,12 @@ class AnalyticsService {
                 avgSaveRate: reels.length > 0
                     ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.saved || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
                     : 0,
+                avgShareRate: reels.length > 0
+                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.shares || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                    : 0,
+                avgCommentRate: reels.length > 0
+                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? (r.commentsCount / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                    : 0,
                 avgPlayRate: reels.length > 0
                     ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 && (r.plays || 0) > 0 ? ((r.plays || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
                     : 0
@@ -837,6 +1040,27 @@ class AnalyticsService {
                 reelMultiplier: nonReelStats.avgEngagement > 0
                     ? ((reelStats.totalEngagement / Math.max(reels.length, 1)) / nonReelStats.avgEngagement).toFixed(2)
                     : 0
+            },
+            diagnostics: {
+                highIntent: [...reels]
+                    .sort((a, b) => this.toPercent(b.saved || 0, b.reach) - this.toPercent(a.saved || 0, a.reach))
+                    .slice(0, 5)
+                    .map((reel) => ({
+                        id: reel.id,
+                        caption: reel.caption || '',
+                        reach: reel.reach,
+                        saveRate: this.toPercent(reel.saved || 0, reel.reach),
+                        shareRate: this.toPercent(reel.shares || 0, reel.reach)
+                    })),
+                strongestDistribution: [...reels]
+                    .sort((a, b) => b.reach - a.reach)
+                    .slice(0, 5)
+                    .map((reel) => ({
+                        id: reel.id,
+                        caption: reel.caption || '',
+                        reach: reel.reach,
+                        interactionRate: this.toPercent(reel.totalInteractions || reel.engagement, reel.reach)
+                    }))
             },
             lastUpdated: new Date().toISOString()
         };
@@ -854,8 +1078,11 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 200 : 100;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
+        const fetchLimit = (startDate || endDate) ? 120 : 80;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+            includeDetailedVideoInsights: true,
+            detailedInsightConcurrency: 4
+        });
         media = this.filterMediaByDate(media, startDate, endDate);
         const stories = await this.getStoryAnalytics();
 
@@ -881,6 +1108,10 @@ class AnalyticsService {
                 impressions: p.impressions,
                 reach: p.reach,
                 saved: p.saved,
+                shares: p.shares || 0,
+                saveRate: this.toPercent(p.saved, p.reach),
+                commentRate: this.toPercent(p.commentsCount, p.reach),
+                engagementRate: this.toPercent(p.engagement, p.reach),
                 timestamp: p.timestamp
             })),
             topByEngagement: byEngagement.slice(0, 10).map(p => p.id),
@@ -896,8 +1127,31 @@ class AnalyticsService {
                 totalReach: media.reduce((sum, p) => sum + p.reach, 0),
                 avgReach: media.length > 0
                     ? Math.round(media.reduce((sum, p) => sum + p.reach, 0) / media.length)
-                    : 0
+                    : 0,
+                totalLikes: media.reduce((sum, p) => sum + p.likeCount, 0),
+                totalComments: media.reduce((sum, p) => sum + p.commentsCount, 0),
+                totalSaved: media.reduce((sum, p) => sum + p.saved, 0),
+                totalShares: media.reduce((sum, p) => sum + (p.shares || 0), 0),
+                avgSaveRate: this.averageValue(media.map((p) => this.toPercent(p.saved, p.reach))),
+                avgCommentRate: this.averageValue(media.map((p) => this.toPercent(p.commentsCount, p.reach))),
+                avgEngagementRate: this.averageValue(media.map((p) => this.toPercent(p.engagement, p.reach)))
             },
+            formatEfficiency: Object.values(
+                media.reduce((acc, post) => {
+                    const key = post.mediaType || 'UNKNOWN';
+                    if (!acc[key]) acc[key] = { type: key, posts: [] };
+                    acc[key].posts.push(post);
+                    return acc;
+                }, {})
+            ).map((entry) => ({
+                type: entry.type,
+                count: entry.posts.length,
+                avgEngagement: Math.round(entry.posts.reduce((sum, post) => sum + post.engagement, 0) / entry.posts.length),
+                avgReach: Math.round(entry.posts.reduce((sum, post) => sum + post.reach, 0) / entry.posts.length),
+                avgSaveRate: this.averageValue(entry.posts.map((post) => this.toPercent(post.saved, post.reach))),
+                avgCommentRate: this.averageValue(entry.posts.map((post) => this.toPercent(post.commentsCount, post.reach))),
+                avgEngagementRate: this.averageValue(entry.posts.map((post) => this.toPercent(post.engagement, post.reach)))
+            })).sort((a, b) => b.avgEngagementRate - a.avgEngagementRate),
             stories,
             lastUpdated: new Date().toISOString()
         };
@@ -1054,9 +1308,14 @@ class AnalyticsService {
                 reelId: reel.id,
                 likes: reel.likes,
                 comments: reel.comments,
+                saves: reel.saved,
+                shares: reel.shares,
                 impressions: reel.impressions,
                 reach: reel.reach,
                 engagement: reel.engagement,
+                engagementRate: reel.engagementRate,
+                saveRate: reel.saveRate,
+                shareRate: reel.shareRate,
                 timestamp: reel.timestamp,
             })));
         }
@@ -1064,7 +1323,10 @@ class AnalyticsService {
         if (data.bestTime?.hourlyAnalysis?.length) {
             pushTable('posting_hours', 'Best Posting Hours', data.bestTime.hourlyAnalysis.map((entry) => ({
                 hour: entry.hour,
+                performanceScore: entry.performanceScore,
                 avgEngagement: entry.avgEngagement,
+                avgReach: entry.avgReach,
+                avgSaveRate: entry.avgSaveRate,
                 postCount: entry.postCount,
             })));
         }
@@ -1072,7 +1334,10 @@ class AnalyticsService {
         if (data.bestTime?.dailyAnalysis?.length) {
             pushTable('posting_days', 'Best Posting Days', data.bestTime.dailyAnalysis.map((entry) => ({
                 day: entry.day,
+                performanceScore: entry.performanceScore,
                 avgEngagement: entry.avgEngagement,
+                avgReach: entry.avgReach,
+                avgSaveRate: entry.avgSaveRate,
                 postCount: entry.postCount,
             })));
         }
@@ -1085,6 +1350,9 @@ class AnalyticsService {
                 avgEngagement: item.avgEngagement,
                 avgLikes: item.avgLikes,
                 avgComments: item.avgComments,
+                reachLift: item.reachLift,
+                consistencyScore: item.consistencyScore,
+                diminishingReturn: item.diminishingReturn,
             })));
         }
 
@@ -1103,10 +1371,13 @@ class AnalyticsService {
                 rank: item.rank,
                 format: item.format,
                 posts: item.count,
+                performanceScore: item.performanceScore,
                 avgEngagement: item.avgEngagement,
                 avgReach: item.avgReach,
-                avgSaved: item.avgSaved,
-                engagementRate: item.engagementRate,
+                avgEngagementRate: item.avgEngagementRate,
+                avgSaveRate: item.avgSaveRate,
+                avgShareRate: item.avgShareRate,
+                avgReachEfficiency: item.avgReachEfficiency,
             })));
         }
 
@@ -1372,7 +1643,12 @@ class AnalyticsService {
         const cached = await this.checkCache('stories', 'current');
         if (cached) return cached;
 
-        const stories = await this.instagram.getActiveStoriesWithInsights();
+        let stories = [];
+        try {
+            stories = await this.instagram.getActiveStoriesWithInsights();
+        } catch (error) {
+            console.warn('Story insights unavailable:', error.message);
+        }
         const analytics = {
             stories: stories.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
             summary: {

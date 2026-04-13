@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Clock, Zap, Calendar, HelpCircle, Info, RefreshCw } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -67,16 +68,15 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle?: 
 function HourlyHeatmap({ data }: { data: any[] }) {
     if (!data || data.length === 0) return null;
 
-    // Find max engagement for color scaling
-    const maxEngagement = Math.max(...data.map(d => d.avgEngagement || 0));
+    const maxScore = Math.max(...data.map(d => d.performanceScore || d.avgEngagement || 0));
 
     // Split into two rows: AM and PM
     const amHours = data.filter(d => d.hour < 12);
     const pmHours = data.filter(d => d.hour >= 12);
 
-    const getOpacity = (engagement: number) => {
-        if (maxEngagement === 0) return 0.1;
-        return 0.15 + (engagement / maxEngagement) * 0.85;
+    const getOpacity = (score: number) => {
+        if (maxScore === 0) return 0.1;
+        return 0.15 + (score / maxScore) * 0.85;
     };
 
     return (
@@ -89,17 +89,17 @@ function HourlyHeatmap({ data }: { data: any[] }) {
                             style={{
                                 height: 40,
                                 borderRadius: 4,
-                                background: `rgba(99, 102, 241, ${getOpacity(hour.avgEngagement)})`,
+                                background: `rgba(99, 102, 241, ${getOpacity(hour.performanceScore || hour.avgEngagement || 0)})`,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 fontSize: 10,
                                 fontWeight: 500,
-                                color: hour.avgEngagement > maxEngagement * 0.5 ? 'white' : 'var(--foreground)'
+                                color: (hour.performanceScore || hour.avgEngagement || 0) > maxScore * 0.5 ? 'white' : 'var(--foreground)'
                             }}
-                            title={`${hour.hour}:00 - ${hour.avgEngagement} avg engagement`}
+                            title={`${hour.hour}:00 - ${hour.performanceScore || 0} score`}
                         >
-                            {hour.avgEngagement || 0}
+                            {hour.performanceScore || 0}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
                             {hour.hour === 0 ? '12' : hour.hour}
@@ -115,17 +115,17 @@ function HourlyHeatmap({ data }: { data: any[] }) {
                             style={{
                                 height: 40,
                                 borderRadius: 4,
-                                background: `rgba(99, 102, 241, ${getOpacity(hour.avgEngagement)})`,
+                                background: `rgba(99, 102, 241, ${getOpacity(hour.performanceScore || hour.avgEngagement || 0)})`,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 fontSize: 10,
                                 fontWeight: 500,
-                                color: hour.avgEngagement > maxEngagement * 0.5 ? 'white' : 'var(--foreground)'
+                                color: (hour.performanceScore || hour.avgEngagement || 0) > maxScore * 0.5 ? 'white' : 'var(--foreground)'
                             }}
-                            title={`${hour.hour}:00 - ${hour.avgEngagement} avg engagement`}
+                            title={`${hour.hour}:00 - ${hour.performanceScore || 0} score`}
                         >
-                            {hour.avgEngagement || 0}
+                            {hour.performanceScore || 0}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
                             {hour.hour === 12 ? '12' : hour.hour - 12}
@@ -134,13 +134,13 @@ function HourlyHeatmap({ data }: { data: any[] }) {
                 ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, justifyContent: 'center' }}>
-                <span className="text-muted" style={{ fontSize: 11 }}>Low engagement</span>
+                <span className="text-muted" style={{ fontSize: 11 }}>Low score</span>
                 <div style={{ display: 'flex', gap: 2 }}>
                     {[0.15, 0.35, 0.55, 0.75, 1].map((opacity, i) => (
                         <div key={i} style={{ width: 20, height: 12, background: `rgba(99, 102, 241, ${opacity})`, borderRadius: 2 }} />
                     ))}
                 </div>
-                <span className="text-muted" style={{ fontSize: 11 }}>High engagement</span>
+                <span className="text-muted" style={{ fontSize: 11 }}>High score</span>
             </div>
         </div>
     );
@@ -149,6 +149,7 @@ function HourlyHeatmap({ data }: { data: any[] }) {
 // ==================== MAIN PAGE ====================
 
 export default function BestTimePage() {
+    const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -157,7 +158,7 @@ export default function BestTimePage() {
         endDate: defaultEnd.toISOString().split('T')[0]
     });
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['best-time', dateRange.startDate, dateRange.endDate],
+        queryKey: ['best-time', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getBestTime(dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -180,7 +181,7 @@ export default function BestTimePage() {
     const recommendations = data?.recommendations || {};
 
     // Find peak and low hours
-    const sortedHours = [...hourlyAnalysis].sort((a, b) => (b.avgEngagement || 0) - (a.avgEngagement || 0));
+    const sortedHours = [...hourlyAnalysis].sort((a, b) => (b.performanceScore || 0) - (a.performanceScore || 0));
     const peakHours = sortedHours.slice(0, 3);
     const lowHours = sortedHours.slice(-3).reverse();
 
@@ -190,7 +191,7 @@ export default function BestTimePage() {
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <div>
                     <h1 className="page-title">Best Time to Post</h1>
-                    <p className="page-subtitle">Optimize your posting schedule for maximum engagement</p>
+                    <p className="page-subtitle">Rank posting windows by reach, saves, comments, shares, and engagement efficiency</p>
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
@@ -209,9 +210,9 @@ export default function BestTimePage() {
                         </div>
                         <div>
                             <h3 style={{ fontWeight: 600, fontSize: 14 }}>Best Hours</h3>
-                            <p className="text-muted" style={{ fontSize: 12 }}>Peak engagement times</p>
+                            <p className="text-muted" style={{ fontSize: 12 }}>Highest recent performance score</p>
                         </div>
-                        <InfoTooltip text="These hours consistently show the highest engagement based on your posting history." />
+                        <InfoTooltip text="These hours rank highest on a combined score using engagement, reach, save rate, comment rate, and share rate." />
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {recommendations.bestHours?.map((hour: number) => (
@@ -236,9 +237,9 @@ export default function BestTimePage() {
                         </div>
                         <div>
                             <h3 style={{ fontWeight: 600, fontSize: 14 }}>Best Days</h3>
-                            <p className="text-muted" style={{ fontSize: 12 }}>Top performing days</p>
+                            <p className="text-muted" style={{ fontSize: 12 }}>Best full-day posting windows</p>
                         </div>
-                        <InfoTooltip text="Days of the week when your posts typically receive the most engagement." />
+                        <InfoTooltip text="Days ranked by the same combined performance score, not just raw engagement." />
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {recommendations.bestDays?.map((day: string) => (
@@ -263,15 +264,15 @@ export default function BestTimePage() {
                         </div>
                         <div>
                             <h3 style={{ fontWeight: 600, fontSize: 14 }}>Optimal Times</h3>
-                            <p className="text-muted" style={{ fontSize: 12 }}>Recommended posting</p>
+                            <p className="text-muted" style={{ fontSize: 12 }}>Best combined outcome windows</p>
                         </div>
-                        <InfoTooltip text="Specific times ranked by average engagement. Try to schedule your posts around these times." />
+                        <InfoTooltip text="Specific hours ranked by combined performance score, along with the real reach and save-rate context behind them." />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {recommendations.optimalPostingTimes?.map((time: any, i: number) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span style={{ fontWeight: 500 }}>{time.formatted}</span>
-                                <span className="text-muted" style={{ fontSize: 12 }}>{time.engagement} avg eng</span>
+                                <span className="text-muted" style={{ fontSize: 12 }}>score {time.score} • {time.reach} reach • {time.saveRate}% save</span>
                             </div>
                         ))}
                     </div>
@@ -319,7 +320,7 @@ export default function BestTimePage() {
                                     </span>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontWeight: 600, color: '#10b981' }}>{hour.avgEngagement}</div>
+                                    <div style={{ fontWeight: 600, color: '#10b981' }}>{hour.performanceScore}</div>
                                     <div className="text-muted" style={{ fontSize: 11 }}>{hour.postCount} posts</div>
                                 </div>
                             </div>
@@ -327,7 +328,7 @@ export default function BestTimePage() {
                     </div>
                 </SectionCard>
 
-                <SectionCard title="Avoid These Hours" subtitle="Times with lowest engagement">
+                <SectionCard title="Avoid These Hours" subtitle="Times with the weakest combined score">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {lowHours.map((hour, i) => (
                             <div key={hour.hour} style={{
@@ -342,7 +343,7 @@ export default function BestTimePage() {
                                     {hour.hour.toString().padStart(2, '0')}:00
                                 </span>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontWeight: 600, color: '#ef4444' }}>{hour.avgEngagement}</div>
+                                    <div style={{ fontWeight: 600, color: '#ef4444' }}>{hour.performanceScore}</div>
                                     <div className="text-muted" style={{ fontSize: 11 }}>{hour.postCount} posts</div>
                                 </div>
                             </div>
@@ -352,7 +353,7 @@ export default function BestTimePage() {
             </div>
 
             {/* Hourly Bar Chart */}
-            <SectionCard title="Engagement by Hour" subtitle="Detailed view of hourly engagement patterns">
+            <SectionCard title="Performance by Hour" subtitle="Detailed view of the combined score by posting hour">
                 <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={hourlyAnalysis}>
                         <XAxis
@@ -368,24 +369,24 @@ export default function BestTimePage() {
                             labelFormatter={(val) => `${val}:00`}
                         />
                         <Bar
-                            dataKey="avgEngagement"
+                            dataKey="performanceScore"
                             fill="#6366f1"
                             radius={[4, 4, 0, 0]}
-                            name="Avg Engagement"
+                            name="Performance Score"
                         />
                     </BarChart>
                 </ResponsiveContainer>
             </SectionCard>
 
             {/* Daily Radar Chart */}
-            <SectionCard title="Engagement by Day of Week" subtitle="Weekly engagement pattern visualization">
+            <SectionCard title="Performance by Day of Week" subtitle="Weekly score pattern visualization">
                 <ResponsiveContainer width="100%" height={320}>
                     <RadarChart data={dailyAnalysis}>
                         <PolarGrid stroke="var(--border)" />
                         <PolarAngleAxis dataKey="day" stroke="#9ca3af" fontSize={12} />
                         <Radar
-                            name="Engagement"
-                            dataKey="avgEngagement"
+                            name="Performance Score"
+                            dataKey="performanceScore"
                             stroke="#6366f1"
                             fill="#6366f1"
                             fillOpacity={0.3}

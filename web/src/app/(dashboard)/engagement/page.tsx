@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import {
     Heart, MessageCircle, Eye, Bookmark, Share2, Image,
     HelpCircle, ChevronRight, ChevronLeft, LogOut,
@@ -244,6 +245,7 @@ function BenchmarkIndicator({ value, benchmark, unit = '%', label }: {
 // ==================== MAIN PAGE ====================
 
 export default function EngagementPage() {
+    const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -252,7 +254,7 @@ export default function EngagementPage() {
         endDate: defaultEnd.toISOString().split('T')[0]
     });
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['posts', dateRange.startDate, dateRange.endDate],
+        queryKey: ['posts', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getPosts(50, dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -272,6 +274,7 @@ export default function EngagementPage() {
 
     const posts = data?.all || [];
     const summary = data?.summary || {};
+    const formatEfficiency = data?.formatEfficiency || [];
     const stories = data?.stories?.stories || [];
     const storySummary = data?.stories?.summary || {};
 
@@ -298,14 +301,22 @@ export default function EngagementPage() {
         return acc;
     }, {});
 
-    const engagementTypeData = Object.entries(engagementByType).map(([name, data]: [string, any]) => ({
-        name: name.replace('_', ' '),
-        avgEngagement: Math.round(data.total / data.count)
-    }));
+    const engagementTypeData = formatEfficiency.length > 0
+        ? formatEfficiency.map((entry: any) => ({
+            name: entry.type.replace('_', ' '),
+            avgEngagement: entry.avgEngagement,
+            avgEngagementRate: entry.avgEngagementRate,
+            avgSaveRate: entry.avgSaveRate,
+            avgCommentRate: entry.avgCommentRate
+        }))
+        : Object.entries(engagementByType).map(([name, data]: [string, any]) => ({
+            name: name.replace('_', ' '),
+            avgEngagement: Math.round(data.total / data.count)
+        }));
 
     // Find best performing format
     const bestFormat = engagementTypeData.length > 0
-        ? engagementTypeData.reduce((best, curr) => curr.avgEngagement > best.avgEngagement ? curr : best)
+        ? engagementTypeData.reduce((best: any, curr: any) => (curr.avgEngagementRate || curr.avgEngagement) > (best.avgEngagementRate || best.avgEngagement) ? curr : best)
         : null;
 
     // Calculate computed metrics
@@ -379,40 +390,40 @@ export default function EngagementPage() {
                 />
             </div>
 
-            {/* Key Performance Indicators with Benchmarks */}
+            {/* Key Performance Indicators */}
             <SectionCard
-                title="Key Performance Indicators"
-                subtitle="Your metrics compared to industry benchmarks"
+                title="Rate Diagnostics"
+                subtitle="Real rates calculated from your fetched post reach and interactions"
                 timePeriod={posts.length > 0 ? `Based on ${posts.length} posts` : undefined}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-                    <BenchmarkIndicator
-                        value={parseFloat(viralScore.toFixed(2))}
-                        benchmark={{ low: 0.1, average: 0.5, good: 1.0 }}
-                        unit="%"
-                        label="Viral Score (Eng/Reach)"
-                    />
-                    <BenchmarkIndicator
-                        value={parseFloat(saveToLikeRatio.toFixed(2))}
-                        benchmark={{ low: 1, average: 3, good: 5 }}
-                        unit="%"
-                        label="Save-to-Like Ratio"
-                    />
-                    <BenchmarkIndicator
-                        value={parseFloat(engagementRate.toFixed(2))}
-                        benchmark={{ low: 1, average: 3, good: 6 }}
-                        unit="%"
-                        label="Engagement Rate"
-                    />
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Engagement Rate</span>
+                            <InfoTooltip text="Average engagement divided by reach across the analyzed posts." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{summary.avgEngagementRate || engagementRate.toFixed(2)}%</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Save Rate</span>
+                            <InfoTooltip text="Average saves divided by reach. High save rate usually signals reference-worthy content." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{summary.avgSaveRate || 0}%</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Comment Rate</span>
+                            <InfoTooltip text="Average comments divided by reach. Useful for understanding conversation depth, not just attention." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#0ea5e9' }}>{summary.avgCommentRate || 0}%</div>
+                    </div>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                             <span className="text-muted" style={{ fontSize: 12 }}>Total Saves</span>
-                            <InfoTooltip text="Number of times your content was saved. Saves indicate high-value, bookmark-worthy content that provides lasting value." />
+                            <InfoTooltip text="Total saves across the analyzed posts." />
                         </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{saveRate.toLocaleString()}</div>
-                        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
-                            ~{Math.round(saveRate / (posts.length || 1))} saves per post
-                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>{(summary.totalSaved || saveRate).toLocaleString()}</div>
                     </div>
                 </div>
             </SectionCard>
@@ -456,9 +467,9 @@ export default function EngagementPage() {
                 </SectionCard>
 
                 <SectionCard
-                    title="Engagement by Content Type"
-                    subtitle="Which formats perform best for your audience"
-                    timePeriod="Avg per post"
+                    title="Format Efficiency"
+                    subtitle="Which formats produce the best rate efficiency, not just total engagement"
+                    timePeriod="Rate per post"
                 >
                     <ResponsiveContainer width="100%" height={180}>
                         <BarChart data={engagementTypeData}>
@@ -467,7 +478,7 @@ export default function EngagementPage() {
                             <Tooltip
                                 contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                             />
-                            <Bar dataKey="avgEngagement" fill="#6366f1" radius={[4, 4, 0, 0]} name="Avg Engagement" />
+                            <Bar dataKey="avgEngagementRate" fill="#6366f1" radius={[4, 4, 0, 0]} name="Avg Engagement Rate" />
                         </BarChart>
                     </ResponsiveContainer>
                     {bestFormat && (
@@ -483,20 +494,51 @@ export default function EngagementPage() {
                         }}>
                             <span>🏆</span>
                             <span>
-                                <strong style={{ textTransform: 'capitalize' }}>{bestFormat.name}</strong> is your best performing format with {bestFormat.avgEngagement} avg engagement
+                                <strong style={{ textTransform: 'capitalize' }}>{bestFormat.name}</strong> is your most efficient format with {(bestFormat.avgEngagementRate || 0)}% engagement rate
                             </span>
                         </div>
                     )}
                 </SectionCard>
             </div>
 
+            {formatEfficiency.length > 0 && (
+                <SectionCard title="Format Rate Table" subtitle="Save, comment, and engagement efficiency by format">
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Format</th>
+                                    <th>Posts</th>
+                                    <th>Avg Engagement</th>
+                                    <th>Engagement Rate</th>
+                                    <th>Save Rate</th>
+                                    <th>Comment Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {formatEfficiency.map((entry: any) => (
+                                    <tr key={entry.type}>
+                                        <td style={{ fontWeight: 600 }}>{entry.type.replace('_', ' ')}</td>
+                                        <td>{entry.count}</td>
+                                        <td>{entry.avgEngagement}</td>
+                                        <td>{entry.avgEngagementRate}%</td>
+                                        <td>{entry.avgSaveRate}%</td>
+                                        <td>{entry.avgCommentRate}%</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </SectionCard>
+            )}
+
             {/* Story Engagement Metrics */}
-            <SectionCard
-                title="Story Engagement"
-                subtitle="Real metrics from your currently active stories"
-                timePeriod="Last 24 hours"
-            >
-                {storySummary.activeStories > 0 ? (
+            {storySummary.activeStories > 0 && (
+                <SectionCard
+                    title="Story Engagement"
+                    subtitle="Real metrics from your currently active stories"
+                    timePeriod="Last 24 hours"
+                >
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
@@ -539,12 +581,8 @@ export default function EngagementPage() {
                             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>DM responses</div>
                         </div>
                     </div>
-                ) : (
-                    <div style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
-                        No active stories were returned by Meta for this account.
-                    </div>
-                )}
-            </SectionCard>
+                </SectionCard>
+            )}
 
             {/* Posts Table */}
             <SectionCard
@@ -562,6 +600,8 @@ export default function EngagementPage() {
                                 <th><MessageCircle size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Comments</th>
                                 <th><Eye size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Reach</th>
                                 <th><Bookmark size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Saved</th>
+                                <th>Save Rate</th>
+                                <th>Comment Rate</th>
                                 <th>Date</th>
                             </tr>
                         </thead>
@@ -589,6 +629,8 @@ export default function EngagementPage() {
                                     <td>{post.comments?.toLocaleString()}</td>
                                     <td>{post.reach?.toLocaleString()}</td>
                                     <td>{post.saved?.toLocaleString()}</td>
+                                    <td>{post.saveRate || 0}%</td>
+                                    <td>{post.commentRate || 0}%</td>
                                     <td className="text-muted" style={{ fontSize: 12 }}>
                                         {new Date(post.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                     </td>

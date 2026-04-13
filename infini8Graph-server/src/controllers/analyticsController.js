@@ -207,6 +207,9 @@ export async function getUnifiedOverview(req, res) {
             totalImpressions: 0,
             totalReach: 0,
             totalSaved: 0,
+            totalShares: 0,
+            totalProfileViews: 0,
+            totalFollowerDelta: 0,
             avgEngagementRate: 0,
             accountCount: successfulResults.length
         };
@@ -220,6 +223,9 @@ export async function getUnifiedOverview(req, res) {
             unifiedMetrics.totalImpressions += m.totalImpressions || 0;
             unifiedMetrics.totalReach += m.totalReach || 0;
             unifiedMetrics.totalSaved += m.totalSaved || 0;
+            unifiedMetrics.totalShares += m.totalShares || 0;
+            unifiedMetrics.totalProfileViews += m.totalProfileViews || 0;
+            unifiedMetrics.totalFollowerDelta += m.followerDelta || 0;
             unifiedMetrics.avgEngagementRate += m.engagementRate || 0;
 
             // Tag posts with account info

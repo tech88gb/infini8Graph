@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import {
     Zap, TrendingUp, Bookmark, Clock, Award, ExternalLink,
     Image, Video, LayoutGrid, Film, HelpCircle, Heart, MessageCircle, Eye, RefreshCw
@@ -311,6 +312,7 @@ function TopPostCard({ post, rank }: { post: any; rank: number }) {
 }
 
 export default function ContentIntelligencePage() {
+    const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -319,7 +321,7 @@ export default function ContentIntelligencePage() {
         endDate: defaultEnd.toISOString().split('T')[0]
     });
     const { data, isLoading, error, refetch, isFetching } = useQuery({
-        queryKey: ['contentIntelligence', dateRange.startDate, dateRange.endDate],
+        queryKey: ['contentIntelligence', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getContentIntelligence(dateRange.startDate, dateRange.endDate);
             return res.data.data;
@@ -348,23 +350,24 @@ export default function ContentIntelligencePage() {
     const intel = data || {};
     const formatBattle = intel.formatBattle || {};
     const captionAnalysis = intel.captionAnalysis || {};
-    const viralCoefficient = intel.viralCoefficient || {};
-    const saveToLike = intel.saveToLike || {};
-    const engagementVelocity = intel.engagementVelocity || {};
+    const reachEfficiency = intel.reachEfficiency || {};
+    const interactionQuality = intel.interactionQuality || {};
+    const postingTime = intel.postingTime || {};
     const contentQuality = intel.contentQuality || {};
 
     // Prepare chart data
     const formatChartData = (formatBattle.ranking || []).map((f: any) => ({
         name: f.format,
-        engagement: f.avgEngagement,
-        reach: f.avgReach,
+        score: f.performanceScore,
+        engagementRate: f.avgEngagementRate,
+        saveRate: f.avgSaveRate,
         fill: FORMAT_COLORS[f.format] || '#6366f1'
     }));
 
     const captionChartData = (captionAnalysis.buckets || []).map((b: any, i: number) => ({
         name: b.label,
-        engagement: b.avgEngagement,
-        count: b.count,
+        score: b.performanceScore,
+        engagementRate: b.avgEngagementRate,
         fill: COLORS[i % COLORS.length]
     }));
 
@@ -382,7 +385,7 @@ export default function ContentIntelligencePage() {
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <div>
                     <h1 className="page-title">Content Intelligence</h1>
-                    <p className="page-subtitle">Deep insights to optimize your content strategy · {intel.postsAnalyzed || 0} posts analyzed</p>
+                    <p className="page-subtitle">Real-signal analysis across format, caption length, reach efficiency, interaction quality, and timing · {intel.postsAnalyzed || 0} posts analyzed</p>
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
@@ -395,7 +398,7 @@ export default function ContentIntelligencePage() {
             {/* Top 5 Best Performing Posts - HERO SECTION */}
             <SectionCard
                 title="🏆 Top 5 Best Performing Posts"
-                subtitle="Ranked by our composite quality score based on engagement, reach, saves, and virality"
+                subtitle="Ranked by a real-only quality score using engagement rate, save rate, share rate, comment rate, and reach efficiency"
             >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
                     {(contentQuality.topContent || []).slice(0, 5).map((post: any, i: number) => (
@@ -407,21 +410,21 @@ export default function ContentIntelligencePage() {
             {/* Content Quality Score Summary */}
             <SectionCard
                 title="Content Quality Score"
-                subtitle="Overall health of your content — based on engagement, reach, and save rates"
+                subtitle="Overall health of your content — built only from fetched rates and reach efficiency"
                 timePeriod={`${data?.contentQuality?.postsAnalyzed || 0} posts analyzed`}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, alignItems: 'center' }}>
                     <div>
                         <ScoreGauge score={contentQuality.averageScore || 0} label="Average Quality Score" />
                         <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6, fontSize: 11, textAlign: 'center' }}>
-                            <strong>Score Formula:</strong> Engagement Rate + Save Rate + Reach Factor
+                            <strong>Score Formula:</strong> Engagement rate + save rate + share rate + comment rate + reach efficiency
                         </div>
                     </div>
 
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
                             <span className="text-muted" style={{ fontSize: 12 }}>Quality Distribution</span>
-                            <InfoTooltip text="Posts are graded: Excellent (70+), Good (50-69), Average (30-49), Poor (below 30). Scores are calculated relative to YOUR average performance, not industry benchmarks." />
+                            <InfoTooltip text="Posts are graded from the normalized mix of real fetched rates. Higher scores mean stronger interaction quality and more efficient reach for your account." />
                         </div>
                         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                             {qualityPieData.map((item, i) => (
@@ -443,7 +446,7 @@ export default function ContentIntelligencePage() {
             {/* Format Battle */}
             <SectionCard
                 title="Content Format Battle"
-                subtitle="Which format performs best for your audience"
+                subtitle="Which format produces the best mix of reach efficiency and interaction quality"
                 insight={formatBattle.insight}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
@@ -453,9 +456,9 @@ export default function ContentIntelligencePage() {
                             <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={11} width={100} />
                             <Tooltip
                                 contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
-                                formatter={(value) => [Number(value || 0).toLocaleString(), 'Avg Engagement']}
+                                formatter={(value) => [Number(value || 0).toLocaleString(), 'Performance Score']}
                             />
-                            <Bar dataKey="engagement" radius={[0, 4, 4, 0]}>
+                            <Bar dataKey="score" radius={[0, 4, 4, 0]}>
                                 {formatChartData.map((entry: any, index: number) => (
                                     <Cell key={`cell-${index}`} fill={entry.fill} />
                                 ))}
@@ -495,8 +498,8 @@ export default function ContentIntelligencePage() {
                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>{f.count} posts</div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontSize: 14, fontWeight: 600 }}>{f.avgEngagement}</div>
-                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>avg eng</div>
+                                        <div style={{ fontSize: 14, fontWeight: 600 }}>{f.performanceScore}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>score</div>
                                     </div>
                                 </div>
                             );
@@ -508,7 +511,7 @@ export default function ContentIntelligencePage() {
             {/* Caption Length Analysis */}
             <SectionCard
                 title="Caption Length Analysis"
-                subtitle="Find your optimal caption length"
+                subtitle="Find the caption length band with the best combined content quality"
                 insight={captionAnalysis.insight}
             >
                 <ResponsiveContainer width="100%" height={200}>
@@ -519,10 +522,10 @@ export default function ContentIntelligencePage() {
                             contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                             formatter={(value, name) => [
                                 Number(value || 0).toLocaleString(),
-                                name === 'engagement' ? 'Avg Engagement' : 'Posts'
+                                name === 'score' ? 'Performance Score' : 'Value'
                             ]}
                         />
-                        <Bar dataKey="engagement" fill="#6366f1" radius={[4, 4, 0, 0]}>
+                        <Bar dataKey="score" fill="#6366f1" radius={[4, 4, 0, 0]}>
                             {captionChartData.map((entry: any, index: number) => (
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                             ))}
@@ -533,29 +536,27 @@ export default function ContentIntelligencePage() {
 
             {/* Key Content Metrics */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 20 }}>
-                {/* Viral Coefficient */}
                 <SectionCard
-                    title="Viral Coefficient"
-                    subtitle="Saves ÷ Reach ratio"
+                    title="Reach Efficiency"
+                    subtitle="Reach as a share of followers"
                 >
                     <div style={{ textAlign: 'center', padding: '20px 0' }}>
                         <div style={{
                             fontSize: 36,
                             fontWeight: 700,
-                            color: viralCoefficient.average > 0.01 ? '#10b981' : '#f59e0b'
+                            color: '#10b981'
                         }}>
-                            {((viralCoefficient.average || 0) * 100).toFixed(2)}%
+                            {(reachEfficiency.average || 0).toFixed(2)}%
                         </div>
                         <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-                            {viralCoefficient.insight}
+                            {reachEfficiency.insight}
                         </p>
                     </div>
                 </SectionCard>
 
-                {/* Save-to-Like Ratio */}
                 <SectionCard
-                    title="Save-to-Like Ratio"
-                    subtitle="Content value indicator"
+                    title="Average Save Rate"
+                    subtitle="Saves ÷ reach"
                 >
                     <div style={{ textAlign: 'center', padding: '20px 0' }}>
                         <div style={{
@@ -563,22 +564,21 @@ export default function ContentIntelligencePage() {
                             fontWeight: 700,
                             color: '#6366f1'
                         }}>
-                            {((saveToLike.average || 0) * 100).toFixed(1)}%
+                            {(interactionQuality.avgSaveRate || 0).toFixed(1)}%
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
                             <Bookmark size={16} style={{ color: '#10b981' }} />
                             <span style={{ fontSize: 13 }}>
-                                <strong>{saveToLike.highValueCount || 0}</strong> high-value posts
+                                <strong>{interactionQuality.topSavers?.length || 0}</strong> top saver posts surfaced
                             </span>
-                            <InfoTooltip text="Posts with 5%+ save-to-like ratio are considered high-value reference content" />
+                            <InfoTooltip text="Save rate is a more reliable value signal than raw save counts because it adjusts for reach." />
                         </div>
                     </div>
                 </SectionCard>
 
-                {/* Engagement Velocity */}
                 <SectionCard
-                    title="Engagement Velocity"
-                    subtitle="How fast posts gain traction"
+                    title="Average Share Rate"
+                    subtitle="Shares ÷ reach"
                 >
                     <div style={{ textAlign: 'center', padding: '20px 0' }}>
                         <div style={{
@@ -586,14 +586,51 @@ export default function ContentIntelligencePage() {
                             fontWeight: 700,
                             color: '#ec4899'
                         }}>
-                            {engagementVelocity.fastStarters || 0}
+                            {(interactionQuality.avgShareRate || 0).toFixed(1)}%
                         </div>
                         <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-                            Fast-starting posts (high velocity in first 24h)
+                            {(interactionQuality.avgCommentRate || 0).toFixed(1)}% avg comment rate
                         </p>
                     </div>
                 </SectionCard>
             </div>
+
+            <SectionCard
+                title="Posting Time Signals"
+                subtitle="Best recent timing windows based on the same real-only performance score"
+                insight={postingTime.insight}
+            >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                    <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Best Hours</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {(postingTime.bestHours || []).map((slot: any) => (
+                                <div key={slot.hour} style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--background)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <span style={{ fontWeight: 600 }}>{slot.formatted}</span>
+                                        <span style={{ color: '#6366f1', fontWeight: 700 }}>score {slot.performanceScore}</span>
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: 11 }}>{slot.avgReach} avg reach • {slot.avgSaveRate}% save rate</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Best Days</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {(postingTime.bestDays || []).map((slot: any) => (
+                                <div key={slot.day} style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--background)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <span style={{ fontWeight: 600 }}>{slot.day}</span>
+                                        <span style={{ color: '#10b981', fontWeight: 700 }}>score {slot.performanceScore}</span>
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: 11 }}>{slot.avgReach} avg reach • {slot.avgSaveRate}% save rate</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </SectionCard>
 
             <p className="text-muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 24 }}>
                 Last updated: {intel.lastUpdated ? new Date(intel.lastUpdated).toLocaleString() : 'N/A'}
