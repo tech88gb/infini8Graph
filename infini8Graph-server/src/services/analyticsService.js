@@ -15,6 +15,15 @@ const CACHE_TTL = {
     hashtags: 600
 };
 
+const MEDIA_FETCH_LIMITS = {
+    overview: { ranged: 24, default: 18 },
+    growth: { ranged: 36, default: 24 },
+    bestTime: { ranged: 36, default: 24 },
+    hashtags: { ranged: 40, default: 28 },
+    contentIntel: { ranged: 36, default: 24 },
+    postsAnalysis: { ranged: 30, default: 24 }
+};
+
 async function runWithConcurrency(tasks, limit = 2) {
     const outcomes = new Array(tasks.length);
     let cursor = 0;
@@ -181,7 +190,7 @@ class AnalyticsService {
      */
     async getOverview(startDate = null, endDate = null) {
         // Build a cache key that includes the dates
-        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v4_core_${startDate || 'default'}_${endDate || 'default'}`;
         
         // Check cache first
         const cached = await this.checkCache('overview', dateKey);
@@ -195,36 +204,30 @@ class AnalyticsService {
             throw new Error('Cannot fetch Instagram profile. Please re-authenticate with the required permissions.');
         }
 
-        // Fetch media and demographics with graceful fallback
+        // Fetch only the fast overview essentials here.
+        // Audience demographics are loaded separately so the dashboard can paint sooner.
         let media = [];
-        let demographics = {};
         let dailyMetrics = [];
-        const fetchLimit = (startDate || endDate) ? 80 : 60;
+        const fetchLimit = (startDate || endDate)
+            ? MEDIA_FETCH_LIMITS.overview.ranged
+            : MEDIA_FETCH_LIMITS.overview.default;
         const overviewTasks = [
             async () => {
                 const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
-                    includeDetailedVideoInsights: true,
-                    detailedInsightConcurrency: 3,
+                    includeDetailedVideoInsights: false,
                     fetchShares: true
                 });
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
-            async () => this.instagram.getFollowerDemographics(),
             async () => this.getDailyAccountMetrics(startDate, endDate)
         ];
 
-        const [mediaResult, demographicsResult, dailyMetricsResult] = await runWithConcurrency(overviewTasks, 2);
+        const [mediaResult, dailyMetricsResult] = await runWithConcurrency(overviewTasks, 2);
 
         if (mediaResult.status === 'fulfilled') {
             media = mediaResult.value;
         } else {
             console.warn('Overview media fetch failed:', mediaResult.reason?.message || mediaResult.reason);
-        }
-
-        if (demographicsResult.status === 'fulfilled') {
-            demographics = demographicsResult.value || {};
-        } else {
-            console.warn('Overview demographics fetch failed:', demographicsResult.reason?.message || demographicsResult.reason);
         }
 
         if (dailyMetricsResult.status === 'fulfilled') {
@@ -271,30 +274,6 @@ class AnalyticsService {
                 deltaPercent: 0
             };
 
-        const onlineFollowerSummary = this.buildOnlineFollowersSummary(demographics.onlineFollowers || []);
-
-        const topCountry = demographics.countries?.[0]
-            ? {
-                label: demographics.countries[0].dimension_values?.[0] || 'Unknown',
-                value: demographics.countries[0].value || 0
-            }
-            : null;
-
-        const topCity = demographics.cities?.[0]
-            ? {
-                label: demographics.cities[0].dimension_values?.[0] || 'Unknown',
-                value: demographics.cities[0].value || 0
-            }
-            : null;
-
-        const topGenderAge = demographics.genderAge?.[0]
-            ? {
-                gender: demographics.genderAge[0].dimension_values?.[0] || '',
-                age: demographics.genderAge[0].dimension_values?.[1] || '',
-                value: demographics.genderAge[0].value || 0
-            }
-            : null;
-
         // Get recent posts performance
         const recentPosts = media.slice(0, 10).map(post => ({
             id: post.id,
@@ -337,17 +316,11 @@ class AnalyticsService {
                 followerDelta: followerTrend.delta,
                 followerDeltaPercent: followerTrend.deltaPercent
             },
-            demographics: demographics || {},
-            audienceInsights: {
-                topCountry,
-                topCity,
-                topGenderAge,
-                peakFollowerHours: onlineFollowerSummary.peakHours,
-                onlineFollowerAverage: onlineFollowerSummary.averageValue
-            },
+            demographics: {},
+            audienceInsights: {},
             followerTrend,
             recentPosts,
-            dailyMetrics, // <-- Exposing daily metrics here
+            dailyMetrics,
             lastUpdated: new Date().toISOString()
         };
 
@@ -355,6 +328,52 @@ class AnalyticsService {
         await this.updateCache('overview', dateKey, overview);
 
         return overview;
+    }
+
+    async getOverviewAudience(startDate = null, endDate = null) {
+        const dateKey = `v1_audience_${startDate || 'default'}_${endDate || 'default'}`;
+        const cached = await this.checkCache('overview', dateKey);
+        if (cached) return cached;
+
+        let demographics = {};
+        try {
+            demographics = await this.instagram.getFollowerDemographics();
+        } catch (error) {
+            console.warn('Overview audience fetch failed:', error.message);
+        }
+
+        const onlineFollowerSummary = this.buildOnlineFollowersSummary(demographics.onlineFollowers || []);
+
+        const audience = {
+            demographics: demographics || {},
+            audienceInsights: {
+                topCountry: demographics.countries?.[0]
+                    ? {
+                        label: demographics.countries[0].dimension_values?.[0] || 'Unknown',
+                        value: demographics.countries[0].value || 0
+                    }
+                    : null,
+                topCity: demographics.cities?.[0]
+                    ? {
+                        label: demographics.cities[0].dimension_values?.[0] || 'Unknown',
+                        value: demographics.cities[0].value || 0
+                    }
+                    : null,
+                topGenderAge: demographics.genderAge?.[0]
+                    ? {
+                        gender: demographics.genderAge[0].dimension_values?.[0] || '',
+                        age: demographics.genderAge[0].dimension_values?.[1] || '',
+                        value: demographics.genderAge[0].value || 0
+                    }
+                    : null,
+                peakFollowerHours: onlineFollowerSummary.peakHours,
+                onlineFollowerAverage: onlineFollowerSummary.averageValue
+            },
+            lastUpdated: new Date().toISOString()
+        };
+
+        await this.updateCache('overview', dateKey, audience);
+        return audience;
     }
 
     /**
@@ -366,15 +385,16 @@ class AnalyticsService {
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const fetchLimit = (startDate || endDate) ? 80 : 60;
+        const fetchLimit = (startDate || endDate)
+            ? MEDIA_FETCH_LIMITS.growth.ranged
+            : MEDIA_FETCH_LIMITS.growth.default;
         let media = [];
         let accountMetrics = [];
         const growthTasks = [
             async () => {
                 const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
-                    includeDetailedVideoInsights: true,
-                    detailedInsightConcurrency: 3,
-                    fetchShares: true
+                    includeDetailedVideoInsights: false,
+                    fetchShares: false
                 });
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
@@ -517,8 +537,12 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 80 : 60;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
+        const fetchLimit = (startDate || endDate)
+            ? MEDIA_FETCH_LIMITS.bestTime.ranged
+            : MEDIA_FETCH_LIMITS.bestTime.default;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+            fetchShares: true
+        });
         media = this.filterMediaByDate(media, startDate, endDate);
 
         const hourlyStats = {};
@@ -625,8 +649,12 @@ class AnalyticsService {
         if (cached) return cached;
 
         // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 100 : 80;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
+        const fetchLimit = (startDate || endDate)
+            ? MEDIA_FETCH_LIMITS.hashtags.ranged
+            : MEDIA_FETCH_LIMITS.hashtags.default;
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+            fetchShares: false
+        });
         media = this.filterMediaByDate(media, startDate, endDate);
 
         // Extract hashtags from captions
@@ -758,10 +786,12 @@ class AnalyticsService {
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const fetchLimit = (startDate || endDate) ? 80 : 60;
+        const fetchLimit = (startDate || endDate)
+            ? MEDIA_FETCH_LIMITS.contentIntel.ranged
+            : MEDIA_FETCH_LIMITS.contentIntel.default;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
-            includeDetailedVideoInsights: true,
-            detailedInsightConcurrency: 4
+            includeDetailedVideoInsights: false,
+            fetchShares: true
         });
         media = this.filterMediaByDate(media, startDate, endDate);
 
@@ -1141,31 +1171,78 @@ class AnalyticsService {
     /**
      * Get detailed post analytics
      */
-    async getPostsAnalytics(limit = 50, startDate = null, endDate = null) {
-        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
+    async getPostsAnalytics(limit = 12, startDate = null, endDate = null, options = {}) {
+        const requestedLimit = Number.isFinite(Number(limit))
+            ? Math.min(Math.max(Number(limit), 6), 20)
+            : 12;
+        const after = options.after || null;
+        const analysisLimit = Number.isFinite(Number(options.analysisLimit))
+            ? Math.min(Math.max(Number(options.analysisLimit), 18), 40)
+            : ((startDate || endDate) ? MEDIA_FETCH_LIMITS.postsAnalysis.ranged : MEDIA_FETCH_LIMITS.postsAnalysis.default);
+        const dateKey = `v5_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${requestedLimit}_${analysisLimit}`;
         const cached = await this.checkCache('posts', dateKey);
         if (cached) return cached;
 
-        // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate) ? 80 : 60;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
-            includeDetailedVideoInsights: true,
-            detailedInsightConcurrency: 4
-        });
-        media = this.filterMediaByDate(media, startDate, endDate);
-        const stories = await this.getStoryAnalytics();
+        let analysisMedia = [];
+        let stories = { stories: [], summary: {} };
 
-        // Limit results to the requested amount after filtering
-        media = media.slice(0, limit);
+        const [analysisResult, storiesResult] = await runWithConcurrency([
+            async () => {
+                const fetchedMedia = await this.instagram.getAllMediaWithInsights(analysisLimit, {
+                    includeDetailedVideoInsights: false,
+                    fetchShares: false
+                });
+                return this.filterMediaByDate(fetchedMedia, startDate, endDate);
+            },
+            async () => this.getStoryAnalytics()
+        ], 2);
 
-        // Sort by different metrics
+        if (analysisResult.status === 'fulfilled') {
+            analysisMedia = analysisResult.value || [];
+        } else {
+            console.warn('Posts analysis media fetch failed:', analysisResult.reason?.message || analysisResult.reason);
+        }
+
+        if (storiesResult.status === 'fulfilled') {
+            stories = storiesResult.value || stories;
+        } else {
+            console.warn('Story analytics fetch failed:', storiesResult.reason?.message || storiesResult.reason);
+        }
+
+        const pagePosts = [];
+        const batchSize = Math.min(Math.max(requestedLimit, 10), 16);
+        const maxPagesToScan = 4;
+        let nextCursor = after;
+        let pagesScanned = 0;
+
+        while (pagesScanned < maxPagesToScan && pagePosts.length < requestedLimit) {
+            const response = await this.instagram.getMediaPageWithInsights(batchSize, nextCursor, {
+                includeDetailedVideoInsights: false,
+                fetchShares: false
+            });
+            const batch = this.filterMediaByDate(response?.data || [], startDate, endDate);
+
+            if (batch.length > 0) {
+                pagePosts.push(...batch);
+            }
+
+            pagesScanned += 1;
+            nextCursor = response?.paging?.cursors?.after || null;
+
+            if (!nextCursor || (response?.data || []).length === 0) {
+                break;
+            }
+        }
+
+        const media = analysisMedia;
+        const visiblePosts = pagePosts.slice(0, requestedLimit);
         const byEngagement = [...media].sort((a, b) => b.engagement - a.engagement);
         const byLikes = [...media].sort((a, b) => b.likeCount - a.likeCount);
         const byComments = [...media].sort((a, b) => b.commentsCount - a.commentsCount);
         const byReach = [...media].sort((a, b) => b.reach - a.reach);
 
         const posts = {
-            all: media.map(p => ({
+            all: visiblePosts.map(p => ({
                 id: p.id,
                 type: p.mediaType,
                 caption: p.caption?.substring(0, 100) + (p.caption?.length > 100 ? '...' : ''),
@@ -1222,6 +1299,13 @@ class AnalyticsService {
                 avgEngagementRate: this.averageValue(entry.posts.map((post) => this.toPercent(post.engagement, post.reach)))
             })).sort((a, b) => b.avgEngagementRate - a.avgEngagementRate),
             stories,
+            pagination: {
+                returned: visiblePosts.length,
+                target: requestedLimit,
+                pagesScanned,
+                nextCursor,
+                hasNextPage: Boolean(nextCursor)
+            },
             lastUpdated: new Date().toISOString()
         };
 

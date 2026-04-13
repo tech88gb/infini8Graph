@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/overview', analyticsController.getOverview);
+router.get('/overview-audience', analyticsController.getOverviewAudience);
 router.get('/growth', analyticsController.getGrowth);
 router.get('/best-time', analyticsController.getBestTime);
 router.get('/hashtags', analyticsController.getHashtags);

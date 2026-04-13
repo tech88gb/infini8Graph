@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import { Film, Heart, MessageCircle, Eye, TrendingUp, Bookmark, Share2, HelpCircle, Users, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
@@ -109,7 +110,8 @@ export default function ReelsPage() {
                 limit: REELS_PER_PAGE
             });
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {

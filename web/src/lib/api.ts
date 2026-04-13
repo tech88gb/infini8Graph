@@ -108,6 +108,7 @@ export const instagramApi = (() => {
 
     return {
         getOverview: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/overview${buildParams(startDate, endDate)}`),
+        getOverviewAudience: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/overview-audience${buildParams(startDate, endDate)}`),
         getGrowth: (startDate?: string, endDate?: string, period = '30d') => {
             const params = new URLSearchParams({ period });
             if (startDate) params.append('startDate', startDate);
@@ -123,11 +124,12 @@ export const instagramApi = (() => {
                     limit: options?.limit
                 })}`
             ),
-        getPosts: (limit = 50, startDate?: string, endDate?: string, includeCollabs = false) => {
+        getPosts: (limit = 12, startDate?: string, endDate?: string, includeCollabs = false, options?: { after?: string }) => {
             const p = new URLSearchParams({ limit: String(limit) });
             if (startDate) p.append('startDate', startDate);
             if (endDate) p.append('endDate', endDate);
             if (includeCollabs) p.append('includeCollabs', 'true');
+            if (options?.after) p.append('after', options.after);
             return instagramApiClient.get(`/instagram/posts?${p.toString()}`);
         },
         exportData: (

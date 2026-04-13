@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import { Clock, Zap, Calendar, HelpCircle, Info, RefreshCw } from 'lucide-react';
 import {
@@ -162,7 +163,8 @@ export default function BestTimePage() {
         queryFn: async () => {
             const res = await instagramApi.getBestTime(dateRange.startDate, dateRange.endDate);
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {

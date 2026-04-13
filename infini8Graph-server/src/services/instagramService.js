@@ -490,7 +490,8 @@ class InstagramService {
     async getAllMediaWithInsights(count = 50, options = {}) {
         const {
             includeDetailedVideoInsights = false,
-            detailedInsightConcurrency = 4
+            detailedInsightConcurrency = 4,
+            fetchShares = false
         } = options;
         const allMedia = [];
         let cursor = null;
@@ -500,7 +501,8 @@ class InstagramService {
             const batchSize = Math.min(25, count - fetched);
             const response = await this.getMediaPageWithInsights(batchSize, cursor, {
                 includeDetailedVideoInsights,
-                detailedInsightConcurrency
+                detailedInsightConcurrency,
+                fetchShares
             });
             const batch = response?.data || [];
 
@@ -523,7 +525,7 @@ class InstagramService {
         const {
             includeDetailedVideoInsights = false,
             detailedInsightConcurrency = 4,
-            fetchShares = true  // always fetch shares via /insights unless disabled
+            fetchShares = false
         } = options;
 
         const response = await this.getMedia(limit, after);

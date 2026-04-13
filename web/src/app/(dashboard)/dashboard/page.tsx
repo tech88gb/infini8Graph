@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi, googleAdsApi, adsApi } from '@/lib/api';
+import { analyticsQueryOptions, audienceQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import {
@@ -551,13 +552,31 @@ export default function DashboardPage() {
         startDate: defaultStart.toISOString().split('T')[0],
         endDate: defaultEnd.toISOString().split('T')[0]
     });
+    const [showCrossPlatformWidgets, setShowCrossPlatformWidgets] = useState(false);
+
+    useEffect(() => {
+        setShowCrossPlatformWidgets(false);
+        const timer = window.setTimeout(() => setShowCrossPlatformWidgets(true), 600);
+        return () => window.clearTimeout(timer);
+    }, [activeAccountId, dateRange.startDate, dateRange.endDate]);
 
     const { data, isLoading, error, refetch, isFetching } = useQuery({
         queryKey: ['overview', activeAccountId, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             const res = await instagramApi.getOverview(dateRange.startDate, dateRange.endDate);
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
+    });
+
+    const { data: audienceData, isFetching: isAudienceFetching } = useQuery({
+        queryKey: ['overview-audience', activeAccountId, dateRange.startDate, dateRange.endDate],
+        queryFn: async () => {
+            const res = await instagramApi.getOverviewAudience(dateRange.startDate, dateRange.endDate);
+            return res.data.data;
+        },
+        enabled: !isLoading && !error,
+        ...audienceQueryOptions
     });
 
     if (isLoading) {
@@ -588,8 +607,8 @@ export default function DashboardPage() {
     const metrics = data?.metrics || {};
     const profile = data?.profile || {};
     const recentPosts = data?.recentPosts || [];
-    const demographics = data?.demographics || {};
-    const audienceInsights = data?.audienceInsights || {};
+    const demographics = audienceData?.demographics || {};
+    const audienceInsights = audienceData?.audienceInsights || {};
 
     const chartData = recentPosts.slice(0, 10).reverse().map((post: any) => ({
         name: new Date(post.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -782,6 +801,12 @@ export default function DashboardPage() {
                         </div>
                     </div>
                 </SectionCard>
+
+                {isAudienceFetching && (
+                    <SectionCard title="Audience Snapshot" subtitle="Loading secondary audience insights...">
+                        <p className="text-muted" style={{ fontSize: 12 }}>Loading audience demographics and follower activity.</p>
+                    </SectionCard>
+                )}
 
                 {(audienceInsights.topCountry || audienceInsights.topCity || audienceInsights.topGenderAge || audienceInsights.peakFollowerHours?.length > 0) && (
                     <SectionCard title="Audience Snapshot" subtitle="Fast read on where your audience is and when they are active">
@@ -1015,8 +1040,8 @@ export default function DashboardPage() {
             </div> {/* END SOCIAL MEDIA WIDGET */}
 
             {/* PAID ADS WIDGETS */}
-            <MetaAdsWidget />
-            <GoogleAdsWidget />
+            {showCrossPlatformWidgets && <MetaAdsWidget />}
+            {showCrossPlatformWidgets && <GoogleAdsWidget />}
 
         </div>
     );

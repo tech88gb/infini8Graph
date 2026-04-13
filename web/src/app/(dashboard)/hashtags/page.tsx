@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import { Hash, Heart, BarChart3, HelpCircle, Star, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -121,7 +122,8 @@ export default function HashtagsPage() {
         queryFn: async () => {
             const res = await instagramApi.getHashtags(dateRange.startDate, dateRange.endDate);
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {

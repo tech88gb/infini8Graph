@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import {
     Zap, TrendingUp, Bookmark, Clock, Award, ExternalLink,
@@ -325,7 +326,8 @@ export default function ContentIntelligencePage() {
         queryFn: async () => {
             const res = await instagramApi.getContentIntelligence(dateRange.startDate, dateRange.endDate);
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {

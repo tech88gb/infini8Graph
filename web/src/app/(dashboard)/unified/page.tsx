@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import {
     Users, Heart, Eye, Bookmark, Image, RefreshCw, Instagram,
     Globe, HelpCircle, Clock, LayoutDashboard, BarChart3, TrendingUp
@@ -154,7 +155,8 @@ export default function UnifiedDashboardPage() {
         queryFn: async () => {
             const res = await instagramApi.getUnifiedOverview(dateRange.startDate, dateRange.endDate);
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {

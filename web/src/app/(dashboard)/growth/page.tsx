@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import { TrendingUp, TrendingDown, Users, Activity, HelpCircle, Eye, UserPlus, Target, RefreshCw } from 'lucide-react';
 import {
@@ -124,7 +125,8 @@ export default function GrowthPage() {
         queryFn: async () => {
             const res = await instagramApi.getGrowth(dateRange.startDate, dateRange.endDate);
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {

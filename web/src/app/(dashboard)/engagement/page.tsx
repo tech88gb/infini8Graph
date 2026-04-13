@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
+import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
 import { useAuth } from '@/lib/auth';
 import {
     Heart, MessageCircle, Eye, Bookmark, Share2, Image,
@@ -246,19 +247,31 @@ function BenchmarkIndicator({ value, benchmark, unit = '%', label }: {
 
 export default function EngagementPage() {
     const { activeAccountId } = useAuth();
+    const POSTS_PER_PAGE = 12;
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
+    const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([null]);
     const [dateRange, setDateRange] = useState({
         startDate: defaultStart.toISOString().split('T')[0],
         endDate: defaultEnd.toISOString().split('T')[0]
     });
+    const currentCursor = cursorHistory[cursorHistory.length - 1] || undefined;
+    const currentPage = cursorHistory.length;
+
+    useEffect(() => {
+        setCursorHistory([null]);
+    }, [activeAccountId, dateRange.startDate, dateRange.endDate]);
+
     const { data, isLoading, error, refetch, isFetching } = useQuery({
-        queryKey: ['posts', activeAccountId, dateRange.startDate, dateRange.endDate],
+        queryKey: ['posts', activeAccountId, dateRange.startDate, dateRange.endDate, currentCursor, POSTS_PER_PAGE],
         queryFn: async () => {
-            const res = await instagramApi.getPosts(50, dateRange.startDate, dateRange.endDate);
+            const res = await instagramApi.getPosts(POSTS_PER_PAGE, dateRange.startDate, dateRange.endDate, false, {
+                after: currentCursor
+            });
             return res.data.data;
-        }
+        },
+        ...analyticsQueryOptions
     });
 
     if (isLoading) {
@@ -293,6 +306,7 @@ export default function EngagementPage() {
     const formatEfficiency = data?.formatEfficiency || [];
     const stories = data?.stories?.stories || [];
     const storySummary = data?.stories?.summary || {};
+    const pagination = data?.pagination || {};
 
     // Content type breakdown
     const contentTypes = posts.reduce((acc: any, post: any) => {
@@ -603,7 +617,7 @@ export default function EngagementPage() {
             {/* Posts Table */}
             <SectionCard
                 title={`All Posts (${posts.length})`}
-                subtitle="Detailed metrics for each post — sorted by most recent"
+                subtitle={`Detailed metrics for the current server-fetched page (${currentPage})`}
                 timePeriod={posts.length > 0 ? `${new Date(posts[posts.length - 1]?.timestamp).toLocaleDateString()} — ${new Date(posts[0]?.timestamp).toLocaleDateString()}` : undefined}
             >
                 <div style={{ overflowX: 'auto' }}>
@@ -622,7 +636,7 @@ export default function EngagementPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {posts.slice(0, 20).map((post: any) => (
+                            {posts.map((post: any) => (
                                 <tr key={post.id}>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -654,6 +668,29 @@ export default function EngagementPage() {
                             ))}
                         </tbody>
                     </table>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 18 }}>
+                    <button
+                        onClick={() => setCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                        className="btn btn-secondary"
+                        disabled={cursorHistory.length === 1 || isFetching}
+                    >
+                        <ChevronLeft size={16} /> Previous Page
+                    </button>
+                    <span className="text-muted" style={{ fontSize: 13 }}>
+                        Page {currentPage}
+                    </span>
+                    <button
+                        onClick={() => {
+                            if (pagination.nextCursor) {
+                                setCursorHistory((history) => [...history, pagination.nextCursor]);
+                            }
+                        }}
+                        className="btn btn-secondary"
+                        disabled={!pagination.hasNextPage || isFetching}
+                    >
+                        Next Page <ChevronRight size={16} />
+                    </button>
                 </div>
             </SectionCard>
         </div>

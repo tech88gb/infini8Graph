@@ -34,6 +34,18 @@ export async function getOverview(req, res) {
     }
 }
 
+export async function getOverviewAudience(req, res) {
+    try {
+        const { startDate, endDate } = req.query;
+        const analytics = await getAnalyticsService(req);
+        const data = await analytics.getOverviewAudience(startDate, endDate);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Overview audience error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
 export async function getGrowth(req, res) {
     try {
         const { startDate, endDate } = req.query;
@@ -87,7 +99,7 @@ export async function getReels(req, res) {
 
 export async function getPosts(req, res) {
     try {
-        const { limit = 50, includeCollabs = 'false' } = req.query;
+        const { limit = 12, includeCollabs = 'false', after } = req.query;
         const analytics = await getAnalyticsService(req);
         
         // Don't include collabs since webhooks don't work for them
@@ -119,7 +131,9 @@ export async function getPosts(req, res) {
         
         // Otherwise use the standard analytics method
         const { startDate, endDate } = req.query;
-        const data = await analytics.getPostsAnalytics(parseInt(limit), startDate, endDate);
+        const data = await analytics.getPostsAnalytics(parseInt(limit, 10), startDate, endDate, {
+            after
+        });
         res.json({ success: true, data });
     } catch (error) {
         console.error('Posts error:', error);
@@ -266,6 +280,7 @@ export async function getUnifiedOverview(req, res) {
 
 export default {
     getOverview,
+    getOverviewAudience,
     getGrowth,
     getBestTime,
     getHashtags,
