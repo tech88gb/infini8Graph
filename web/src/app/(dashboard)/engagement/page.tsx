@@ -272,6 +272,8 @@ export default function EngagementPage() {
 
     const posts = data?.all || [];
     const summary = data?.summary || {};
+    const stories = data?.stories?.stories || [];
+    const storySummary = data?.stories?.summary || {};
 
     // Content type breakdown
     const contentTypes = posts.reduce((acc: any, post: any) => {
@@ -319,15 +321,6 @@ export default function EngagementPage() {
     const engagementRate = summary.avgEngagement && summary.totalReach
         ? (summary.avgEngagement / (summary.avgReach || 1) * 100)
         : 0;
-
-    // Story engagement metrics (simulated - would come from API in real implementation)
-    const storyMetrics = {
-        tapsForward: 245,
-        tapsBack: 89,
-        exits: 67,
-        replies: 34,
-        retentionRate: 78
-    };
 
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -500,56 +493,57 @@ export default function EngagementPage() {
             {/* Story Engagement Metrics */}
             <SectionCard
                 title="Story Engagement"
-                subtitle="How people interact with your Stories"
+                subtitle="Real metrics from your currently active stories"
                 timePeriod="Last 24 hours"
             >
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                            <ChevronRight size={16} style={{ color: 'var(--muted)' }} />
-                            <span className="text-muted" style={{ fontSize: 11 }}>Taps Forward</span>
+                {storySummary.activeStories > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                                <Eye size={16} style={{ color: 'var(--muted)' }} />
+                                <span className="text-muted" style={{ fontSize: 11 }}>Story Reach</span>
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 700 }}>{storySummary.totalReach || 0}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>unique accounts</div>
                         </div>
-                        <div style={{ fontSize: 20, fontWeight: 700 }}>{storyMetrics.tapsForward}</div>
-                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>Skipped to next</div>
-                        <InfoTooltip text="Times users tapped to skip to the next story. High numbers may indicate story is too long or not engaging enough." />
-                    </div>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                            <ChevronLeft size={16} style={{ color: 'var(--muted)' }} />
-                            <span className="text-muted" style={{ fontSize: 11 }}>Taps Back</span>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                                <ChevronRight size={16} style={{ color: 'var(--muted)' }} />
+                                <span className="text-muted" style={{ fontSize: 11 }}>Taps Forward</span>
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 700 }}>{storySummary.totalTapsForward || 0}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>skipped ahead</div>
                         </div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}>{storyMetrics.tapsBack}</div>
-                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>Rewatched</div>
-                        <InfoTooltip text="Times users tapped back to re-watch. High numbers indicate engaging content worth rewatching!" />
-                    </div>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                            <LogOut size={16} style={{ color: 'var(--muted)' }} />
-                            <span className="text-muted" style={{ fontSize: 11 }}>Exits</span>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                                <ChevronLeft size={16} style={{ color: 'var(--muted)' }} />
+                                <span className="text-muted" style={{ fontSize: 11 }}>Taps Back</span>
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}>{storySummary.totalTapsBack || 0}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>rewatched</div>
                         </div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}>{storyMetrics.exits}</div>
-                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>Left stories</div>
-                        <InfoTooltip text="Times users left your stories. Lower is better - means people want to watch more." />
-                    </div>
-                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                            <MessageCircle size={16} style={{ color: 'var(--muted)' }} />
-                            <span className="text-muted" style={{ fontSize: 11 }}>Replies</span>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                                <LogOut size={16} style={{ color: 'var(--muted)' }} />
+                                <span className="text-muted" style={{ fontSize: 11 }}>Exits</span>
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}>{storySummary.totalExits || 0}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>left stories</div>
                         </div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--primary)' }}>{storyMetrics.replies}</div>
-                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>DM responses</div>
-                        <InfoTooltip text="Direct message replies to your stories. High engagement signal - these are your most engaged followers!" />
-                    </div>
-                    <div style={{ padding: 16, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)', borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                            <TrendingUp size={16} style={{ color: 'var(--muted)' }} />
-                            <span className="text-muted" style={{ fontSize: 11 }}>Retention</span>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                                <MessageCircle size={16} style={{ color: 'var(--muted)' }} />
+                                <span className="text-muted" style={{ fontSize: 11 }}>Replies</span>
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--primary)' }}>{storySummary.totalReplies || 0}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>DM responses</div>
                         </div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}>{storyMetrics.retentionRate}%</div>
-                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>Watched fully</div>
-                        <InfoTooltip text="Percentage of viewers who watched your stories without exiting. Higher is better! Industry average is around 70%." />
                     </div>
-                </div>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
+                        No active stories were returned by Meta for this account.
+                    </div>
+                )}
             </SectionCard>
 
             {/* Posts Table */}

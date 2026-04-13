@@ -10,6 +10,7 @@ const CACHE_TTL = {
     growth: parseInt(process.env.CACHE_TTL_GROWTH) || 600,
     posts: parseInt(process.env.CACHE_TTL_POSTS) || 300,
     reels: parseInt(process.env.CACHE_TTL_REELS) || 300,
+    stories: 300,
     best_time: 600,
     hashtags: 600
 };
@@ -136,53 +137,13 @@ class AnalyticsService {
         let demographics = {};
         let dailyMetrics = [];
         const fetchLimit = (startDate || endDate) ? 200 : 100;
-        const todayStr = new Date().toISOString().split('T')[0];
-        const startStr = startDate || '0000-00-00';
-        const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
         const overviewTasks = [
             async () => {
                 const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit);
-                if (!startDate && !endDate) return fetchedMedia;
-                return fetchedMedia.filter((post) => {
-                    const postDateStr = (post.timestamp || '').split('T')[0];
-                    return postDateStr >= startStr && postDateStr <= endStr;
-                });
+                return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
             async () => this.instagram.getFollowerDemographics(),
-            async () => {
-                let since = null;
-                let until = null;
-
-                if (startDate) since = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
-                if (endDate) {
-                    const end = new Date(`${endDate}T23:59:59Z`);
-                    until = Math.floor(end.getTime() / 1000);
-                }
-
-                const insightsRes = await this.instagram.getAccountInsights(
-                    'day',
-                    ['follower_count', 'impressions', 'reach', 'profile_views'],
-                    since,
-                    until
-                );
-
-                if (!insightsRes?.data) return [];
-
-                const dailyData = {};
-                insightsRes.data.forEach((metric) => {
-                    const metricName = metric.name;
-                    if (!Array.isArray(metric.values)) return;
-                    metric.values.forEach((val) => {
-                        const date = (val.end_time || '').split('T')[0];
-                        if (!date) return;
-                        if (!dailyData[date]) dailyData[date] = { date };
-                        dailyData[date][metricName] = val.value || 0;
-                    });
-                });
-
-                return Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
-            }
+            async () => this.getDailyAccountMetrics(startDate, endDate)
         ];
 
         const [mediaResult, demographicsResult, dailyMetricsResult] = await runWithConcurrency(overviewTasks, 2);
@@ -273,18 +234,8 @@ class AnalyticsService {
         // Fetch more to ensure we have enough after filtering
         const fetchLimit = (startDate || endDate) ? 200 : 100;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-
-        // Filter by date range
-        if (startDate || endDate) {
-            const startStr = startDate ? startDate : '0000-00-00';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-            media = media.filter(post => {
-                const postDateStr = (post.timestamp || "").split('T')[0];
-                return postDateStr >= startStr && postDateStr <= endStr;
-            });
-        }
+        media = this.filterMediaByDate(media, startDate, endDate);
+        const accountMetrics = await this.getDailyAccountMetrics(startDate, endDate);
 
         // Group posts by date for growth analysis
         const postsByDate = {};
@@ -340,6 +291,21 @@ class AnalyticsService {
             currentFollowing: profile.follows_count,
             totalPosts: profile.media_count,
             growthData,
+            accountMetrics,
+            accountSummary: {
+                totalReach: accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0),
+                totalImpressions: accountMetrics.reduce((sum, day) => sum + Number(day.impressions || 0), 0),
+                totalProfileViews: accountMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0),
+                avgDailyReach: accountMetrics.length > 0
+                    ? Math.round(accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0) / accountMetrics.length)
+                    : 0,
+                avgDailyImpressions: accountMetrics.length > 0
+                    ? Math.round(accountMetrics.reduce((sum, day) => sum + Number(day.impressions || 0), 0) / accountMetrics.length)
+                    : 0,
+                avgDailyProfileViews: accountMetrics.length > 0
+                    ? Math.round(accountMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0) / accountMetrics.length)
+                    : 0,
+            },
             weeklyStats: {
                 postsThisWeek: thisWeekPosts.length,
                 engagementThisWeek: thisWeekEngagement,
@@ -459,24 +425,17 @@ class AnalyticsService {
         // Fetch more to ensure we have enough after filtering
         const fetchLimit = (startDate || endDate) ? 200 : 100;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-
-        // Filter by date range
-        if (startDate || endDate) {
-            const startStr = startDate ? startDate : '0000-00-00';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-            media = media.filter(post => {
-                const postDateStr = (post.timestamp || "").split('T')[0];
-                return postDateStr >= startStr && postDateStr <= endStr;
-            });
-        }
+        media = this.filterMediaByDate(media, startDate, endDate);
 
         // Extract hashtags from captions
         const hashtagStats = {};
+        const overallAvgEngagement = media.length > 0
+            ? media.reduce((sum, post) => sum + post.engagement, 0) / media.length
+            : 0;
 
         media.forEach(post => {
             const hashtags = (post.caption || '').match(/#\w+/g) || [];
+            const attributionWeight = hashtags.length > 0 ? 1 / hashtags.length : 0;
             hashtags.forEach(tag => {
                 const normalizedTag = tag.toLowerCase();
                 if (!hashtagStats[normalizedTag]) {
@@ -486,6 +445,9 @@ class AnalyticsService {
                         totalEngagement: 0,
                         totalLikes: 0,
                         totalComments: 0,
+                        totalAttributedEngagement: 0,
+                        totalAttributedLikes: 0,
+                        totalAttributedComments: 0,
                         posts: []
                     };
                 }
@@ -493,6 +455,9 @@ class AnalyticsService {
                 hashtagStats[normalizedTag].totalEngagement += post.engagement;
                 hashtagStats[normalizedTag].totalLikes += post.likeCount;
                 hashtagStats[normalizedTag].totalComments += post.commentsCount;
+                hashtagStats[normalizedTag].totalAttributedEngagement += post.engagement * attributionWeight;
+                hashtagStats[normalizedTag].totalAttributedLikes += post.likeCount * attributionWeight;
+                hashtagStats[normalizedTag].totalAttributedComments += post.commentsCount * attributionWeight;
                 hashtagStats[normalizedTag].posts.push(post.id);
             });
         });
@@ -501,9 +466,12 @@ class AnalyticsService {
         const hashtagList = Object.values(hashtagStats)
             .map(h => ({
                 ...h,
-                avgEngagement: Math.round(h.totalEngagement / h.usageCount),
-                avgLikes: Math.round(h.totalLikes / h.usageCount),
-                avgComments: Math.round(h.totalComments / h.usageCount)
+                avgEngagement: Math.round(h.totalAttributedEngagement / h.usageCount),
+                avgLikes: Math.round(h.totalAttributedLikes / h.usageCount),
+                avgComments: Math.round(h.totalAttributedComments / h.usageCount),
+                engagementLift: overallAvgEngagement > 0
+                    ? Number((((h.totalAttributedEngagement / h.usageCount) / overallAvgEngagement - 1) * 100).toFixed(1))
+                    : 0
             }))
             .sort((a, b) => b.avgEngagement - a.avgEngagement);
 
@@ -794,19 +762,8 @@ class AnalyticsService {
 
         // Fetch more to ensure we have enough after filtering
         const fetchLimit = (startDate || endDate) ? 200 : 100;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-
-        // Filter by date range
-        if (startDate || endDate) {
-            const startStr = startDate ? startDate : '0000-00-00';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-            media = media.filter(post => {
-                const postDateStr = (post.timestamp || "").split('T')[0];
-                return postDateStr >= startStr && postDateStr <= endStr;
-            });
-        }
+        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, { includeDetailedVideoInsights: true });
+        media = this.filterMediaByDate(media, startDate, endDate);
 
         // Filter for reels only
         const reels = media.filter(m => m.mediaType === 'REEL' || m.mediaType === 'VIDEO');
@@ -819,7 +776,8 @@ class AnalyticsService {
             totalLikes: reels.reduce((sum, r) => sum + r.likeCount, 0),
             totalComments: reels.reduce((sum, r) => sum + r.commentsCount, 0),
             totalImpressions: reels.reduce((sum, r) => sum + r.impressions, 0),
-            totalReach: reels.reduce((sum, r) => sum + r.reach, 0)
+            totalReach: reels.reduce((sum, r) => sum + r.reach, 0),
+            totalPlays: reels.reduce((sum, r) => sum + (r.plays || 0), 0)
         };
 
         const nonReelStats = {
@@ -838,6 +796,13 @@ class AnalyticsService {
                 engagement: r.engagement,
                 impressions: r.impressions,
                 reach: r.reach,
+                saved: r.saved || 0,
+                shares: r.shares || 0,
+                plays: r.plays || 0,
+                totalInteractions: r.totalInteractions || r.engagement,
+                engagementRate: r.reach > 0 ? Number(((r.engagement / r.reach) * 100).toFixed(2)) : 0,
+                saveRate: r.reach > 0 ? Number((((r.saved || 0) / r.reach) * 100).toFixed(2)) : 0,
+                playRate: r.reach > 0 && (r.plays || 0) > 0 ? Number((((r.plays || 0) / r.reach) * 100).toFixed(2)) : 0,
                 timestamp: r.timestamp
             })),
             summary: {
@@ -850,6 +815,18 @@ class AnalyticsService {
                     : 0,
                 avgComments: reels.length > 0
                     ? Math.round(reelStats.totalComments / reels.length)
+                    : 0,
+                avgPlays: reels.length > 0
+                    ? Math.round(reelStats.totalPlays / reels.length)
+                    : 0,
+                avgEngagementRate: reels.length > 0
+                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? (r.engagement / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                    : 0,
+                avgSaveRate: reels.length > 0
+                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.saved || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                    : 0,
+                avgPlayRate: reels.length > 0
+                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 && (r.plays || 0) > 0 ? ((r.plays || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
                     : 0
             },
             comparison: {
@@ -879,18 +856,8 @@ class AnalyticsService {
         // Fetch more to ensure we have enough after filtering
         const fetchLimit = (startDate || endDate) ? 200 : 100;
         let media = await this.instagram.getAllMediaWithInsights(fetchLimit);
-
-        // Filter by date range
-        if (startDate || endDate) {
-            const startStr = startDate ? startDate : '0000-00-00';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const endStr = endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr;
-
-            media = media.filter(post => {
-                const postDateStr = (post.timestamp || "").split('T')[0];
-                return postDateStr >= startStr && postDateStr <= endStr;
-            });
-        }
+        media = this.filterMediaByDate(media, startDate, endDate);
+        const stories = await this.getStoryAnalytics();
 
         // Limit results to the requested amount after filtering
         media = media.slice(0, limit);
@@ -931,6 +898,7 @@ class AnalyticsService {
                     ? Math.round(media.reduce((sum, p) => sum + p.reach, 0) / media.length)
                     : 0
             },
+            stories,
             lastUpdated: new Date().toISOString()
         };
 
@@ -1346,6 +1314,81 @@ class AnalyticsService {
             default:
                 throw new Error(`Unsupported export format: ${format}`);
         }
+    }
+
+    clampDateWindow(startDate = null, endDate = null) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        return {
+            startStr: startDate || '0000-00-00',
+            endStr: endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr
+        };
+    }
+
+    filterMediaByDate(media = [], startDate = null, endDate = null) {
+        if (!startDate && !endDate) return media;
+
+        const { startStr, endStr } = this.clampDateWindow(startDate, endDate);
+
+        return media.filter((post) => {
+            const postDateStr = (post.timestamp || '').split('T')[0];
+            return postDateStr >= startStr && postDateStr <= endStr;
+        });
+    }
+
+    async getDailyAccountMetrics(startDate = null, endDate = null) {
+        let since = null;
+        let until = null;
+
+        if (startDate) since = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
+        if (endDate) {
+            const end = new Date(`${endDate}T23:59:59Z`);
+            until = Math.floor(end.getTime() / 1000);
+        }
+
+        const insightsRes = await this.instagram.getAccountInsights(
+            'day',
+            ['follower_count', 'impressions', 'reach', 'profile_views'],
+            since,
+            until
+        );
+
+        if (!insightsRes?.data) return [];
+
+        const dailyData = {};
+        insightsRes.data.forEach((metric) => {
+            if (!Array.isArray(metric.values)) return;
+            metric.values.forEach((val) => {
+                const date = (val.end_time || '').split('T')[0];
+                if (!date) return;
+                if (!dailyData[date]) dailyData[date] = { date };
+                dailyData[date][metric.name] = val.value || 0;
+            });
+        });
+
+        return Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    async getStoryAnalytics() {
+        const cached = await this.checkCache('stories', 'current');
+        if (cached) return cached;
+
+        const stories = await this.instagram.getActiveStoriesWithInsights();
+        const analytics = {
+            stories: stories.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
+            summary: {
+                activeStories: stories.length,
+                totalImpressions: stories.reduce((sum, story) => sum + (story.impressions || 0), 0),
+                totalReach: stories.reduce((sum, story) => sum + (story.reach || 0), 0),
+                totalReplies: stories.reduce((sum, story) => sum + (story.replies || 0), 0),
+                totalTapsForward: stories.reduce((sum, story) => sum + (story.tapsForward || 0), 0),
+                totalTapsBack: stories.reduce((sum, story) => sum + (story.tapsBack || 0), 0),
+                totalExits: stories.reduce((sum, story) => sum + (story.exits || 0), 0),
+            },
+            lastUpdated: new Date().toISOString()
+        };
+
+        await this.updateCache('stories', 'current', analytics);
+        return analytics;
     }
 }
 

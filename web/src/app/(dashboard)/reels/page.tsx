@@ -115,6 +115,10 @@ export default function ReelsPage() {
     const reels = data?.reels || [];
     const summary = data?.summary || {};
     const comparison = data?.comparison || {};
+    const playsAvailable = reels.some((reel: any) => (reel.plays || 0) > 0);
+    const diagnosticReels = [...reels]
+        .sort((a: any, b: any) => (b.reach || 0) - (a.reach || 0))
+        .slice(0, 8);
 
     // Chart data for engagement
     const chartData = reels.slice(0, 10).map((reel: any, i: number) => ({
@@ -124,15 +128,6 @@ export default function ReelsPage() {
         comments: reel.comments,
         reach: reel.reach || 0
     }));
-
-    // Video retention curve data (simulated based on industry averages)
-    const retentionData = [
-        { point: '0%', viewers: 100, label: 'Start' },
-        { point: '25%', viewers: 75, label: '25% watched' },
-        { point: '50%', viewers: 55, label: '50% watched' },
-        { point: '75%', viewers: 35, label: '75% watched' },
-        { point: '100%', viewers: 20, label: 'Completed' }
-    ];
 
     // Calculate computed metrics
     const viralScore = summary.totalReach && summary.totalEngagement
@@ -257,54 +252,46 @@ export default function ReelsPage() {
                 </div>
             </SectionCard>
 
-            {/* Video Retention Curve */}
+            {/* Playback & intent */}
             <SectionCard
-                title="Video Retention Curve"
-                subtitle="Industry benchmark for where viewers typically drop off"
+                title="Playback & Intent Signals"
+                subtitle="Only real reel metrics returned by Meta are shown here"
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                    <Play size={16} style={{ color: 'var(--muted)' }} />
-                    <span style={{ fontSize: 13 }}>This shows typical viewer retention patterns</span>
-                    <InfoTooltip text="Retention curves show what percentage of viewers are still watching at each point of your video. Steeper drops indicate content that loses attention quickly." />
-                </div>
-                <ResponsiveContainer width="100%" height={250}>
-                    <AreaChart data={retentionData}>
-                        <defs>
-                            <linearGradient id="retentionGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                            </linearGradient>
-                        </defs>
-                        <XAxis dataKey="point" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis
-                            stroke="#9ca3af"
-                            fontSize={11}
-                            tickLine={false}
-                            tickFormatter={(v) => `${v}%`}
-                            domain={[0, 100]}
-                        />
-                        <Tooltip
-                            formatter={(value: any) => [`${value}% viewers`, 'Retention']}
-                            contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
-                        />
-                        <Area
-                            type="monotone"
-                            dataKey="viewers"
-                            stroke="#6366f1"
-                            fill="url(#retentionGrad)"
-                            strokeWidth={2}
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
-                <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 16, padding: '12px 0', background: 'var(--background)', borderRadius: 8 }}>
-                    {retentionData.map((point, i) => (
-                        <div key={i} style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: 18, fontWeight: 600, color: i === 4 ? '#10b981' : 'var(--foreground)' }}>
-                                {point.viewers}%
+                <div style={{ display: 'grid', gridTemplateColumns: playsAvailable ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: 16 }}>
+                    {playsAvailable && (
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Total Plays</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>
+                                {(summary.totalPlays || 0).toLocaleString()}
                             </div>
-                            <div className="text-muted" style={{ fontSize: 11 }}>{point.label}</div>
+                            <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>
+                                Returned by media insights
+                            </div>
                         </div>
-                    ))}
+                    )}
+                    {playsAvailable && (
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Play Rate</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>
+                                {summary.avgPlayRate || 0}%
+                            </div>
+                            <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>Plays divided by reach</div>
+                        </div>
+                    )}
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Save Rate</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                            {summary.avgSaveRate || 0}%
+                        </div>
+                        <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>Saves divided by reach</div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Avg Engagement Rate</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>
+                            {summary.avgEngagementRate || 0}%
+                        </div>
+                        <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>Engagement divided by reach</div>
+                    </div>
                 </div>
             </SectionCard>
 
@@ -324,127 +311,64 @@ export default function ReelsPage() {
             </SectionCard>
 
 
-            {/* ===== VIRAL DISCOVERY — Non-Follower vs Follower Reach (instagram_manage_insights) ===== */}
             <SectionCard
-                title="🔥 Viral Discovery"
-                subtitle="Identifies which Reels are reaching new audiences vs. existing followers"
+                title="Real Reel Diagnostics"
+                subtitle="Top reels ranked by actual reach, plays, saves, and engagement efficiency"
             >
-
-
-                {reels.length > 0 ? (() => {
-                    // Derive non-follower reach from available data
-                    // Instagram provides this via insights: reach breakdown (follower vs non-follower)
-                    // We estimate non-follower ratio from the reel's engagement-to-reach ratio:
-                    // Reels with broader distribution have lower engagement rates (non-followers engage less)
-                    const reelsWithNFR = reels.slice(0, 8).map((reel: any, i: number) => {
-                        const reach = reel.reach || reel.plays || 0;
-                        const engagement = (reel.likes || 0) + (reel.comments || 0) + (reel.saved || 0);
-                        const engRate = reach > 0 ? engagement / reach : 0;
-                        // Non-follower % is inversely related to eng rate (industry insight)
-                        // High eng rate = follower-heavy; low eng rate = wider non-follower spread
-                        const nonFollowerPct = Math.max(10, Math.min(85, Math.round(60 - engRate * 400 + i * 3)));
-                        const followerPct = 100 - nonFollowerPct;
-                        const nonFollowerReach = Math.round(reach * nonFollowerPct / 100);
-                        const followerReach = reach - nonFollowerReach;
-                        const virality = nonFollowerPct >= 60 ? 'viral' : nonFollowerPct >= 35 ? 'growing' : 'contained';
-                        return { ...reel, reach, engagement, nonFollowerPct, followerPct, nonFollowerReach, followerReach, virality };
-                    }).sort((a: any, b: any) => b.nonFollowerPct - a.nonFollowerPct);
-
-                    const viralReels   = reelsWithNFR.filter((r: any) => r.virality === 'viral').length;
-                    const growingReels = reelsWithNFR.filter((r: any) => r.virality === 'growing').length;
-                    const totalNFR = reelsWithNFR.reduce((s: number, r: any) => s + r.nonFollowerReach, 0);
-
-                    const viralityColor = (v: string) => v === 'viral' ? '#ec4899' : v === 'growing' ? '#f59e0b' : '#10b981';
-                    const viralityLabel = (v: string) => v === 'viral' ? 'Viral' : v === 'growing' ? 'Growing' : 'Contained';
-
-                    return (
-                        <div>
-                            {/* Summary bar */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-                                {[
-                                    { label: 'Viral', value: viralReels, color: '#ec4899', icon: Flame, tip: 'Reels reaching 60%+ non-followers.' },
-                                    { label: 'Growing', value: growingReels, color: '#f59e0b', icon: ArrowUpRight, tip: 'Reels reaching 35–59% non-followers.' },
-                                    { label: 'Non-Follower Reach', value: totalNFR.toLocaleString(), color: '#6366f1', icon: Users, tip: 'Unique non-followers reached.' },
-                                    { label: 'Avg Breakdown', value: `${Math.round(reelsWithNFR.reduce((s: number, r: any) => s + (r.nonFollowerPct || 0), 0) / (reelsWithNFR.length || 1))}% NF`, color: '#10b981', icon: Zap, tip: 'Average non-follower percentage.' },
-                                ].map((m: any, i: number) => (
-                                    <div key={i} style={{
-                                        padding: '12px 16px', background: 'var(--card-raised)', borderRadius: 12,
-                                        border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12
-                                    }}>
-                                        <div style={{ width: 32, height: 32, borderRadius: 8, background: `${m.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <m.icon size={16} style={{ color: m.color }} />
+                {diagnosticReels.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {diagnosticReels.map((reel: any, i: number) => (
+                            <div key={reel.id || i} style={{
+                                padding: '14px',
+                                borderRadius: 12,
+                                background: 'var(--card-raised)',
+                                border: '1px solid var(--border)'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                                    <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--background)', flexShrink: 0, overflow: 'hidden' }}>
+                                        {reel.thumbnail ? <img src={reel.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Film size={20} style={{ color: 'var(--muted)', margin: 10 }} />}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 2 }}>
+                                            {(() => {
+                                                const text = reel.caption || reel.title || reel.name;
+                                                if (text) return text.length > 60 ? `${text.substring(0, 60)}…` : text;
+                                                return new Date(reel.timestamp || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                            })()}
                                         </div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 10 }}>
+                                            <span>{(reel.reach || 0).toLocaleString()} reach</span>
+                                            <span>{(reel.likes || 0).toLocaleString()} likes</span>
+                                            {playsAvailable && <span>{(reel.plays || 0).toLocaleString()} plays</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: playsAvailable ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 12 }}>
+                                    <div>
+                                        <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Engagement Rate</div>
+                                        <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{reel.engagementRate || 0}%</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Save Rate</div>
+                                        <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>{reel.saveRate || 0}%</div>
+                                    </div>
+                                    {playsAvailable && (
                                         <div>
-                                            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{m.label}</div>
-                                            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--foreground)' }}>{m.value}</div>
+                                            <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Play Rate</div>
+                                            <div style={{ fontSize: 16, fontWeight: 700, color: '#ec4899' }}>{reel.playRate || 0}%</div>
                                         </div>
+                                    )}
+                                    <div>
+                                        <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>Saves</div>
+                                        <div style={{ fontSize: 16, fontWeight: 700, color: '#6366f1' }}>{reel.saved || 0}</div>
                                     </div>
-                                ))}
+                                </div>
                             </div>
-
-                            {/* Per-reel breakdown */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                {reelsWithNFR.map((reel: any, i: number) => (
-                                    <div key={reel.id || i} style={{
-                                        padding: '14px', borderRadius: 12,
-                                        background: 'var(--card-raised)',
-                                        border: '1px solid var(--border)',
-                                        transition: 'border-color 0.2s',
-                                        position: 'relative'
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                                            <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--background)', flexShrink: 0, overflow: 'hidden' }}>
-                                                {reel.thumbnail ? <img src={reel.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Film size={20} style={{ color: 'var(--muted)', margin: 10 }} />}
-                                            </div>
-
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 2 }}>
-                                                    {(() => {
-                                                        const text = reel.caption || reel.title || reel.name;
-                                                        if (text) return text.length > 60 ? text.substring(0, 60) + '…' : text;
-                                                        return new Date(reel.timestamp || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                                                    })()}
-                                                </div>
-                                                <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 10 }}>
-                                                    <span>{(reel.reach || 0).toLocaleString()} views</span>
-                                                    <span>{(reel.likes || 0).toLocaleString()} likes</span>
-                                                </div>
-                                            </div>
-
-                                            <div style={{
-                                                fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 6,
-                                                background: `${viralityColor(reel.virality)}15`, color: viralityColor(reel.virality),
-                                                textTransform: 'uppercase', letterSpacing: '0.05em'
-                                            }}>{viralityLabel(reel.virality)}</div>
-                                        </div>
-
-                                        <div style={{ position: 'relative', height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden', display: 'flex' }}>
-                                            <div style={{ width: `${reel.followerPct}%`, background: '#6366f1', opacity: 0.8 }} />
-                                            <div style={{ width: `${reel.nonFollowerPct}%`, background: '#ec4899' }} />
-                                        </div>
-                                        
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
-                                                <span style={{ color: '#6366f1', opacity: 0.8 }}>●</span> Followers: {reel.followerPct}%
-                                            </span>
-                                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
-                                                <span style={{ color: '#ec4899' }}>●</span> Non-Followers: {reel.nonFollowerPct}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div style={{ marginTop: 20, textAlign: 'center' }}>
-                                <p style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
-                                    Insights derived from reel distribution and engagement ratios.
-                                </p>
-                            </div>
-                        </div>
-                    );
-                })() : (
+                        ))}
+                    </div>
+                ) : (
                     <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>
-                        <Users size={24} style={{ margin: '0 auto 12px' }} />
+                        <Film size={24} style={{ margin: '0 auto 12px' }} />
                         <p style={{ fontSize: 13 }}>No reels data found. Post Reels on Instagram and check back after 24 hours for insights.</p>
                     </div>
                 )}

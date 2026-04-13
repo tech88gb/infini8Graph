@@ -3,11 +3,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
-import { Hash, TrendingUp, Heart, BarChart3, HelpCircle, Star, Repeat, RefreshCw } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Hash, Heart, BarChart3, HelpCircle, Star, RefreshCw } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
-
-const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -109,7 +107,6 @@ function HashtagTag({ tag, engagement, color = 'primary' }: { tag: string; engag
 // ==================== MAIN PAGE ====================
 
 export default function HashtagsPage() {
-    const [activeView, setActiveView] = useState<'performance' | 'usage'>('performance');
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
@@ -160,7 +157,7 @@ export default function HashtagsPage() {
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <div>
                     <h1 className="page-title">Hashtag Analytics</h1>
-                    <p className="page-subtitle">Discover which hashtags drive the most engagement</p>
+                    <p className="page-subtitle">Weighted hashtag attribution based on real post performance</p>
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
@@ -191,7 +188,7 @@ export default function HashtagsPage() {
                     value={topPerforming[0]?.avgEngagement?.toLocaleString() || 0}
                     icon={Star}
                     color="#f59e0b"
-                    tooltip="Highest average engagement from a single hashtag"
+                    tooltip="Highest weighted average engagement attributed to a hashtag across the posts where it appeared"
                 />
                 <MetricCard
                     label="Posts Analyzed"
@@ -203,37 +200,37 @@ export default function HashtagsPage() {
             </div>
 
             {/* Calculated Insights */}
-            <SectionCard title="Hashtag Insights" subtitle="Key findings from your hashtag usage">
+            <SectionCard title="Hashtag Insights" subtitle="Insights derived from weighted attribution across the posts using each hashtag">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                             <span className="text-muted" style={{ fontSize: 12 }}>Top Hashtag Performance</span>
-                            <InfoTooltip text="How much better your best hashtag performs compared to average" />
+                            <InfoTooltip text="How much better your strongest weighted hashtag performs compared to your hashtag average" />
                         </div>
                         <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{efficiencyScore}%</div>
                         <div className="text-muted" style={{ fontSize: 11 }}>above average</div>
                     </div>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>Average Engagement</span>
-                            <InfoTooltip text="Average engagement across all hashtags used" />
+                            <span className="text-muted" style={{ fontSize: 12 }}>Average Attributed Engagement</span>
+                            <InfoTooltip text="Average weighted engagement attributed to each hashtag based on the posts where it appeared" />
                         </div>
                         <div style={{ fontSize: 24, fontWeight: 700 }}>{Math.round(avgEngagement).toLocaleString()}</div>
-                        <div className="text-muted" style={{ fontSize: 11 }}>per hashtag</div>
+                        <div className="text-muted" style={{ fontSize: 11 }}>weighted per hashtag</div>
                     </div>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <span className="text-muted" style={{ fontSize: 12 }}>Optimal Hashtag Count</span>
-                            <InfoTooltip text="Recommended number of hashtags based on your performance data" />
+                            <span className="text-muted" style={{ fontSize: 12 }}>Top Engagement Lift</span>
+                            <InfoTooltip text="Best positive lift versus your overall post engagement baseline, based on weighted hashtag attribution" />
                         </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>5-10</div>
-                        <div className="text-muted" style={{ fontSize: 11 }}>hashtags per post</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{topPerforming[0]?.engagementLift || 0}%</div>
+                        <div className="text-muted" style={{ fontSize: 11 }}>vs post baseline</div>
                     </div>
                 </div>
             </SectionCard>
 
             {/* Top Performing Hashtags Cloud */}
-            <SectionCard title="Top Performing Hashtags" subtitle="Hashtags that drive the most engagement">
+            <SectionCard title="Top Performing Hashtags" subtitle="Weighted average engagement attributed to each hashtag">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {topPerforming.slice(0, 15).map((h: any, i: number) => (
                         <HashtagTag
@@ -247,7 +244,7 @@ export default function HashtagsPage() {
             </SectionCard>
 
             {/* Chart */}
-            <SectionCard title="Top 10 Hashtags by Engagement" subtitle="Horizontal comparison of hashtag performance">
+            <SectionCard title="Top 10 Hashtags by Attributed Engagement" subtitle="Horizontal comparison using weighted attribution across posts">
                 <ResponsiveContainer width="100%" height={320}>
                     <BarChart data={chartData} layout="vertical">
                         <XAxis type="number" stroke="#9ca3af" fontSize={11} tickLine={false} />
@@ -262,7 +259,7 @@ export default function HashtagsPage() {
                         <Tooltip
                             contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                         />
-                        <Bar dataKey="engagement" fill="#6366f1" radius={[0, 4, 4, 0]} name="Avg Engagement" />
+                        <Bar dataKey="engagement" fill="#6366f1" radius={[0, 4, 4, 0]} name="Attributed Engagement" />
                     </BarChart>
                 </ResponsiveContainer>
             </SectionCard>
@@ -271,7 +268,7 @@ export default function HashtagsPage() {
             {underperforming.length > 0 && (
                 <SectionCard
                     title="Consider Replacing"
-                    subtitle="Hashtags you use often but don't drive much engagement"
+                    subtitle="Frequently used hashtags with weak weighted engagement compared with your other tags"
                 >
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {underperforming.map((h: any) => (
@@ -299,7 +296,7 @@ export default function HashtagsPage() {
 
             {/* Tables */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                <SectionCard title="Top Performing" subtitle="Ranked by average engagement" badge={`${topPerforming.length}`}>
+                <SectionCard title="Top Performing" subtitle="Ranked by weighted average engagement" badge={`${topPerforming.length}`}>
                     <div style={{ overflowX: 'auto' }}>
                         <table className="table">
                             <thead>
@@ -308,6 +305,7 @@ export default function HashtagsPage() {
                                     <th>Hashtag</th>
                                     <th>Uses</th>
                                     <th>Avg Engagement</th>
+                                    <th>Lift</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -332,6 +330,9 @@ export default function HashtagsPage() {
                                         <td style={{ fontWeight: 500, color: 'var(--primary)' }}>{h.tag}</td>
                                         <td>{h.usageCount}</td>
                                         <td style={{ fontWeight: 600 }}>{h.avgEngagement.toLocaleString()}</td>
+                                        <td style={{ color: (h.engagementLift || 0) >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                            {(h.engagementLift || 0) >= 0 ? '+' : ''}{h.engagementLift || 0}%
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

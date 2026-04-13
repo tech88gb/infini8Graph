@@ -38,6 +38,58 @@ class InstagramService {
         }
     }
 
+    getInsightValue(insight) {
+        return (
+            insight?.values?.[0]?.value ??
+            insight?.total_value?.value ??
+            0
+        );
+    }
+
+    extractInsightsMap(insights = []) {
+        const mapped = {};
+
+        if (!Array.isArray(insights)) return mapped;
+
+        for (const insight of insights) {
+            mapped[insight.name] = this.getInsightValue(insight);
+        }
+
+        return mapped;
+    }
+
+    normaliseMediaNode(node, extraInsights = {}) {
+        const baseInsights = this.extractInsightsMap(node?.insights?.data);
+        const mergedInsights = { ...baseInsights, ...extraInsights };
+
+        const likeCount = node?.like_count || 0;
+        const commentsCount = node?.comments_count || 0;
+        const saved = mergedInsights.saved || 0;
+        const shares = mergedInsights.shares || 0;
+        const plays = mergedInsights.plays || mergedInsights.views || 0;
+        const totalInteractions = mergedInsights.total_interactions || 0;
+        const computedEngagement = likeCount + commentsCount + saved + shares;
+
+        return {
+            id: node?.id,
+            mediaType: node?.media_type,
+            caption: node?.caption || '',
+            mediaUrl: node?.media_url,
+            thumbnailUrl: node?.thumbnail_url || node?.media_url,
+            permalink: node?.permalink,
+            timestamp: node?.timestamp,
+            likeCount,
+            commentsCount,
+            impressions: mergedInsights.impressions || 0,
+            reach: mergedInsights.reach || 0,
+            saved,
+            shares,
+            plays,
+            totalInteractions: totalInteractions || computedEngagement,
+            engagement: Math.max(totalInteractions, computedEngagement),
+        };
+    }
+
     /**
      * Get account profile information
      */
@@ -270,22 +322,37 @@ class InstagramService {
      * @param {string} mediaType - 'IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', or 'REEL'
      */
     async getMediaInsights(mediaId, mediaType = 'IMAGE') {
-        let metrics;
+        const metricSets = (mediaType === 'REEL' || mediaType === 'VIDEO')
+            ? [
+                'impressions,reach,saved,shares,plays,total_interactions',
+                'impressions,reach,saved,plays,total_interactions',
+                'impressions,reach,saved,views,total_interactions',
+                'impressions,reach,saved,plays',
+                'impressions,reach,saved'
+            ]
+            : ['impressions,reach,saved'];
 
-        if (mediaType === 'REEL' || mediaType === 'VIDEO') {
-            // Valid metrics for Reels/Video: impressions, reach, plays, saved, likes, comments, shares, total_interactions
-            metrics = 'impressions,reach,saved,plays,total_interactions';
-        } else if (mediaType === 'CAROUSEL_ALBUM') {
-            // Valid metrics for Carousel
-            metrics = 'impressions,reach,saved';
-        } else {
-            // Valid metrics for Images
-            metrics = 'impressions,reach,saved';
+        let lastError = null;
+
+        for (const metrics of metricSets) {
+            try {
+                return await this.apiRequest(`/${mediaId}/insights`, { metric: metrics });
+            } catch (error) {
+                lastError = error;
+                const message = String(error.message || '').toLowerCase();
+                const canRetry =
+                    message.includes('invalid parameter') ||
+                    message.includes('unsupported') ||
+                    message.includes('metric');
+
+                if (!canRetry) {
+                    throw error;
+                }
+            }
         }
 
-        return this.apiRequest(`/${mediaId}/insights`, {
-            metric: metrics
-        });
+        if (lastError) throw lastError;
+        return { data: [] };
     }
 
     /**
@@ -305,65 +372,6 @@ class InstagramService {
         return this.apiRequest(`/${storyId}/insights`, {
             metric: 'impressions,reach,replies,taps_forward,taps_back,exits'
         });
-    }
-
-    /**
-     * Get all media with full insights (batch processing)
-     * @param {number} count - Total number of posts to fetch
-     */
-    async getAllMediaWithInsights(count = 50) {
-        const allMedia = [];
-        let cursor = null;
-        let fetched = 0;
-
-        while (fetched < count) {
-            const batchSize = Math.min(25, count - fetched);
-            const response = await this.getMedia(batchSize, cursor);
-
-            if (!response.data || response.data.length === 0) break;
-
-            // Process each media item to get detailed insights
-            for (const media of response.data) {
-                try {
-                    // Extract insights from the nested structure
-                    const insights = {};
-                    if (media.insights && media.insights.data) {
-                        for (const insight of media.insights.data) {
-                            insights[insight.name] = insight.values[0]?.value || 0;
-                        }
-                    }
-
-                    allMedia.push({
-                        id: media.id,
-                        caption: media.caption || '',
-                        mediaType: media.media_type,
-                        mediaUrl: media.media_url,
-                        thumbnailUrl: media.thumbnail_url,
-                        permalink: media.permalink,
-                        timestamp: media.timestamp,
-                        likeCount: media.like_count || 0,
-                        commentsCount: media.comments_count || 0,
-                        impressions: insights.impressions || 0,
-                        reach: insights.reach || 0,
-                        engagement: insights.engagement || (media.like_count || 0) + (media.comments_count || 0),
-                        saved: insights.saved || 0,
-                        shares: insights.shares || 0
-                    });
-                } catch (err) {
-                    console.warn(`Failed to process media ${media.id}:`, err.message);
-                }
-            }
-
-            fetched += response.data.length;
-
-            if (response.paging?.cursors?.after) {
-                cursor = response.paging.cursors.after;
-            } else {
-                break;
-            }
-        }
-
-        return allMedia;
     }
 
     /**
@@ -408,58 +416,84 @@ class InstagramService {
         }
     }
 
-    /**
-     * Get all media with normalised insight fields.
-     * Used by AnalyticsService.getPostsAnalytics() and anywhere that needs
-     * a consistent camelCase shape with computed engagement.
-     *
-     * Raw API field → normalised field:
-     *   media_type       → mediaType
-     *   media_url        → mediaUrl
-     *   thumbnail_url    → thumbnailUrl
-     *   like_count       → likeCount
-     *   comments_count   → commentsCount
-     *   insights.data[]  → impressions, reach, saved (extracted)
-     *   computed         → engagement = likes + comments + saved
-     */
-    async getAllMediaWithInsights(limit = 50) {
-        const response = await this.getMedia(limit);
-        const rawPosts = response?.data || [];
+    async getAllMediaWithInsights(count = 50, options = {}) {
+        const { includeDetailedVideoInsights = false } = options;
+        const allMedia = [];
+        let cursor = null;
+        let fetched = 0;
 
-        return rawPosts.map(p => {
-            let impressions = 0, reach = 0, saved = 0;
+        while (fetched < count) {
+            const batchSize = Math.min(25, count - fetched);
+            const response = await this.getMedia(batchSize, cursor);
+            const rawMedia = response?.data || [];
 
-            // Insights come back as nested { data: [{ name, values: [{value}] }] }
-            if (Array.isArray(p.insights?.data)) {
-                for (const insight of p.insights.data) {
-                    const val =
-                        insight?.values?.[0]?.value ??    // period-based
-                        insight?.total_value?.value ??    // total_value style
-                        0;
-                    if (insight.name === 'impressions') impressions = val;
-                    else if (insight.name === 'reach')  reach = val;
-                    else if (insight.name === 'saved')  saved = val;
-                }
+            if (rawMedia.length === 0) break;
+
+            const normalisedBatch = rawMedia.map((media) => this.normaliseMediaNode(media));
+
+            if (includeDetailedVideoInsights) {
+                const detailedTasks = normalisedBatch.map(async (media, index) => {
+                    if (media.mediaType !== 'REEL' && media.mediaType !== 'VIDEO') {
+                        return;
+                    }
+
+                    try {
+                        const detailed = await this.getMediaInsights(media.id, media.mediaType);
+                        const detailedInsights = this.extractInsightsMap(detailed?.data);
+                        normalisedBatch[index] = {
+                            ...media,
+                            ...this.normaliseMediaNode(rawMedia[index], detailedInsights),
+                        };
+                    } catch (error) {
+                        console.warn(`Detailed insights unavailable for media ${media.id}:`, error.message);
+                    }
+                });
+
+                await Promise.allSettled(detailedTasks);
             }
 
-            const likeCount     = p.like_count     || 0;
-            const commentsCount = p.comments_count || 0;
-            const engagement    = likeCount + commentsCount + saved;
+            allMedia.push(...normalisedBatch);
+            fetched += rawMedia.length;
+
+            if (response?.paging?.cursors?.after) {
+                cursor = response.paging.cursors.after;
+            } else {
+                break;
+            }
+        }
+
+        return allMedia;
+    }
+
+    async getActiveStoriesWithInsights() {
+        const response = await this.getStories();
+        const rawStories = response?.data || [];
+
+        if (rawStories.length === 0) {
+            return [];
+        }
+
+        const settled = await Promise.allSettled(
+            rawStories.map((story) => this.getStoryInsights(story.id))
+        );
+
+        return rawStories.map((story, index) => {
+            const storyInsights = settled[index].status === 'fulfilled'
+                ? this.extractInsightsMap(settled[index].value?.data)
+                : {};
 
             return {
-                id:            p.id,
-                mediaType:     p.media_type,
-                caption:       p.caption || '',
-                mediaUrl:      p.media_url,
-                thumbnailUrl:  p.thumbnail_url || p.media_url,
-                permalink:     p.permalink,
-                timestamp:     p.timestamp,
-                likeCount,
-                commentsCount,
-                impressions,
-                reach,
-                saved,
-                engagement,
+                id: story.id,
+                mediaType: story.media_type,
+                mediaUrl: story.media_url,
+                thumbnailUrl: story.thumbnail_url || story.media_url,
+                timestamp: story.timestamp,
+                impressions: storyInsights.impressions || 0,
+                reach: storyInsights.reach || 0,
+                replies: storyInsights.replies || 0,
+                tapsForward: storyInsights.taps_forward || 0,
+                tapsBack: storyInsights.taps_back || 0,
+                exits: storyInsights.exits || 0,
             };
         });
     }

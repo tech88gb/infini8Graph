@@ -6,11 +6,9 @@ import { instagramApi } from '@/lib/api';
 import { TrendingUp, TrendingDown, Users, Activity, HelpCircle, Eye, UserPlus, Target, RefreshCw } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-    AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell
+    AreaChart, Area, BarChart, Bar
 } from 'recharts';
 import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
-
-const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b'];
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -141,17 +139,13 @@ export default function GrowthPage() {
     const growth = data || {};
     const growthData = growth.growthData || [];
     const weeklyStats = growth.weeklyStats || {};
+    const accountSummary = growth.accountSummary || {};
+    const accountMetrics = growth.accountMetrics || [];
 
     // Calculate follower acquisition rate
     const followerAcquisitionRate = growth.currentFollowers && weeklyStats.engagementThisWeek
         ? ((weeklyStats.engagementThisWeek / growth.currentFollowers) * 100).toFixed(2)
         : '0';
-
-    // Simulated reach breakdown (would come from API in real implementation)
-    const reachBreakdown = [
-        { name: 'Followers', value: 65 },
-        { name: 'Non-Followers', value: 35 }
-    ];
 
     // Calculate week-over-week changes
     const totalLikesThisWeek = growthData.slice(-7).reduce((sum: number, d: any) => sum + (d.likes || 0), 0);
@@ -263,7 +257,7 @@ export default function GrowthPage() {
             </SectionCard>
 
             {/* Calculated Insights */}
-            <SectionCard title="Growth Insights" subtitle="Advanced metrics for understanding your growth">
+            <SectionCard title="Growth Insights" subtitle="Only account-level metrics returned by Meta are shown here">
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
@@ -282,43 +276,59 @@ export default function GrowthPage() {
                         </div>
                     </div>
 
-                    {/* Reach Breakdown Pie Chart */}
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                             <Eye size={16} style={{ color: 'var(--muted)' }} />
-                            <span style={{ fontSize: 13, fontWeight: 500 }}>Reach Breakdown</span>
-                            <InfoTooltip text="Percentage of reach from followers vs non-followers. High non-follower reach indicates content discovery." />
+                            <span style={{ fontSize: 13, fontWeight: 500 }}>Account Visibility Summary</span>
+                            <InfoTooltip text="These are daily account insights returned by Meta for the selected date range." />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                            <ResponsiveContainer width={100} height={100}>
-                                <PieChart>
-                                    <Pie
-                                        data={reachBreakdown}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={25}
-                                        outerRadius={45}
-                                    >
-                                        {reachBreakdown.map((_, i) => (
-                                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                </PieChart>
-                            </ResponsiveContainer>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                             <div>
-                                {reachBreakdown.map((item, i) => (
-                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                                        <div style={{ width: 10, height: 10, borderRadius: 2, background: COLORS[i] }} />
-                                        <span style={{ fontSize: 12 }}>{item.name}: {item.value}%</span>
-                                    </div>
-                                ))}
+                                <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Total Reach</div>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}>
+                                    {(accountSummary.totalReach || 0).toLocaleString()}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Total Impressions</div>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: '#6366f1' }}>
+                                    {(accountSummary.totalImpressions || 0).toLocaleString()}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Profile Views</div>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: '#f59e0b' }}>
+                                    {(accountSummary.totalProfileViews || 0).toLocaleString()}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </SectionCard>
+
+            {accountMetrics.length > 0 && (
+                <SectionCard title="Account Reach & Intent Trend" subtitle="Daily reach, impressions, and profile views returned by Meta">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={accountMetrics.slice(-30)}>
+                            <XAxis
+                                dataKey="date"
+                                stroke="#9ca3af"
+                                fontSize={11}
+                                tickLine={false}
+                                tickFormatter={(val) => new Date(val).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                            />
+                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                            <Tooltip
+                                contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
+                                labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                            />
+                            <Line type="monotone" dataKey="reach" stroke="#10b981" strokeWidth={2} dot={false} name="Reach" />
+                            <Line type="monotone" dataKey="impressions" stroke="#6366f1" strokeWidth={2} dot={false} name="Impressions" />
+                            <Line type="monotone" dataKey="profile_views" stroke="#f59e0b" strokeWidth={2} dot={false} name="Profile Views" />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </SectionCard>
+            )}
 
             {/* Engagement Over Time Chart */}
             <SectionCard title="Engagement Over Time" subtitle={`Engagement trend: ${dateRange.startDate} → ${dateRange.endDate}`}>
