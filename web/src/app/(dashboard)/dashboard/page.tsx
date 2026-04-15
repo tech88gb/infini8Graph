@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi, googleAdsApi, adsApi } from '@/lib/api';
 import { analyticsQueryOptions, audienceQueryOptions } from '@/lib/analyticsQueryOptions';
@@ -8,7 +8,8 @@ import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import {
     Users, Heart, Eye, Bookmark, TrendingUp, TrendingDown, Image, RefreshCw, Instagram,
-    Globe, MapPin, HelpCircle, Clock, Zap, MousePointer, DollarSign, BarChart2, ExternalLink
+    Globe, MapPin, HelpCircle, Clock, Zap, MousePointer, DollarSign, BarChart2, ExternalLink,
+    Download, ChevronDown, FileSpreadsheet, FileText
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
@@ -37,6 +38,271 @@ const getCountryName = (code: string): string => {
     const upperCode = code.toUpperCase();
     return COUNTRY_NAMES[upperCode] || code;
 };
+
+type SectionExportFormat = 'excel' | 'html';
+
+function sanitizeFileName(value: string) {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'section-export';
+}
+
+function escapeHtml(value: string) {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+async function svgToPngDataUrl(svg: SVGSVGElement) {
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    const bounds = svg.getBoundingClientRect();
+    const width = Math.max(Math.round(bounds.width || Number(svg.getAttribute('width')) || 600), 32);
+    const height = Math.max(Math.round(bounds.height || Number(svg.getAttribute('height')) || 240), 32);
+
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(width));
+    clone.setAttribute('height', String(height));
+    if (!clone.getAttribute('viewBox')) {
+        clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    }
+
+    const serialized = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new window.Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Unable to render SVG export'));
+            img.src = url;
+        });
+
+        const scale = Math.min(window.devicePixelRatio || 1, 2);
+        const canvas = document.createElement('canvas');
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+            throw new Error('Canvas unavailable');
+        }
+
+        context.scale(scale, scale);
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        return canvas.toDataURL('image/png');
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+async function buildExportableSection(section: HTMLElement) {
+    const clone = section.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('[data-export-ignore="true"]').forEach((node) => node.remove());
+    clone.querySelectorAll('.recharts-tooltip-wrapper').forEach((node) => node.remove());
+
+    const originalSvgs = Array.from(section.querySelectorAll('svg'));
+    const clonedSvgs = Array.from(clone.querySelectorAll('svg'));
+
+    for (let index = 0; index < Math.min(originalSvgs.length, clonedSvgs.length); index += 1) {
+        const originalSvg = originalSvgs[index] as SVGSVGElement;
+        const clonedSvg = clonedSvgs[index] as SVGSVGElement;
+
+        try {
+            const pngDataUrl = await svgToPngDataUrl(originalSvg);
+            const image = document.createElement('img');
+            image.src = pngDataUrl;
+            image.alt = '';
+            image.style.maxWidth = '100%';
+            image.style.height = 'auto';
+            image.style.display = 'block';
+            clonedSvg.replaceWith(image);
+        } catch {
+            // Leave the SVG in place if conversion fails so the export still completes.
+        }
+    }
+
+    return clone;
+}
+
+function buildExportDocument(title: string, subtitle: string | undefined, sectionMarkup: string, format: SectionExportFormat) {
+    const exportLabel = format === 'excel' ? 'Excel export' : 'HTML export';
+    const generatedAt = new Date().toLocaleString();
+
+    return `<!DOCTYPE html>
+<html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      --background: #ffffff;
+      --card-hover: #f5f7fb;
+      --muted: #667085;
+      --foreground: #101828;
+      --primary: #4f46e5;
+      --border: #dbe4f0;
+      --border-light: #e7edf5;
+      --card-raised: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f3f6fb;
+      color: var(--foreground);
+      padding: 32px;
+    }
+    .export-shell {
+      max-width: 1240px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+    }
+    .export-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--border-light);
+      background: linear-gradient(135deg, #eef2ff, #f8fafc);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .export-title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .export-subtitle {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .export-meta {
+      text-align: right;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+      white-space: nowrap;
+    }
+    .export-content {
+      padding: 24px 28px 30px;
+    }
+    .card, .chart-container {
+      background: #ffffff !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 18px !important;
+      box-shadow: none !important;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card-title, h3 {
+      margin: 0;
+      color: #0f172a !important;
+    }
+    .text-muted {
+      color: var(--muted) !important;
+    }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+    }
+    .table th, .table td {
+      border-bottom: 1px solid var(--border-light);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .table th {
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+    @page {
+      size: landscape;
+      margin: 0.5in;
+    }
+  </style>
+</head>
+<body>
+  <div class="export-shell">
+    <div class="export-header">
+      <div>
+        <h1 class="export-title">${escapeHtml(title)}</h1>
+        ${subtitle ? `<p class="export-subtitle">${escapeHtml(subtitle)}</p>` : ''}
+      </div>
+      <div class="export-meta">
+        <div>${escapeHtml(exportLabel)}</div>
+        <div>Generated ${escapeHtml(generatedAt)}</div>
+      </div>
+    </div>
+    <div class="export-content">
+      ${sectionMarkup}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+async function exportSection(section: HTMLElement, title: string, format: SectionExportFormat, subtitle?: string) {
+    const exportableSection = await buildExportableSection(section);
+    const markup = buildExportDocument(title, subtitle, exportableSection.outerHTML, format);
+    const fileExtension = format === 'excel' ? 'xls' : 'html';
+    const mimeType = format === 'excel'
+        ? 'application/vnd.ms-excel;charset=utf-8'
+        : 'text/html;charset=utf-8';
+
+    downloadBlob(
+        new Blob([markup], { type: mimeType }),
+        `${sanitizeFileName(title)}-${new Date().toISOString().slice(0, 10)}.${fileExtension}`
+    );
+}
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -75,9 +341,134 @@ function InfoTooltip({ text }: { text: string }) {
     );
 }
 
+function SectionExportMenu({
+    sectionRef,
+    title,
+    subtitle
+}: {
+    sectionRef: { current: HTMLElement | null };
+    title: string;
+    subtitle?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState<SectionExportFormat | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [open]);
+
+    const handleExport = async (format: SectionExportFormat) => {
+        if (!sectionRef.current || isExporting) return;
+
+        setIsExporting(format);
+        setOpen(false);
+
+        try {
+            await exportSection(sectionRef.current, title, format, subtitle);
+        } finally {
+            setIsExporting(null);
+        }
+    };
+
+    return (
+        <div ref={menuRef} data-export-ignore="true" style={{ position: 'relative' }}>
+            <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setOpen((current) => !current)}
+                disabled={!!isExporting}
+                style={{ minWidth: 104, justifyContent: 'center' }}
+            >
+                {isExporting ? (
+                    isExporting === 'excel' ? 'Exporting XLS' : 'Exporting HTML'
+                ) : (
+                    <>
+                        <Download size={14} />
+                        Export
+                        <ChevronDown size={14} style={{ opacity: 0.8 }} />
+                    </>
+                )}
+            </button>
+
+            {open && (
+                <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    minWidth: 210,
+                    background: 'rgba(15, 23, 42, 0.98)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 14,
+                    padding: 8,
+                    zIndex: 30,
+                    boxShadow: '0 20px 45px rgba(0,0,0,0.35)'
+                }}>
+                    <button
+                        type="button"
+                        onClick={() => handleExport('excel')}
+                        style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'white',
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            cursor: 'pointer',
+                            textAlign: 'left'
+                        }}
+                    >
+                        <FileSpreadsheet size={16} style={{ color: '#22c55e' }} />
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>Export as Excel</div>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Clean workbook-style export</div>
+                        </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleExport('html')}
+                        style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'white',
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            cursor: 'pointer',
+                            textAlign: 'left'
+                        }}
+                    >
+                        <FileText size={16} style={{ color: '#60a5fa' }} />
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>Export as HTML</div>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Polished shareable report</div>
+                        </div>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ==================== GOOGLE ADS WIDGET ====================
 
 function GoogleAdsWidget() {
+    const sectionRef = useRef<HTMLDivElement>(null);
     const { data: statusData, isLoading: statusLoading } = useQuery({
         queryKey: ['google-ads-status'],
         queryFn: async () => {
@@ -152,7 +543,9 @@ function GoogleAdsWidget() {
     const adsAccount = statusData?.account;
 
     return (
-        <div style={{
+        <div
+            ref={sectionRef}
+            style={{
             background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
             border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: 12, padding: '20px 24px', marginBottom: 24,
@@ -169,7 +562,8 @@ function GoogleAdsWidget() {
                         {adsAccount && <p className="text-muted" style={{ fontSize: 11 }}>{adsAccount.email}</p>}
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div data-export-ignore="true" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <SectionExportMenu sectionRef={sectionRef} title="Google Ads Overview" subtitle="Last 30 days performance summary" />
                     <span style={{
                         padding: '4px 10px',
                         background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
@@ -272,28 +666,37 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
 function SectionCard({ title, subtitle, timePeriod, children }: {
     title: string; subtitle?: string; timePeriod?: string; children: React.ReactNode
 }) {
+    const sectionRef = useRef<HTMLDivElement>(null);
+
     return (
-        <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
+        <div
+            ref={sectionRef}
+            className="card"
+            style={{ marginBottom: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}
+        >
             <div className="card-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600 }}>{title}</h3>
                     {subtitle && <p className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>{subtitle}</p>}
                 </div>
-                {timePeriod && (
-                    <span style={{
-                        padding: '4px 10px',
-                        background: 'var(--background)',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        color: 'var(--muted)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4
-                    }}>
-                        <Clock size={12} />
-                        {timePeriod}
-                    </span>
-                )}
+                <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {timePeriod && (
+                        <span style={{
+                            padding: '4px 10px',
+                            background: 'var(--background)',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            color: 'var(--muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                        }}>
+                            <Clock size={12} />
+                            {timePeriod}
+                        </span>
+                    )}
+                    <SectionExportMenu sectionRef={sectionRef} title={title} subtitle={subtitle} />
+                </div>
             </div>
             {children}
         </div>
@@ -396,6 +799,7 @@ function OnlineFollowersHeatmap({ data }: { data: any[] }) {
 // ==================== META ADS WIDGET ====================
 
 function MetaAdsWidget() {
+    const sectionRef = useRef<HTMLDivElement>(null);
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
         queryKey: ['ad-accounts'],
         queryFn: async () => {
@@ -460,7 +864,9 @@ function MetaAdsWidget() {
     const summary = insightsData?.data?.summary;
 
     return (
-        <div style={{
+        <div
+            ref={sectionRef}
+            style={{
             background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
             border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: 12, padding: '20px 24px', marginBottom: 24,
@@ -479,7 +885,8 @@ function MetaAdsWidget() {
                         </p>
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div data-export-ignore="true" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <SectionExportMenu sectionRef={sectionRef} title="Meta Ads Overview" subtitle="Last 30 days performance summary" />
                     <span style={{
                         padding: '4px 10px',
                         background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
@@ -544,6 +951,11 @@ function MetaAdsWidget() {
 
 export default function DashboardPage() {
     const { activeAccountId } = useAuth();
+    const socialOverviewRef = useRef<HTMLDivElement>(null);
+    const dailyAudienceRef = useRef<HTMLDivElement>(null);
+    const engagementTrendRef = useRef<HTMLDivElement>(null);
+    const likesCommentsRef = useRef<HTMLDivElement>(null);
+    const recentPostsRef = useRef<HTMLDivElement>(null);
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 29);
@@ -690,7 +1102,9 @@ export default function DashboardPage() {
             </div>
 
             {/* SOCIAL MEDIA WIDGET (Instagram) */}
-            <div style={{
+            <div
+                ref={socialOverviewRef}
+                style={{
                 background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
                 border: '1px solid rgba(255,255,255,0.06)',
                 borderRadius: 12, padding: '20px 24px', marginBottom: 24,
@@ -706,6 +1120,9 @@ export default function DashboardPage() {
                             <h3 style={{ fontSize: 14, fontWeight: 600 }}>Social Media Overview</h3>
                             <p className="text-muted" style={{ fontSize: 11 }}>@{profile.username}</p>
                         </div>
+                    </div>
+                    <div data-export-ignore="true">
+                        <SectionExportMenu sectionRef={socialOverviewRef} title="Social Media Overview" subtitle={`@${profile.username || 'instagram'} account performance overview`} />
                     </div>
                 </div>
 
@@ -856,10 +1273,15 @@ export default function DashboardPage() {
                 )}
                 {/* Daily Metrics Chart */}
                 {dailyChartData.length > 0 && (
-                    <div className="chart-container" style={{ marginBottom: 24 }}>
+                    <div ref={dailyAudienceRef} className="chart-container" style={{ marginBottom: 24 }}>
                         <div className="card-header">
-                            <h3 className="card-title">Daily Audience Metrics</h3>
-                            <p className="text-muted" style={{ fontSize: 12 }}>Daily follower gains and reach returned by Meta. Views and profile visits are aggregate-only.</p>
+                            <div>
+                                <h3 className="card-title">Daily Audience Metrics</h3>
+                                <p className="text-muted" style={{ fontSize: 12 }}>Daily follower gains and reach returned by Meta. Views and profile visits are aggregate-only.</p>
+                            </div>
+                            <div data-export-ignore="true">
+                                <SectionExportMenu sectionRef={dailyAudienceRef} title="Daily Audience Metrics" subtitle="Daily follower gains and reach returned by Meta" />
+                            </div>
                         </div>
                         <ResponsiveContainer width="100%" height={240}>
                             <AreaChart data={dailyChartData}>
@@ -889,9 +1311,12 @@ export default function DashboardPage() {
 
                 {/* Engagement Charts */}
                 <div className="grid-charts" style={{ marginBottom: 24 }}>
-                    <div className="chart-container">
+                    <div ref={engagementTrendRef} className="chart-container">
                         <div className="card-header">
                             <h3 className="card-title">Engagement Trend</h3>
+                            <div data-export-ignore="true">
+                                <SectionExportMenu sectionRef={engagementTrendRef} title="Engagement Trend" subtitle="Recent post engagement trend" />
+                            </div>
                         </div>
                         <ResponsiveContainer width="100%" height={200}>
                             <AreaChart data={chartData}>
@@ -916,9 +1341,12 @@ export default function DashboardPage() {
                         </ResponsiveContainer>
                     </div>
 
-                    <div className="chart-container">
+                    <div ref={likesCommentsRef} className="chart-container">
                         <div className="card-header">
                             <h3 className="card-title">Likes vs Comments</h3>
+                            <div data-export-ignore="true">
+                                <SectionExportMenu sectionRef={likesCommentsRef} title="Likes vs Comments" subtitle="Comparison of likes and comments across recent posts" />
+                            </div>
                         </div>
                         <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={chartData}>
@@ -1023,10 +1451,13 @@ export default function DashboardPage() {
                 )}
 
                 {/* Recent Posts Table */}
-                <div className="card">
+                <div ref={recentPostsRef} className="card">
                     <div className="card-header">
                         <h3 className="card-title">Recent Posts</h3>
-                        <span className="badge badge-info">{recentPosts.length} posts</span>
+                        <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <span className="badge badge-info">{recentPosts.length} posts</span>
+                            <SectionExportMenu sectionRef={recentPostsRef} title="Recent Posts" subtitle="Latest post performance snapshot" />
+                        </div>
                     </div>
                     {recentPosts.length > 0 ? (
                         <table className="table">
