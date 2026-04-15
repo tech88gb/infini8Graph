@@ -434,37 +434,80 @@ class InstagramService {
      * @param {string} storyId - The story media ID
      */
     async getStoryInsights(storyId) {
-        const metricSets = [
-            'views,reach,replies,taps_forward,taps_back,exits,navigation',
-            'views,reach,replies,taps_forward,taps_back,exits',
-            'views,reach,taps_forward,taps_back,exits',
-            'views,reach,replies',
-            'views,reach',
-            'reach,replies',
-            'reach'
-        ];
-
-        let lastError = null;
-
-        for (const metrics of metricSets) {
-            try {
-                return await this.apiRequest(`/${storyId}/insights`, { metric: metrics });
-            } catch (error) {
-                lastError = error;
-                const message = String(error.message || '').toLowerCase();
-                const canRetry =
-                    message.includes('invalid parameter') ||
-                    message.includes('unsupported') ||
-                    message.includes('metric');
-
-                if (!canRetry) {
-                    throw error;
-                }
+        const insights = {
+            impressions: 0,
+            views: 0,
+            reach: 0,
+            replies: 0,
+            navigation: {
+                tap_forward: 0,
+                tap_back: 0,
+                tap_exit: 0,
+                tap_replay: 0,
+                swipe_forward: 0
             }
+        };
+
+        const requests = await Promise.allSettled([
+            this.apiRequest(`/${storyId}/insights`, { metric: 'reach' }),
+            this.apiRequest(`/${storyId}/insights`, { metric: 'replies' }),
+            this.apiRequest(`/${storyId}/insights`, {
+                metric: 'navigation',
+                breakdown: 'story_navigation_action_type'
+            }),
+            this.apiRequest(`/${storyId}/insights`, { metric: 'views' }),
+            this.apiRequest(`/${storyId}/insights`, { metric: 'impressions' })
+        ]);
+
+        for (const result of requests) {
+            if (result.status !== 'fulfilled') continue;
+            const rows = result.value?.data || [];
+
+            rows.forEach((row) => {
+                if (row?.name === 'navigation') {
+                    const breakdowns = row?.total_value?.breakdowns || [];
+                    breakdowns.forEach((breakdown) => {
+                        const items = breakdown?.results || [];
+                        items.forEach((item) => {
+                            const rawKey = String(item?.dimension_values?.[0] || '').toLowerCase();
+                            const value = this.parseNavigationMetricValue(item?.value);
+
+                            if (!rawKey || value <= 0) return;
+
+                            if (rawKey.includes('swipe') && rawKey.includes('forward')) {
+                                insights.navigation.swipe_forward += value;
+                            } else if (rawKey.includes('replay')) {
+                                insights.navigation.tap_replay += value;
+                            } else if (rawKey.includes('back')) {
+                                insights.navigation.tap_back += value;
+                            } else if (rawKey.includes('exit')) {
+                                insights.navigation.tap_exit += value;
+                            } else if (rawKey.includes('forward')) {
+                                insights.navigation.tap_forward += value;
+                            }
+                        });
+                    });
+                    return;
+                }
+
+                insights[row.name] = this.getInsightValue(row);
+            });
         }
 
-        if (lastError) throw lastError;
-        return { data: [] };
+        return insights;
+    }
+
+    parseNavigationMetricValue(value) {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+        if (value && typeof value === 'object') {
+            if (typeof value.value === 'number') return value.value;
+            if (typeof value.count === 'number') return value.count;
+        }
+        return 0;
     }
 
     /**
@@ -649,7 +692,7 @@ class InstagramService {
 
         return rawStories.map((story, index) => {
             const storyInsights = settled[index].status === 'fulfilled'
-                ? this.extractInsightsMap(settled[index].value?.data)
+                ? settled[index].value
                 : {};
 
             // navigation insight is an object: { swipe_forward, tap_back, tap_exit, tap_replay }

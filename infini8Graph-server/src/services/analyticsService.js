@@ -2151,7 +2151,7 @@ class AnalyticsService {
     }
 
     async getStoryAnalytics() {
-        const cached = await this.checkCache('stories', 'current_v3');
+        const cached = await this.checkCache('stories', 'current_v4');
         if (cached) return cached;
 
         let stories = [];
@@ -2182,7 +2182,7 @@ class AnalyticsService {
             lastUpdated: new Date().toISOString()
         };
 
-        await this.updateCache('stories', 'current_v3', analytics);
+        await this.updateCache('stories', 'current_v4', analytics);
         return analytics;
     }
 }
