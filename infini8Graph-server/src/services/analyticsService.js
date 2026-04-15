@@ -314,7 +314,28 @@ class AnalyticsService {
                 totalShares,
                 totalProfileViews,
                 followerDelta: followerTrend.delta,
-                followerDeltaPercent: followerTrend.deltaPercent
+                followerDeltaPercent: followerTrend.deltaPercent,
+                // === Advanced Metrics ===
+                // True Follower Growth Rate: new followers / start followers * 100
+                trueFollowerGrowthRate: followerTrend.start > 0
+                    ? Number(((followerTrend.delta / followerTrend.start) * 100).toFixed(2))
+                    : 0,
+                // Content ROI Score: total engagement / posts published in period
+                contentRoiScore: media.length > 0
+                    ? Number((totalEngagement / media.length).toFixed(1))
+                    : 0,
+                // Reach-to-Follower Ratio: total reach / followers (breakout signal)
+                reachToFollowerRatio: profile.followers_count > 0
+                    ? Number((totalReach / profile.followers_count).toFixed(2))
+                    : 0,
+                // Save Rate: saves / reach * 100 (high saves = evergreen content signal)
+                saveRate: totalReach > 0
+                    ? Number(((totalSaved / totalReach) * 100).toFixed(2))
+                    : 0,
+                // Profile Visit Rate: profile_views / reach * 100
+                profileVisitRate: totalReach > 0
+                    ? Number(((totalProfileViews / totalReach) * 100).toFixed(2))
+                    : 0
             },
             demographics: {},
             audienceInsights: {},
@@ -502,7 +523,21 @@ class AnalyticsService {
                 followerStart,
                 followerEnd,
                 followerDelta,
-                followerDeltaPercent: this.toPercent(followerDelta, followerStart)
+                followerDeltaPercent: this.toPercent(followerDelta, followerStart),
+                // === Advanced Growth Metrics ===
+                // True Follower Growth Rate: (new followers / start) * 100 in the period
+                trueFollowerGrowthRate: followerStart > 0
+                    ? Number(((followerDelta / followerStart) * 100).toFixed(2))
+                    : 0,
+                // Net Follower Change (gained − lost; we have delta from daily snapshots)
+                netFollowerChange: followerDelta,
+                // Audience Quality Score: (likes + comments + saves) / followers
+                audienceQualityScore: profile.followers_count > 0
+                    ? Number((
+                        media.reduce((sum, p) => sum + p.likeCount + p.commentsCount + (p.saved || 0), 0)
+                        / profile.followers_count
+                      ).toFixed(3))
+                    : 0
             },
             comparisonSummary: {
                 avgPostsPerActiveDay: growthData.filter((day) => day.posts > 0).length > 0
@@ -521,6 +556,42 @@ class AnalyticsService {
                     ? Math.round(thisWeekEngagement / thisWeekPosts.length)
                     : 0
             },
+            // === Follower-to-Engagement Ratio Trend (weekly buckets) ===
+            // Declining ratio over time = audience getting stale
+            followerEngagementRatioTrend: (() => {
+                const weeks = {};
+                media.forEach((post) => {
+                    const d = new Date(post.timestamp);
+                    const weekStart = new Date(d);
+                    weekStart.setDate(d.getDate() - d.getDay());
+                    const wk = weekStart.toISOString().split('T')[0];
+                    if (!weeks[wk]) weeks[wk] = { week: wk, engagement: 0, posts: 0 };
+                    weeks[wk].engagement += post.engagement;
+                    weeks[wk].posts += 1;
+                });
+                return Object.values(weeks)
+                    .sort((a, b) => a.week.localeCompare(b.week))
+                    .map((wk) => ({
+                        week: wk.week,
+                        posts: wk.posts,
+                        totalEngagement: wk.engagement,
+                        followerEngagementRatio: profile.followers_count > 0
+                            ? Number((wk.engagement / profile.followers_count).toFixed(4))
+                            : 0
+                    }));
+            })(),
+            // === Post-to-Follower Growth Correlation ===
+            // Cross-reference posting days with follower change (from daily snapshots)
+            postToFollowerGrowthCorrelation: (() => {
+                const postingDates = new Set(media.map((p) => p.timestamp.split('T')[0]));
+                return accountMetrics
+                    .filter((day) => typeof day.follower_count === 'number')
+                    .map((day, idx, arr) => ({
+                        date: day.date,
+                        hadPost: postingDates.has(day.date),
+                        followerChange: idx > 0 ? (day.follower_count - arr[idx - 1].follower_count) : 0
+                    }));
+            })(),
             lastUpdated: new Date().toISOString()
         };
 
@@ -951,12 +1022,39 @@ class AnalyticsService {
                 : 'Not enough data'
         };
 
+        // Content Type Mix Optimization: which format drives most ER adjusted for reach
+        const contentTypeMixOptimization = formatRanking.map((row) => ({
+            type: row.format,
+            postCount: row.count,
+            shareOfPosts: enrichedPosts.length > 0
+                ? Number(((row.count / enrichedPosts.length) * 100).toFixed(1))
+                : 0,
+            avgEngagementRate: row.avgEngagementRate,
+            avgSaveRate: row.avgSaveRate,
+            avgShareRate: row.avgShareRate,
+            avgReachEfficiency: row.avgReachEfficiency,
+            // Reach-adjusted ER: down-weights types that only get ER on tiny audiences
+            reachAdjustedER: row.avgReachEfficiency > 0
+                ? Number((row.avgEngagementRate * (row.avgReachEfficiency / 100)).toFixed(3))
+                : 0,
+            performanceScore: row.performanceScore,
+            rank: row.rank
+        })).sort((a, b) => b.reachAdjustedER - a.reachAdjustedER);
+
         const intelligence = {
             formatBattle: {
                 ranking: formatRanking,
                 winner: formatRanking[0]?.format || null,
                 insight: formatRanking[0]
                     ? `${formatRanking[0].format} leads on performance score with ${formatRanking[0].avgSaveRate}% save rate and ${formatRanking[0].avgReachEfficiency}% reach efficiency`
+                    : 'Not enough data'
+            },
+            // Content Type Mix Optimization
+            contentTypeMix: {
+                breakdown: contentTypeMixOptimization,
+                bestByReachAdjustedER: contentTypeMixOptimization[0]?.type || null,
+                insight: contentTypeMixOptimization.length > 0
+                    ? `${contentTypeMixOptimization[0]?.type || 'N/A'} delivers the highest reach-adjusted engagement rate (${contentTypeMixOptimization[0]?.reachAdjustedER || 0})`
                     : 'Not enough data'
             },
             captionAnalysis: {
@@ -1051,7 +1149,24 @@ class AnalyticsService {
             }
         }
 
-        // Calculate reel-specific metrics
+        // Fetch virality breakdown (follow_type) for top reels — capped to avoid rate overload
+        const TOP_REELS_VIRALITY = 6;
+        const viralityMap = {};
+        await Promise.allSettled(
+            reels.slice(0, TOP_REELS_VIRALITY).map(async (r) => {
+                try {
+                    const breakdown = await this.instagram.getReelReachByFollowType(r.id);
+                    if (breakdown) viralityMap[r.id] = breakdown;
+                } catch { /* non-fatal */ }
+            })
+        );
+
+        // Average play rate used to detect algorithm boost window candidates
+        const avgPlayRate = reels.length > 0
+            ? reels.reduce((sum, r) => sum + (r.plays > 0 && r.reach > 0 ? r.plays / r.reach : 0), 0) / reels.length
+            : 0;
+
+        // Calculate reel-specific aggregate stats
         const reelStats = {
             totalReels: reels.length,
             totalEngagement: reels.reduce((sum, r) => sum + r.engagement, 0),
@@ -1072,8 +1187,29 @@ class AnalyticsService {
                 : 0
         };
 
-        const analytics = {
-            reels: reels.map(r => ({
+        const enrichedReels = reels.map((r) => {
+            const plays = r.plays || 0;
+            const reach = r.reach || 0;
+            const virality = viralityMap[r.id] || null;
+            const nonFollowerReach = virality ? virality.nonFollower : 0;
+
+            // Watch-Through Rate: reach / plays * 100 (complete_views not in basic API — approximation)
+            const watchThroughRate = plays > 0 ? Number(((reach / plays) * 100).toFixed(2)) : 0;
+            // Hook Rate: plays / impressions * 100 (3-sec views not available; uses impressions as proxy)
+            const hookRate = r.impressions > 0 ? Number(((plays / r.impressions) * 100).toFixed(2)) : 0;
+            // Reel Virality Score: non-follower reach / total reach * 100
+            const reelViralityScore = virality && reach > 0
+                ? Number(((nonFollowerReach / reach) * 100).toFixed(1))
+                : null;
+            // Reel-to-Profile Funnel: profile_activity / plays * 100
+            const reelToProfileFunnel = plays > 0
+                ? Number(((r.profileActivity || 0) / plays * 100).toFixed(2))
+                : 0;
+            // Algorithm Boost Window flag: play rate 1.5× above account average
+            const thisPlayRate = reach > 0 && plays > 0 ? plays / reach : 0;
+            const algorithmBoosted = avgPlayRate > 0 ? thisPlayRate > avgPlayRate * 1.5 : false;
+
+            return {
                 id: r.id,
                 thumbnail: r.thumbnailUrl || r.mediaUrl,
                 caption: r.caption || '',
@@ -1081,19 +1217,28 @@ class AnalyticsService {
                 comments: r.commentsCount,
                 engagement: r.engagement,
                 impressions: r.impressions,
-                reach: r.reach,
+                reach,
                 saved: r.saved || 0,
                 shares: r.shares || 0,
-                plays: r.plays || 0,
+                plays,
                 totalInteractions: r.totalInteractions || r.engagement,
-                engagementRate: r.reach > 0 ? Number(((r.engagement / r.reach) * 100).toFixed(2)) : 0,
-                saveRate: r.reach > 0 ? Number((((r.saved || 0) / r.reach) * 100).toFixed(2)) : 0,
-                shareRate: r.reach > 0 ? Number((((r.shares || 0) / r.reach) * 100).toFixed(2)) : 0,
-                commentRate: r.reach > 0 ? Number(((r.commentsCount / r.reach) * 100).toFixed(2)) : 0,
-                interactionRate: r.reach > 0 ? Number((((r.totalInteractions || r.engagement) / r.reach) * 100).toFixed(2)) : 0,
-                playRate: r.reach > 0 && (r.plays || 0) > 0 ? Number((((r.plays || 0) / r.reach) * 100).toFixed(2)) : 0,
+                engagementRate: reach > 0 ? Number(((r.engagement / reach) * 100).toFixed(2)) : 0,
+                saveRate: reach > 0 ? Number((((r.saved || 0) / reach) * 100).toFixed(2)) : 0,
+                shareRate: reach > 0 ? Number((((r.shares || 0) / reach) * 100).toFixed(2)) : 0,
+                commentRate: reach > 0 ? Number(((r.commentsCount / reach) * 100).toFixed(2)) : 0,
+                interactionRate: reach > 0 ? Number((((r.totalInteractions || r.engagement) / reach) * 100).toFixed(2)) : 0,
+                playRate: reach > 0 && plays > 0 ? Number(((plays / reach) * 100).toFixed(2)) : 0,
+                watchThroughRate,
+                hookRate,
+                reelViralityScore,
+                reelToProfileFunnel,
+                algorithmBoosted,
                 timestamp: r.timestamp
-            })),
+            };
+        });
+
+        const analytics = {
+            reels: enrichedReels,
             summary: {
                 ...reelStats,
                 avgEngagement: reels.length > 0
@@ -1122,7 +1267,27 @@ class AnalyticsService {
                     : 0,
                 avgPlayRate: reels.length > 0
                     ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 && (r.plays || 0) > 0 ? ((r.plays || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
-                    : 0
+                    : 0,
+                // Watch-Through Rate (avg)
+                avgWatchThroughRate: enrichedReels.length > 0
+                    ? Number((enrichedReels.reduce((sum, r) => sum + r.watchThroughRate, 0) / enrichedReels.length).toFixed(2))
+                    : 0,
+                // Hook Rate (avg)
+                avgHookRate: enrichedReels.length > 0
+                    ? Number((enrichedReels.reduce((sum, r) => sum + r.hookRate, 0) / enrichedReels.length).toFixed(2))
+                    : 0,
+                // Reel Virality Score (avg, only for reels with breakdown data)
+                avgViralityScore: (() => {
+                    const withV = enrichedReels.filter((r) => r.reelViralityScore !== null);
+                    if (withV.length === 0) return null;
+                    return Number((withV.reduce((sum, r) => sum + r.reelViralityScore, 0) / withV.length).toFixed(1));
+                })(),
+                // Reel-to-Profile Funnel (avg)
+                avgReelToProfileFunnel: enrichedReels.length > 0
+                    ? Number((enrichedReels.reduce((sum, r) => sum + r.reelToProfileFunnel, 0) / enrichedReels.length).toFixed(2))
+                    : 0,
+                // Algorithm Boost Window count
+                algorithmBoostedCount: enrichedReels.filter((r) => r.algorithmBoosted).length
             },
             comparison: {
                 reelAvgEngagement: reels.length > 0
@@ -1258,6 +1423,10 @@ class AnalyticsService {
                 saveRate: this.toPercent(p.saved, p.reach),
                 commentRate: this.toPercent(p.commentsCount, p.reach),
                 engagementRate: this.toPercent(p.engagement, p.reach),
+                // Profile Visit Rate: profile_activity / reach * 100 (from post insights)
+                profileVisitRate: this.toPercent(p.profileActivity || 0, p.reach),
+                // Website Click Rate: not directly available per-post without ads_read level; kept 0
+                websiteClickRate: 0,
                 timestamp: p.timestamp
             })),
             topByEngagement: byEngagement.slice(0, 10).map(p => p.id),
@@ -1280,7 +1449,11 @@ class AnalyticsService {
                 totalShares: media.reduce((sum, p) => sum + (p.shares || 0), 0),
                 avgSaveRate: this.averageValue(media.map((p) => this.toPercent(p.saved, p.reach))),
                 avgCommentRate: this.averageValue(media.map((p) => this.toPercent(p.commentsCount, p.reach))),
-                avgEngagementRate: this.averageValue(media.map((p) => this.toPercent(p.engagement, p.reach)))
+                avgEngagementRate: this.averageValue(media.map((p) => this.toPercent(p.engagement, p.reach))),
+                // Profile Visit Rate: profile_activity / reach * 100
+                avgProfileVisitRate: this.averageValue(media.map((p) => this.toPercent(p.profileActivity || 0, p.reach))),
+                // Website Click Rate: not available per-post via basic permissions
+                avgWebsiteClickRate: 0
             },
             formatEfficiency: Object.values(
                 media.reduce((acc, post) => {
@@ -1834,6 +2007,14 @@ class AnalyticsService {
                 totalTapsForward: stories.reduce((sum, story) => sum + (story.tapsForward || 0), 0),
                 totalTapsBack: stories.reduce((sum, story) => sum + (story.tapsBack || 0), 0),
                 totalExits: stories.reduce((sum, story) => sum + (story.exits || 0), 0),
+                // Story Completion Rate: % of viewers who watched the full story (avg across active stories)
+                avgCompletionRate: stories.length > 0
+                    ? Number((stories.reduce((sum, story) => sum + (story.completionRate || 0), 0) / stories.length).toFixed(1))
+                    : 0,
+                // Best story by completion rate
+                topStoryByCompletion: stories.length > 0
+                    ? [...stories].sort((a, b) => (b.completionRate || 0) - (a.completionRate || 0))[0]?.id || null
+                    : null
             },
             lastUpdated: new Date().toISOString()
         };

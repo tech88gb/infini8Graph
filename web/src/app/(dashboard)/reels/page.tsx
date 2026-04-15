@@ -332,6 +332,70 @@ export default function ReelsPage() {
                 </div>
             </SectionCard>
 
+            {/* Reel Intelligence Metrics */}
+            <SectionCard title="Reel Intelligence" subtitle="Advanced signals: Hook Rate, Watch-Through, Virality, Algorithm Boost">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Hook Rate</span>
+                            <InfoTooltip text="Plays / impressions x 100. How many who saw the reel actually started watching." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>
+                            {summary.avgHookRate ?? 0}%
+                        </div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Watch-Through</span>
+                            <InfoTooltip text="Reach / plays x 100. Approximates how many viewers watched to the end." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>
+                            {summary.avgWatchThroughRate ?? 0}%
+                        </div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Avg Virality Score</span>
+                            <InfoTooltip text="Non-follower reach / total reach x 100. Top 6 reels only." />
+                        </div>
+                            {summary.avgViralityScore != null ? summary.avgViralityScore + '%' : 'N/A'}
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Algorithm Boosted</span>
+                            <InfoTooltip text="Reels with play rate 1.5x above your account average — caught the algorithm." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                            {summary.algorithmBoostedCount ?? 0} reels
+                        </div>
+                    </div>
+                </div>
+
+                {reels.filter((r: any) => r.algorithmBoosted).length > 0 && (
+                    <div style={{ marginTop: 20 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#10b981', marginBottom: 10 }}>
+                            Algorithm-Boosted Reels this period
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                            {reels.filter((r: any) => r.algorithmBoosted).map((r: any, i: number) => (
+                                <div key={i} style={{
+                                    padding: '8px 14px',
+                                    background: 'rgba(16,185,129,0.1)',
+                                    border: '1px solid rgba(16,185,129,0.25)',
+                                    borderRadius: 8, fontSize: 12
+                                }}>
+                                    <div style={{ fontWeight: 600 }}>{r.caption ? r.caption.substring(0, 30) + '...' : 'Reel ' + (i + 1)}</div>
+                                    <div className="text-muted" style={{ fontSize: 11 }}>
+                                        Play: {r.playRate}% | Hook: {r.hookRate}%
+                                        {r.reelViralityScore != null && (' | Viral: ' + r.reelViralityScore + '%')}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </SectionCard>
+
             {/* Engagement Chart */}
             <SectionCard title="Top Reels Engagement" subtitle="Engagement breakdown for your best performing reels">
                 <ResponsiveContainer width="100%" height={280}>

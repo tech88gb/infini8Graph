@@ -89,6 +89,8 @@ class InstagramService {
         const totalInteractions = mergedInsights.total_interactions || 0;
         const computedEngagement = likeCount + commentsCount + saved + shares;
 
+        const profileActivity = mergedInsights.profile_activity || 0;
+
         return {
             id: node?.id,
             mediaType: node?.media_type,
@@ -106,6 +108,7 @@ class InstagramService {
             plays,
             totalInteractions: totalInteractions || computedEngagement,
             engagement: Math.max(totalInteractions, computedEngagement),
+            profileActivity,
         };
     }
 
@@ -365,6 +368,7 @@ class InstagramService {
     async getMediaInsights(mediaId, mediaType = 'IMAGE') {
         const metricSets = (mediaType === 'REEL' || mediaType === 'VIDEO')
             ? [
+                'impressions,reach,saved,shares,plays,total_interactions,profile_activity',
                 'impressions,reach,saved,shares,plays,total_interactions',
                 'impressions,reach,saved,shares,plays',
                 'impressions,reach,saved,shares,views,total_interactions',
@@ -376,7 +380,7 @@ class InstagramService {
                 'impressions,reach,saved,views',
                 'impressions,reach,saved'
             ]
-            : ['impressions,reach,saved'];
+            : ['impressions,reach,saved,profile_activity', 'impressions,reach,saved'];
 
         let lastError = null;
 
@@ -416,6 +420,7 @@ class InstagramService {
      */
     async getStoryInsights(storyId) {
         const metricSets = [
+            'impressions,reach,replies,taps_forward,taps_back,exits,navigation',
             'impressions,reach,replies,taps_forward,taps_back,exits',
             'impressions,reach,taps_forward,taps_back,exits',
             'impressions,reach,replies',
@@ -607,20 +612,62 @@ class InstagramService {
                 ? this.extractInsightsMap(settled[index].value?.data)
                 : {};
 
+            // navigation insight is an object: { swipe_forward, tap_back, tap_exit, tap_replay }
+            const navigation = storyInsights.navigation || {};
+            const tapReplay = typeof navigation === 'object' ? (navigation.tap_replay || 0) : 0;
+            const swipeForward = typeof navigation === 'object' ? (navigation.swipe_forward || 0) : 0;
+
+            const impressions = storyInsights.impressions || 0;
+            const reach = storyInsights.reach || 0;
+            const tapsForward = storyInsights.taps_forward || swipeForward || 0;
+            const tapsBack = storyInsights.taps_back || 0;
+            const exits = storyInsights.exits || 0;
+
+            // Completion rate: viewers who did NOT exit early
+            // Approximation: (reach - exits) / reach
+            const completionRate = reach > 0 ? Number((((reach - exits) / reach) * 100).toFixed(1)) : 0;
+
             return {
                 id: story.id,
                 mediaType: story.media_type,
                 mediaUrl: story.media_url,
                 thumbnailUrl: story.thumbnail_url || story.media_url,
                 timestamp: story.timestamp,
-                impressions: storyInsights.impressions || 0,
-                reach: storyInsights.reach || 0,
+                impressions,
+                reach,
                 replies: storyInsights.replies || 0,
-                tapsForward: storyInsights.taps_forward || 0,
-                tapsBack: storyInsights.taps_back || 0,
-                exits: storyInsights.exits || 0,
+                tapsForward,
+                tapsBack,
+                exits,
+                tapReplay,
+                completionRate,
             };
         });
+    }
+
+    /**
+     * Fetch reach breakdown by follow_type for a reel to calculate virality score.
+     * Returns { follower: number, non_follower: number } or null if unsupported.
+     */
+    async getReelReachByFollowType(mediaId) {
+        try {
+            const result = await this.apiRequest(`/${mediaId}/insights`, {
+                metric: 'reach',
+                breakdown: 'follow_type'
+            });
+            const breakdowns = result?.data?.[0]?.total_value?.breakdowns?.[0]?.results || [];
+            const map = {};
+            breakdowns.forEach(b => {
+                const key = (b.dimension_values?.[0] || '').toLowerCase();
+                map[key] = b.value || 0;
+            });
+            return {
+                follower: map['follower'] || 0,
+                nonFollower: map['non_follower'] || map['non-follower'] || 0
+            };
+        } catch {
+            return null;
+        }
     }
 }
 

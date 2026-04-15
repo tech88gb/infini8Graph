@@ -44,6 +44,60 @@ function InfoTooltip({ text }: { text: string }) {
                     {text}
                 </div>
             )}
+
+            {/* === Advanced Growth Metrics === */}
+            <SectionCard title="Advanced Growth Metrics" subtitle="Deeper signals from follower and engagement data">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>True Follower Growth Rate</span>
+                            <InfoTooltip text="(Follower delta / start followers) x 100 in the selected period." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: (accountSummary.trueFollowerGrowthRate || 0) >= 0 ? '#10b981' : '#ef4444' }}>
+                            {(accountSummary.trueFollowerGrowthRate || 0) >= 0 ? '+' : ''}{accountSummary.trueFollowerGrowthRate ?? 0}%
+                        </div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Net Follower Change</span>
+                            <InfoTooltip text="Gained minus lost followers in the period, from daily account snapshots." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: (accountSummary.netFollowerChange || 0) >= 0 ? '#10b981' : '#ef4444' }}>
+                            {(accountSummary.netFollowerChange || 0) >= 0 ? '+' : ''}{accountSummary.netFollowerChange ?? 0}
+                        </div>
+                    </div>
+                    <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <span className="text-muted" style={{ fontSize: 12 }}>Audience Quality Score</span>
+                            <InfoTooltip text="(Likes + Comments + Saves) / followers. Higher = more engaged real audience." />
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
+                            {accountSummary.audienceQualityScore ?? 0}
+                        </div>
+                    </div>
+                </div>
+
+                {(growth.followerEngagementRatioTrend || []).length > 0 && (
+                    <div style={{ marginTop: 24 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                            Follower-to-Engagement Ratio Trend
+                            <InfoTooltip text="Weekly engagement / followers. Declining trend = audience getting stale." />
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                            {(growth.followerEngagementRatioTrend || []).map((wk: any, i: number) => (
+                                <div key={i} style={{ padding: '10px 14px', background: 'var(--card-hover)', borderRadius: 8, minWidth: 100 }}>
+                                    <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>
+                                        {new Date(wk.week).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                                    </div>
+                                    <div style={{ fontSize: 16, fontWeight: 700 }}>{wk.followerEngagementRatio}</div>
+                                    <div className="text-muted" style={{ fontSize: 10 }}>{wk.posts} posts</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </SectionCard>
+
         </div>
     );
 }

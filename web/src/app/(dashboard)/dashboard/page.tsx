@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -121,11 +121,11 @@ function GoogleAdsWidget() {
                         width: 48, height: 48, borderRadius: 12,
                         background: 'linear-gradient(135deg, #4285F4, #34A853)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-                    }}>📊</div>
+                    }}>ðŸ“Š</div>
                     <div>
                         <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Connect Google Ads</h3>
                         <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 420 }}>
-                            See campaign performance, keyword scores, ROAS & cross-platform spend — all in one place.
+                            See campaign performance, keyword scores, ROAS & cross-platform spend â€” all in one place.
                         </p>
                     </div>
                 </div>
@@ -163,9 +163,9 @@ function GoogleAdsWidget() {
                         width: 32, height: 32, borderRadius: 8,
                         background: 'linear-gradient(135deg, #4285F4, #34A853)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                    }}>📊</div>
+                    }}>ðŸ“Š</div>
                     <div>
-                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Google Ads — Last 30 days</h3>
+                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Google Ads â€” Last 30 days</h3>
                         {adsAccount && <p className="text-muted" style={{ fontSize: 11 }}>{adsAccount.email}</p>}
                     </div>
                 </div>
@@ -174,7 +174,7 @@ function GoogleAdsWidget() {
                         padding: '4px 10px',
                         background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
                         borderRadius: 20, color: '#10b981', fontSize: 11, fontWeight: 500,
-                    }}>● Connected</span>
+                    }}>â— Connected</span>
                     <Link
                         href="/google-ads"
                         style={{
@@ -208,10 +208,10 @@ function GoogleAdsWidget() {
                     {[
                         { label: 'Impressions', value: (adsMetrics.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
                         { label: 'Clicks', value: (adsMetrics.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
-                        { label: 'Spend', value: `₹${(adsMetrics.spend || 0).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
+                        { label: 'Spend', value: `â‚¹${(adsMetrics.spend || 0).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
                         { label: 'CTR', value: `${adsMetrics.ctr || 0}%`, icon: Zap, color: '#ec4899' },
                         { label: 'Conversions', value: (adsMetrics.conversions || 0).toLocaleString(), icon: BarChart2, color: '#f59e0b' },
-                        { label: 'ROAS', value: adsMetrics.roas ? `${adsMetrics.roas.toFixed(2)}x` : '—', icon: TrendingUp, color: adsMetrics.roas >= 4 ? '#10b981' : adsMetrics.roas >= 2 ? '#f59e0b' : '#ef4444' },
+                        { label: 'ROAS', value: adsMetrics.roas ? `${adsMetrics.roas.toFixed(2)}x` : 'â€”', icon: TrendingUp, color: adsMetrics.roas >= 4 ? '#10b981' : adsMetrics.roas >= 2 ? '#f59e0b' : '#ef4444' },
                     ].map((m) => (
                         <div key={m.label} style={{
                             padding: '12px 14px', background: 'var(--background)',
@@ -434,7 +434,7 @@ function MetaAdsWidget() {
                         width: 48, height: 48, borderRadius: 12,
                         background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-                    }}>📈</div>
+                    }}>ðŸ“ˆ</div>
                     <div>
                         <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Connect Meta Ads</h3>
                         <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 420 }}>
@@ -471,9 +471,9 @@ function MetaAdsWidget() {
                         width: 32, height: 32, borderRadius: 8,
                         background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                    }}>📈</div>
+                    }}>ðŸ“ˆ</div>
                     <div>
-                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Meta Ads — Last 30 days</h3>
+                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Meta Ads â€” Last 30 days</h3>
                         <p className="text-muted" style={{ fontSize: 11 }}>
                             {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
                         </p>
@@ -484,7 +484,7 @@ function MetaAdsWidget() {
                         padding: '4px 10px',
                         background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
                         borderRadius: 20, color: '#10b981', fontSize: 11, fontWeight: 500,
-                    }}>● Connected</span>
+                    }}>â— Connected</span>
                     <Link
                         href="/ads"
                         style={{
@@ -518,10 +518,10 @@ function MetaAdsWidget() {
                     {[
                         { label: 'Impressions', value: parseInt(summary.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
                         { label: 'Clicks', value: parseInt(summary.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
-                        { label: 'Spend', value: `₹${((parseFloat(summary.spend || 0)) / 100).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
+                        { label: 'Spend', value: `â‚¹${((parseFloat(summary.spend || 0)) / 100).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
                         { label: 'CTR', value: `${parseFloat(summary.ctr || 0).toFixed(2)}%`, icon: Zap, color: '#ec4899' },
                         { label: 'Reach', value: parseInt(summary.reach || 0).toLocaleString(), icon: Users, color: '#f59e0b' },
-                        { label: 'CPM', value: `₹${((parseFloat(summary.cpm || 0)) / 100).toFixed(2)}`, icon: TrendingUp, color: '#8b5cf6' },
+                        { label: 'CPM', value: `â‚¹${((parseFloat(summary.cpm || 0)) / 100).toFixed(2)}`, icon: TrendingUp, color: '#8b5cf6' },
                     ].map((m) => (
                         <div key={m.label} style={{
                             padding: '12px 14px', background: 'var(--background)',
@@ -764,40 +764,58 @@ export default function DashboardPage() {
                     />
                 </div>
 
-                {/* Calculated Insights */}
-                <SectionCard title="Calculated Insights" subtitle="Advanced metrics calculated from your data">
+                                {/* Advanced Performance Metrics */}
+                <SectionCard title="Advanced Performance Metrics" subtitle="Calculated from your content data">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                <span className="text-muted" style={{ fontSize: 12 }}>Viral Score</span>
-                                <InfoTooltip text="(Saves ÷ Reach) × 100. Higher score means content is more share-worthy and bookmark-worthy." />
+                                <span className="text-muted" style={{ fontSize: 12 }}>True Follower Growth Rate</span>
+                                <InfoTooltip text="(New followers / start followers) x 100 for the selected period." />
                             </div>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{viralScore}%</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: (metrics.trueFollowerGrowthRate || 0) >= 0 ? '#10b981' : '#ef4444' }}>
+                                {(metrics.trueFollowerGrowthRate || 0) >= 0 ? '+' : ''}{metrics.trueFollowerGrowthRate ?? 0}%
+                            </div>
+                        </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Content ROI Score</span>
+                                <InfoTooltip text="Total engagement divided by posts published. Higher means more output per post." />
+                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
+                                {(metrics.contentRoiScore ?? 0).toLocaleString()}
+                            </div>
+                        </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Reach-to-Follower Ratio</span>
+                                <InfoTooltip text="Total reach divided by followers. Above 1.0 = content breaking out to non-followers." />
+                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: (metrics.reachToFollowerRatio || 0) >= 1 ? '#10b981' : '#f59e0b' }}>
+                                {metrics.reachToFollowerRatio ?? 0}x
+                            </div>
+                        </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Save Rate</span>
+                                <InfoTooltip text="Saves divided by Reach x 100. High save rate signals evergreen content." />
+                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>{metrics.saveRate ?? 0}%</div>
+                        </div>
+                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Profile Visit Rate</span>
+                                <InfoTooltip text="Profile Views divided by Reach x 100. Shows how content drives account discovery." />
+                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>
+                                {metrics.profileVisitRate ?? profileViewRate}%
+                            </div>
                         </div>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                                 <span className="text-muted" style={{ fontSize: 12 }}>True Engagement Rate</span>
-                                <InfoTooltip text="(Likes + Comments) ÷ Reach × 100. More accurate than follower-based engagement rate." />
+                                <InfoTooltip text="(Likes + Comments) divided by Reach x 100. More accurate than follower-based rate." />
                             </div>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{trueEngagementRate}%</div>
-                        </div>
-                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                <span className="text-muted" style={{ fontSize: 12 }}>Save-to-Like Ratio</span>
-                                <InfoTooltip text="Saves ÷ Likes. Higher ratio indicates valuable, reference-worthy content." />
-                            </div>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>
-                                {metrics.totalSaved && metrics.avgLikes
-                                    ? ((metrics.totalSaved / (metrics.avgLikes * recentPosts.length)) * 100).toFixed(1)
-                                    : '0'}%
-                            </div>
-                        </div>
-                        <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                <span className="text-muted" style={{ fontSize: 12 }}>Profile View Rate</span>
-                                <InfoTooltip text="Profile Views ÷ Reach. Useful for spotting whether attention is moving into account intent." />
-                            </div>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>{profileViewRate}%</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#0ea5e9' }}>{trueEngagementRate}%</div>
                         </div>
                     </div>
                 </SectionCard>
@@ -813,25 +831,25 @@ export default function DashboardPage() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                                 <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Top Country</div>
-                                <div style={{ fontSize: 18, fontWeight: 700 }}>{audienceInsights.topCountry?.label || '—'}</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>{audienceInsights.topCountry?.label || 'â€”'}</div>
                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{audienceInsights.topCountry?.value?.toLocaleString?.() || 0} followers</div>
                             </div>
                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                                 <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Top City</div>
-                                <div style={{ fontSize: 18, fontWeight: 700 }}>{audienceInsights.topCity?.label?.split(',')[0] || '—'}</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>{audienceInsights.topCity?.label?.split(',')[0] || 'â€”'}</div>
                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{audienceInsights.topCity?.value?.toLocaleString?.() || 0} followers</div>
                             </div>
                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                                 <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Top Demographic</div>
                                 <div style={{ fontSize: 18, fontWeight: 700 }}>
-                                    {audienceInsights.topGenderAge ? `${audienceInsights.topGenderAge.gender} ${audienceInsights.topGenderAge.age}` : '—'}
+                                    {audienceInsights.topGenderAge ? `${audienceInsights.topGenderAge.gender} ${audienceInsights.topGenderAge.age}` : 'â€”'}
                                 </div>
                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{audienceInsights.topGenderAge?.value?.toLocaleString?.() || 0} followers</div>
                             </div>
                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                                 <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Peak Follower Hours</div>
                                 <div style={{ fontSize: 18, fontWeight: 700 }}>
-                                    {(audienceInsights.peakFollowerHours || []).slice(0, 2).map((item: any) => item.label).join(' • ') || '—'}
+                                    {(audienceInsights.peakFollowerHours || []).slice(0, 2).map((item: any) => item.label).join(' â€¢ ') || 'â€”'}
                                 </div>
                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>from follower activity insights</div>
                             </div>
@@ -1046,3 +1064,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+
