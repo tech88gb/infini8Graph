@@ -208,12 +208,17 @@ class AnalyticsService {
         return totals;
     }
 
-    buildFollowerTrendFromDailyMetrics(dailyMetrics = [], fallbackAggregates = {}) {
+    buildFollowerTrendFromDailyMetrics(dailyMetrics = [], fallbackAggregates = {}, currentFollowerCount = 0) {
         const snapshots = (dailyMetrics || [])
             .filter((day) => typeof day?.follower_count === 'number' && Number.isFinite(day.follower_count))
             .sort((a, b) => a.date.localeCompare(b.date));
 
-        if (snapshots.length >= 2) {
+        const maxSnapshotValue = snapshots.reduce((max, day) => Math.max(max, Number(day.follower_count || 0)), 0);
+        const looksLikeAbsoluteFollowerBase = currentFollowerCount <= 0
+            ? maxSnapshotValue > 0
+            : maxSnapshotValue >= currentFollowerCount * 0.5;
+
+        if (snapshots.length >= 2 && looksLikeAbsoluteFollowerBase) {
             const first = snapshots[0];
             const last = snapshots[snapshots.length - 1];
             const delta = Number(last.follower_count || 0) - Number(first.follower_count || 0);
@@ -431,7 +436,7 @@ class AnalyticsService {
         const followerTrend = this.buildFollowerTrendFromDailyMetrics(dailyMetrics, {
             ...accountAggregates,
             followerEnd: profile.followers_count || 0
-        });
+        }, profile.followers_count || 0);
 
         // Get recent posts performance
         const recentPosts = media.slice(0, 10).map(post => ({
@@ -665,7 +670,7 @@ class AnalyticsService {
         const followerTrend = this.buildFollowerTrendFromDailyMetrics(accountMetrics, {
             ...accountAggregates,
             followerEnd: profile.followers_count || 0
-        });
+        }, profile.followers_count || 0);
         const followerDelta = followerTrend.delta || 0;
         const followerEnd = followerTrend.end || profile.followers_count || 0;
         const followerStart = followerTrend.start || 0;
