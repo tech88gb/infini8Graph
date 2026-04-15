@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { googleAdsApi } from '@/lib/api';
 import {
+    PageExportMenu,
+    appendDatasetTables,
+    buildExportDocument,
+    buildWorkbookBlob,
+    downloadBlob,
+    sanitizeFileName,
+    tablesToMarkup,
+    tablesToSheets,
+    type ExportTable,
+    type SectionExportFormat
+} from '@/lib/pageExport';
+import {
     BarChart2, TrendingUp, TrendingDown, DollarSign, MousePointer, Eye,
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
@@ -26,6 +38,69 @@ const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'
 const fmt = (n: number, dec = 2) => n?.toLocaleString('en-US', { maximumFractionDigits: dec }) ?? '—';
 const fmtINR = (n: number) => `₹${fmt(n, 2)}`;
 const fmtPct = (n: number) => `${fmt(n, 2)}%`;
+
+function buildGoogleAdsExportTables({
+    preset,
+    status,
+    accounts,
+    performance,
+    budget,
+    campaigns,
+    keywords,
+    auctionInsights,
+    searchTerms,
+    geography,
+    alerts,
+    bidding,
+    qualityScore,
+    assets
+}: {
+    preset: string;
+    status: any;
+    accounts: any;
+    performance: any;
+    budget: any;
+    campaigns: any;
+    keywords: any;
+    auctionInsights: any;
+    searchTerms: any;
+    geography: any;
+    alerts: any;
+    bidding: any;
+    qualityScore: any;
+    assets: any;
+}) {
+    const tables: ExportTable[] = [
+        {
+            title: 'Export Context',
+            subtitle: 'Google Ads account and reporting window',
+            headers: ['Field', 'Value'],
+            rows: [
+                ['Customer ID', accounts?.customerId || status?.account?.customerId || '-'],
+                ['Account Email', status?.account?.email || '-'],
+                ['Preset', preset],
+                ['Generated At', new Date().toLocaleString()]
+            ],
+            sheetName: 'Context'
+        }
+    ];
+
+    appendDatasetTables(tables, 'Connection Status', status);
+    appendDatasetTables(tables, 'Account Discovery', accounts);
+    appendDatasetTables(tables, 'Performance Overview', performance);
+    appendDatasetTables(tables, 'Budget Overview', budget);
+    appendDatasetTables(tables, 'Campaigns', campaigns);
+    appendDatasetTables(tables, 'Keywords', keywords);
+    appendDatasetTables(tables, 'Auction Insights', auctionInsights);
+    appendDatasetTables(tables, 'Search Terms', searchTerms);
+    appendDatasetTables(tables, 'Geography', geography);
+    appendDatasetTables(tables, 'Alerts', alerts);
+    appendDatasetTables(tables, 'Bidding Intelligence', bidding);
+    appendDatasetTables(tables, 'Quality Score', qualityScore);
+    appendDatasetTables(tables, 'Asset Performance', assets);
+
+    return tables;
+}
 
 function ROAS({ value }: { value: number }) {
     const color = value >= 4 ? '#10b981' : value >= 2 ? '#f59e0b' : value >= 1 ? '#ef4444' : '#6b7280';
@@ -1264,6 +1339,68 @@ export default function GoogleAdsPage() {
         { key: 'alerts', label: 'Alerts', icon: AlertTriangle, badge: urgentCount },
     ];
 
+    const handlePageExport = async (format: SectionExportFormat) => {
+        const [
+            latestStatus,
+            latestAccounts,
+            latestPerformance,
+            latestBudget,
+            latestCampaigns,
+            latestKeywords,
+            latestAuctionInsights,
+            latestSearchTerms,
+            latestGeo,
+            latestAlerts,
+            latestBidding,
+            latestQualityScore,
+            latestAssets
+        ] = await Promise.all([
+            googleAdsApi.getStatus().then((res) => res.data).catch(() => status),
+            googleAdsApi.getDiscovery().then((res) => res.data.data).catch(() => accountsData),
+            googleAdsApi.getPerformance(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getBudget().then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getCampaigns(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getKeywords(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getAuctionInsights(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getSearchTerms(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getGeo(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getAlerts().then((res) => res.data.data).catch(() => alertsData),
+            googleAdsApi.getBidding(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getQualityScore().then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getAssetData().then((res) => res.data.data).catch(() => null)
+        ]);
+
+        const customerId = latestAccounts?.customerId || latestStatus?.account?.customerId || 'google-ads';
+        const reportTitle = `Google Ads ${customerId} Report`;
+        const reportSubtitle = `${preset} export for ${latestStatus?.account?.email || customerId}`;
+        const tables = buildGoogleAdsExportTables({
+            preset,
+            status: latestStatus,
+            accounts: latestAccounts,
+            performance: latestPerformance,
+            budget: latestBudget,
+            campaigns: latestCampaigns,
+            keywords: latestKeywords,
+            auctionInsights: latestAuctionInsights,
+            searchTerms: latestSearchTerms,
+            geography: latestGeo,
+            alerts: latestAlerts,
+            bidding: latestBidding,
+            qualityScore: latestQualityScore,
+            assets: latestAssets
+        });
+
+        if (format === 'excel') {
+            const workbookBlob = buildWorkbookBlob(reportTitle, tablesToSheets(tables));
+            downloadBlob(workbookBlob, `${sanitizeFileName(reportTitle)}.xlsx`);
+            return;
+        }
+
+        const markup = tablesToMarkup(tables);
+        const documentMarkup = buildExportDocument(reportTitle, reportSubtitle, markup, format);
+        downloadBlob(new Blob([documentMarkup], { type: 'text/html;charset=utf-8' }), `${sanitizeFileName(reportTitle)}.html`);
+    };
+
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {onboardingTip}
@@ -1301,6 +1438,7 @@ export default function GoogleAdsPage() {
                             ))}
                         </div>
                     )}
+                    <PageExportMenu onExport={handlePageExport} />
                     <button
                         onClick={() => disconnectMutation.mutate()}
                         disabled={disconnectMutation.isPending}

@@ -5,6 +5,18 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { adsApi } from '@/lib/api';
 import {
+    PageExportMenu,
+    appendDatasetTables,
+    buildExportDocument,
+    buildWorkbookBlob,
+    downloadBlob,
+    sanitizeFileName,
+    tablesToMarkup,
+    tablesToSheets,
+    type ExportTable,
+    type SectionExportFormat
+} from '@/lib/pageExport';
+import {
     IndianRupee, Eye, MousePointer, Users, BarChart3,
     Play, Target, Layers, TrendingUp, HelpCircle, Smartphone, Monitor,
     Globe, MapPin, Award, Zap, DollarSign, ExternalLink, ChevronDown, ChevronUp,
@@ -46,6 +58,76 @@ function formatRoas(value: number | string) {
 }
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'];
+
+function toTitleCase(value: string) {
+    return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildAdsExportTables({
+    accountName,
+    accountId,
+    datePreset,
+    insightsData,
+    demographicsData,
+    placementsData,
+    geographyData,
+    campaignsData,
+    funnelData,
+    intelligenceData,
+    advancedData,
+    deepInsightsData
+}: {
+    accountName: string;
+    accountId: string;
+    datePreset: string;
+    insightsData: any;
+    demographicsData: any;
+    placementsData: any;
+    geographyData: any;
+    campaignsData: any;
+    funnelData: any;
+    intelligenceData: any;
+    advancedData: any;
+    deepInsightsData: any;
+}) {
+    const tables: ExportTable[] = [
+        {
+            title: 'Export Context',
+            subtitle: 'Meta Ads account and reporting window',
+            headers: ['Field', 'Value'],
+            rows: [
+                ['Account Name', accountName],
+                ['Account ID', accountId],
+                ['Preset', toTitleCase(datePreset)],
+                ['Generated At', new Date().toLocaleString()]
+            ],
+            sheetName: 'Context'
+        }
+    ];
+
+    appendDatasetTables(tables, 'Account Summary', insightsData?.data?.summary);
+    appendDatasetTables(tables, 'Relevance Diagnostics', insightsData?.data?.relevanceDiagnostics);
+    appendDatasetTables(tables, 'ROAS Metrics', insightsData?.data?.roas);
+    appendDatasetTables(tables, 'Click Metrics', insightsData?.data?.clickMetrics);
+    appendDatasetTables(tables, 'Daily Performance', insightsData?.data?.daily);
+    appendDatasetTables(tables, 'Device Breakdown', insightsData?.data?.devices);
+    appendDatasetTables(tables, 'Position Breakdown', placementsData?.data?.positions || insightsData?.data?.positions);
+    appendDatasetTables(tables, 'Video Views', insightsData?.data?.videoViews);
+    appendDatasetTables(tables, 'Conversions', insightsData?.data?.conversions);
+    appendDatasetTables(tables, 'Action Values', insightsData?.data?.actionValues);
+    appendDatasetTables(tables, 'Cost Per Action', insightsData?.data?.costPerAction);
+    appendDatasetTables(tables, 'Campaigns', campaignsData?.data?.campaigns);
+    appendDatasetTables(tables, 'Demographics', demographicsData?.data?.demographics);
+    appendDatasetTables(tables, 'Placements', placementsData?.data?.placements);
+    appendDatasetTables(tables, 'Countries', geographyData?.data?.countries);
+    appendDatasetTables(tables, 'Regions', geographyData?.data?.regions);
+    appendDatasetTables(tables, 'Conversion Funnel', funnelData?.data);
+    appendDatasetTables(tables, 'Campaign Intelligence', intelligenceData?.data);
+    appendDatasetTables(tables, 'Advanced Analytics', advancedData?.data);
+    appendDatasetTables(tables, 'Deep Insights', deepInsightsData?.data);
+
+    return tables;
+}
 
 // ==================== TOOLTIP COMPONENT ====================
 
@@ -410,6 +492,62 @@ export default function AdsPage() {
         ctr: parseFloat(p.ctr || 0)
     }));
 
+    const selectedAccountMeta = adAccounts.find((account: any) => account.account_id === effectiveAccount);
+
+    const handlePageExport = async (format: SectionExportFormat) => {
+        if (!effectiveAccount) return;
+
+        const [
+            latestInsights,
+            latestDemographics,
+            latestPlacements,
+            latestGeography,
+            latestCampaigns,
+            latestFunnel,
+            latestIntelligence,
+            latestAdvanced,
+            latestDeepInsights
+        ] = await Promise.all([
+            adsApi.getAdInsights(effectiveAccount, datePreset).then((res) => res.data).catch(() => insightsData),
+            adsApi.getDemographics(effectiveAccount, datePreset).then((res) => res.data).catch(() => demographicsData),
+            adsApi.getPlacements(effectiveAccount, datePreset).then((res) => res.data).catch(() => placementsData),
+            adsApi.getGeography(effectiveAccount, datePreset).then((res) => res.data).catch(() => geographyData),
+            adsApi.getCampaigns(effectiveAccount).then((res) => res.data).catch(() => campaignsData),
+            adsApi.getConversionFunnel(effectiveAccount, datePreset).then((res) => res.data).catch(() => funnelData),
+            adsApi.getCampaignIntelligence(effectiveAccount, datePreset).then((res) => res.data).catch(() => intelligenceData),
+            adsApi.getAdvancedAnalytics(effectiveAccount, datePreset).then((res) => res.data).catch(() => advancedData),
+            adsApi.getDeepInsights(effectiveAccount, datePreset).then((res) => res.data).catch(() => deepInsightsData)
+        ]);
+
+        const accountName = selectedAccountMeta?.name || selectedAccountMeta?.account_name || `Account ${effectiveAccount}`;
+        const reportTitle = `${accountName} Meta Ads Report`;
+        const reportSubtitle = `${toTitleCase(datePreset)} performance export for ${effectiveAccount}`;
+        const tables = buildAdsExportTables({
+            accountName,
+            accountId: effectiveAccount,
+            datePreset,
+            insightsData: latestInsights,
+            demographicsData: latestDemographics,
+            placementsData: latestPlacements,
+            geographyData: latestGeography,
+            campaignsData: latestCampaigns,
+            funnelData: latestFunnel,
+            intelligenceData: latestIntelligence,
+            advancedData: latestAdvanced,
+            deepInsightsData: latestDeepInsights
+        });
+
+        if (format === 'excel') {
+            const workbookBlob = buildWorkbookBlob(reportTitle, tablesToSheets(tables));
+            downloadBlob(workbookBlob, `${sanitizeFileName(reportTitle)}.xlsx`);
+            return;
+        }
+
+        const markup = tablesToMarkup(tables);
+        const documentMarkup = buildExportDocument(reportTitle, reportSubtitle, markup, format);
+        downloadBlob(new Blob([documentMarkup], { type: 'text/html;charset=utf-8' }), `${sanitizeFileName(reportTitle)}.html`);
+    };
+
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
@@ -450,6 +588,7 @@ export default function AdsPage() {
                             </button>
                         ))}
                     </div>
+                    <PageExportMenu onExport={handlePageExport} />
                 </div>
             </div>
 
