@@ -141,6 +141,34 @@ async function buildExportableSection(section: HTMLElement) {
     return clone;
 }
 
+function formatExportValue(value: unknown) {
+    if (value === null || value === undefined || value === '') return '-';
+    if (typeof value === 'number') return value.toLocaleString();
+    return String(value);
+}
+
+function buildTableMarkup(title: string, subtitle: string | undefined, headers: string[], rows: Array<Array<string | number>>) {
+    const headerCells = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+    const bodyRows = rows.map((row) => `
+      <tr>${row.map((cell) => `<td>${escapeHtml(formatExportValue(cell))}</td>`).join('')}</tr>
+    `).join('');
+
+    return `
+      <section class="export-section">
+        <div class="export-section-header">
+          <div>
+            <h2>${escapeHtml(title)}</h2>
+            ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+          </div>
+        </div>
+        <table class="table export-table">
+          <thead><tr>${headerCells}</tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </section>
+    `;
+}
+
 function buildExportDocument(title: string, subtitle: string | undefined, sectionMarkup: string, format: SectionExportFormat) {
     const exportLabel = format === 'excel' ? 'Excel export' : 'HTML export';
     const generatedAt = new Date().toLocaleString();
@@ -210,6 +238,27 @@ function buildExportDocument(title: string, subtitle: string | undefined, sectio
     .export-content {
       padding: 24px 28px 30px;
     }
+    .export-section {
+      margin-bottom: 28px;
+    }
+    .export-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .export-section-header h2 {
+      margin: 0;
+      font-size: 18px;
+      color: #0f172a;
+    }
+    .export-section-header p {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
     .card, .chart-container {
       background: #ffffff !important;
       border: 1px solid var(--border) !important;
@@ -247,6 +296,9 @@ function buildExportDocument(title: string, subtitle: string | undefined, sectio
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+    }
+    .export-table tbody tr:nth-child(even) {
+      background: #fbfdff;
     }
     .badge {
       display: inline-flex;
@@ -290,18 +342,88 @@ function buildExportDocument(title: string, subtitle: string | undefined, sectio
 </html>`;
 }
 
-async function exportSection(section: HTMLElement, title: string, format: SectionExportFormat, subtitle?: string) {
-    const exportableSection = await buildExportableSection(section);
-    const markup = buildExportDocument(title, subtitle, exportableSection.outerHTML, format);
-    const fileExtension = format === 'excel' ? 'xls' : 'html';
-    const mimeType = format === 'excel'
-        ? 'application/vnd.ms-excel;charset=utf-8'
-        : 'text/html;charset=utf-8';
+function buildOverviewReportMarkup({
+    profile,
+    metrics,
+    recentPosts,
+    dailyChartData,
+    countryData,
+    cityData,
+    genderAgeData,
+    audienceInsights,
+    dateRange,
+    visiblePageMarkup
+}: {
+    profile: any;
+    metrics: any;
+    recentPosts: any[];
+    dailyChartData: Array<{ name: string; followers: number; reach: number }>;
+    countryData: Array<{ name: string; value: number }>;
+    cityData: Array<{ name: string; value: number }>;
+    genderAgeData: Array<{ name: string; shortName: string; value: number }>;
+    audienceInsights: any;
+    dateRange: { startDate: string; endDate: string };
+    visiblePageMarkup: string;
+}) {
+    const executiveRows = [
+        ['Date Range', `${dateRange.startDate} to ${dateRange.endDate}`, 'Reporting window used for every metric below'],
+        ['Account', `@${profile.username || 'instagram'}`, 'Primary Instagram profile in view'],
+        ['Followers', metrics.followers || 0, 'Current follower base'],
+        ['Engagement Rate', `${metrics.engagementRate || 0}%`, 'Follower-level engagement efficiency'],
+        ['Profile Views', metrics.totalProfileViews || 0, 'Profile intent generated in this period'],
+        ['Total Reach', metrics.totalReach || 0, 'Unique accounts reached'],
+        ['Total Saves', metrics.totalSaved || 0, 'High-intent content signal'],
+        ['Total Shares', metrics.totalShares || 0, 'Distribution beyond direct viewers'],
+        ['Follower Delta', `${metrics.followerDelta >= 0 ? '+' : ''}${metrics.followerDelta || 0}`, 'Net audience movement']
+    ];
 
-    downloadBlob(
-        new Blob([markup], { type: mimeType }),
-        `${sanitizeFileName(title)}-${new Date().toISOString().slice(0, 10)}.${fileExtension}`
-    );
+    const advancedRows = [
+        ['True Follower Growth Rate', `${(metrics.trueFollowerGrowthRate || 0) >= 0 ? '+' : ''}${metrics.trueFollowerGrowthRate ?? 0}%`, 'New followers relative to the starting audience'],
+        ['Content ROI Score', metrics.contentRoiScore ?? 0, 'Total engagement generated per post'],
+        ['Reach-to-Follower Ratio', `${metrics.reachToFollowerRatio ?? 0}x`, 'How strongly content breaks beyond followers'],
+        ['Save Rate', `${metrics.saveRate ?? 0}%`, 'Evergreen or reference-worthy content signal'],
+        ['Profile Visit Rate', `${metrics.profileVisitRate ?? 0}%`, 'How efficiently reach becomes account intent'],
+        ['True Engagement Rate', `${metrics.engagementRate || 0}%`, 'Reach-based engagement read']
+    ];
+
+    const audienceRows = [
+        ['Top Country', audienceInsights.topCountry?.label || '-', audienceInsights.topCountry?.value || 0],
+        ['Top City', audienceInsights.topCity?.label?.split(',')[0] || '-', audienceInsights.topCity?.value || 0],
+        ['Top Demographic', audienceInsights.topGenderAge ? `${audienceInsights.topGenderAge.gender} ${audienceInsights.topGenderAge.age}` : '-', audienceInsights.topGenderAge?.value || 0],
+        ['Peak Follower Hours', (audienceInsights.peakFollowerHours || []).slice(0, 3).map((item: any) => item.label).join(', ') || '-', 'Follower activity insight']
+    ];
+
+    const dailyRows = dailyChartData.map((day) => [day.name, day.followers, day.reach]);
+    const recentPostRows = recentPosts.slice(0, 5).map((post: any) => [
+        new Date(post.timestamp).toLocaleDateString(),
+        post.type || '-',
+        post.likes || 0,
+        post.comments || 0,
+        post.engagement || 0
+    ]);
+    const countryRows = countryData.map((item) => [item.name, item.value]);
+    const cityRows = cityData.map((item) => [item.name, item.value]);
+    const demographicRows = genderAgeData.map((item) => [item.name || item.shortName, item.value]);
+
+    return `
+      ${buildTableMarkup('Executive KPI Summary', 'A quick read of the account-level performance signals performance marketers usually lead with.', ['Metric', 'Value', 'Why it matters'], executiveRows)}
+      ${buildTableMarkup('Advanced Performance Metrics', 'Derived ratios and quality signals for content efficiency and audience movement.', ['Metric', 'Value', 'Performance marketer read'], advancedRows)}
+      ${buildTableMarkup('Audience Snapshot', 'Fast audience context for geo, demographic, and follower activity planning.', ['Signal', 'Value', 'Volume / Note'], audienceRows)}
+      ${dailyRows.length > 0 ? buildTableMarkup('Daily Audience Data', 'Raw daily values behind the visibility trend section.', ['Date', 'Followers Gained', 'Reach'], dailyRows) : ''}
+      ${recentPostRows.length > 0 ? buildTableMarkup('Recent Posts', 'The same recent post rows shown on the page, exported into a usable table.', ['Publish Date', 'Format', 'Likes', 'Comments', 'Engagement'], recentPostRows) : ''}
+      ${countryRows.length > 0 ? buildTableMarkup('Top Countries', 'Audience distribution by country.', ['Country', 'Followers'], countryRows) : ''}
+      ${cityRows.length > 0 ? buildTableMarkup('Top Cities', 'Audience distribution by city.', ['City', 'Followers'], cityRows) : ''}
+      ${demographicRows.length > 0 ? buildTableMarkup('Top Demographics', 'Highest concentration follower cohorts.', ['Demographic', 'Followers'], demographicRows) : ''}
+      <section class="export-section">
+        <div class="export-section-header">
+          <div>
+            <h2>Full Page Visual Export</h2>
+            <p>The rendered page is included below so charts, cards, and paid media widgets stay attached to the report.</p>
+          </div>
+        </div>
+        ${visiblePageMarkup}
+      </section>
+    `;
 }
 
 // ==================== TOOLTIP COMPONENT ====================
@@ -341,14 +463,10 @@ function InfoTooltip({ text }: { text: string }) {
     );
 }
 
-function SectionExportMenu({
-    sectionRef,
-    title,
-    subtitle
+function PageExportMenu({
+    onExport
 }: {
-    sectionRef: { current: HTMLElement | null };
-    title: string;
-    subtitle?: string;
+    onExport: (format: SectionExportFormat) => Promise<void>;
 }) {
     const [open, setOpen] = useState(false);
     const [isExporting, setIsExporting] = useState<SectionExportFormat | null>(null);
@@ -368,13 +486,12 @@ function SectionExportMenu({
     }, [open]);
 
     const handleExport = async (format: SectionExportFormat) => {
-        if (!sectionRef.current || isExporting) return;
-
+        if (isExporting) return;
         setIsExporting(format);
         setOpen(false);
 
         try {
-            await exportSection(sectionRef.current, title, format, subtitle);
+            await onExport(format);
         } finally {
             setIsExporting(null);
         }
@@ -394,7 +511,7 @@ function SectionExportMenu({
                 ) : (
                     <>
                         <Download size={14} />
-                        Export
+                        Export Page
                         <ChevronDown size={14} style={{ opacity: 0.8 }} />
                     </>
                 )}
@@ -432,8 +549,8 @@ function SectionExportMenu({
                     >
                         <FileSpreadsheet size={16} style={{ color: '#22c55e' }} />
                         <div>
-                            <div style={{ fontSize: 13, fontWeight: 600 }}>Export as Excel</div>
-                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Clean workbook-style export</div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>Export page as Excel</div>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Whole-page workbook for marketers</div>
                         </div>
                     </button>
                     <button
@@ -455,8 +572,8 @@ function SectionExportMenu({
                     >
                         <FileText size={16} style={{ color: '#60a5fa' }} />
                         <div>
-                            <div style={{ fontSize: 13, fontWeight: 600 }}>Export as HTML</div>
-                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Polished shareable report</div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>Export page as HTML</div>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Clean shareable page report</div>
                         </div>
                     </button>
                 </div>
@@ -468,7 +585,6 @@ function SectionExportMenu({
 // ==================== GOOGLE ADS WIDGET ====================
 
 function GoogleAdsWidget() {
-    const sectionRef = useRef<HTMLDivElement>(null);
     const { data: statusData, isLoading: statusLoading } = useQuery({
         queryKey: ['google-ads-status'],
         queryFn: async () => {
@@ -544,7 +660,6 @@ function GoogleAdsWidget() {
 
     return (
         <div
-            ref={sectionRef}
             style={{
             background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
             border: '1px solid rgba(255,255,255,0.06)',
@@ -562,8 +677,7 @@ function GoogleAdsWidget() {
                         {adsAccount && <p className="text-muted" style={{ fontSize: 11 }}>{adsAccount.email}</p>}
                     </div>
                 </div>
-                <div data-export-ignore="true" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <SectionExportMenu sectionRef={sectionRef} title="Google Ads Overview" subtitle="Last 30 days performance summary" />
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <span style={{
                         padding: '4px 10px',
                         background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
@@ -666,37 +780,28 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
 function SectionCard({ title, subtitle, timePeriod, children }: {
     title: string; subtitle?: string; timePeriod?: string; children: React.ReactNode
 }) {
-    const sectionRef = useRef<HTMLDivElement>(null);
-
     return (
-        <div
-            ref={sectionRef}
-            className="card"
-            style={{ marginBottom: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}
-        >
+        <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
             <div className="card-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600 }}>{title}</h3>
                     {subtitle && <p className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>{subtitle}</p>}
                 </div>
-                <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {timePeriod && (
-                        <span style={{
-                            padding: '4px 10px',
-                            background: 'var(--background)',
-                            borderRadius: 6,
-                            fontSize: 11,
-                            color: 'var(--muted)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4
-                        }}>
-                            <Clock size={12} />
-                            {timePeriod}
-                        </span>
-                    )}
-                    <SectionExportMenu sectionRef={sectionRef} title={title} subtitle={subtitle} />
-                </div>
+                {timePeriod && (
+                    <span style={{
+                        padding: '4px 10px',
+                        background: 'var(--background)',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        color: 'var(--muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                    }}>
+                        <Clock size={12} />
+                        {timePeriod}
+                    </span>
+                )}
             </div>
             {children}
         </div>
@@ -799,7 +904,6 @@ function OnlineFollowersHeatmap({ data }: { data: any[] }) {
 // ==================== META ADS WIDGET ====================
 
 function MetaAdsWidget() {
-    const sectionRef = useRef<HTMLDivElement>(null);
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
         queryKey: ['ad-accounts'],
         queryFn: async () => {
@@ -865,7 +969,6 @@ function MetaAdsWidget() {
 
     return (
         <div
-            ref={sectionRef}
             style={{
             background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
             border: '1px solid rgba(255,255,255,0.06)',
@@ -885,8 +988,7 @@ function MetaAdsWidget() {
                         </p>
                     </div>
                 </div>
-                <div data-export-ignore="true" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <SectionExportMenu sectionRef={sectionRef} title="Meta Ads Overview" subtitle="Last 30 days performance summary" />
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <span style={{
                         padding: '4px 10px',
                         background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
@@ -951,11 +1053,7 @@ function MetaAdsWidget() {
 
 export default function DashboardPage() {
     const { activeAccountId } = useAuth();
-    const socialOverviewRef = useRef<HTMLDivElement>(null);
-    const dailyAudienceRef = useRef<HTMLDivElement>(null);
-    const engagementTrendRef = useRef<HTMLDivElement>(null);
-    const likesCommentsRef = useRef<HTMLDivElement>(null);
-    const recentPostsRef = useRef<HTMLDivElement>(null);
+    const pageExportRef = useRef<HTMLDivElement>(null);
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 29);
@@ -1073,8 +1171,38 @@ export default function DashboardPage() {
         ? ((metrics.totalProfileViews / metrics.totalReach) * 100).toFixed(2)
         : '0';
 
+    const handlePageExport = async (format: SectionExportFormat) => {
+        if (!pageExportRef.current) return;
+
+        const exportablePage = await buildExportableSection(pageExportRef.current);
+        const reportMarkup = buildOverviewReportMarkup({
+            profile,
+            metrics,
+            recentPosts,
+            dailyChartData,
+            countryData,
+            cityData,
+            genderAgeData,
+            audienceInsights,
+            dateRange,
+            visiblePageMarkup: exportablePage.outerHTML
+        });
+        const reportTitle = `${profile.username ? `@${profile.username} ` : ''}Overview Report`;
+        const reportSubtitle = `Overview page export for ${dateRange.startDate} to ${dateRange.endDate}`;
+        const documentMarkup = buildExportDocument(reportTitle, reportSubtitle, reportMarkup, format);
+        const extension = format === 'excel' ? 'xls' : 'html';
+        const mimeType = format === 'excel'
+            ? 'application/vnd.ms-excel;charset=utf-8'
+            : 'text/html;charset=utf-8';
+
+        downloadBlob(
+            new Blob([documentMarkup], { type: mimeType }),
+            `${sanitizeFileName(reportTitle)}-${dateRange.startDate}-to-${dateRange.endDate}.${extension}`
+        );
+    };
+
     return (
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div ref={pageExportRef} style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <div>
@@ -1087,8 +1215,9 @@ export default function DashboardPage() {
                     </div>
                     <p className="page-subtitle">Account performance overview</p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                    <PageExportMenu onExport={handlePageExport} />
                     <button
                         onClick={() => refetch()}
                         disabled={isFetching}
@@ -1103,7 +1232,6 @@ export default function DashboardPage() {
 
             {/* SOCIAL MEDIA WIDGET (Instagram) */}
             <div
-                ref={socialOverviewRef}
                 style={{
                 background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
                 border: '1px solid rgba(255,255,255,0.06)',
@@ -1120,9 +1248,6 @@ export default function DashboardPage() {
                             <h3 style={{ fontSize: 14, fontWeight: 600 }}>Social Media Overview</h3>
                             <p className="text-muted" style={{ fontSize: 11 }}>@{profile.username}</p>
                         </div>
-                    </div>
-                    <div data-export-ignore="true">
-                        <SectionExportMenu sectionRef={socialOverviewRef} title="Social Media Overview" subtitle={`@${profile.username || 'instagram'} account performance overview`} />
                     </div>
                 </div>
 
@@ -1273,14 +1398,11 @@ export default function DashboardPage() {
                 )}
                 {/* Daily Metrics Chart */}
                 {dailyChartData.length > 0 && (
-                    <div ref={dailyAudienceRef} className="chart-container" style={{ marginBottom: 24 }}>
+                    <div className="chart-container" style={{ marginBottom: 24 }}>
                         <div className="card-header">
                             <div>
                                 <h3 className="card-title">Daily Audience Metrics</h3>
                                 <p className="text-muted" style={{ fontSize: 12 }}>Daily follower gains and reach returned by Meta. Views and profile visits are aggregate-only.</p>
-                            </div>
-                            <div data-export-ignore="true">
-                                <SectionExportMenu sectionRef={dailyAudienceRef} title="Daily Audience Metrics" subtitle="Daily follower gains and reach returned by Meta" />
                             </div>
                         </div>
                         <ResponsiveContainer width="100%" height={240}>
@@ -1311,12 +1433,9 @@ export default function DashboardPage() {
 
                 {/* Engagement Charts */}
                 <div className="grid-charts" style={{ marginBottom: 24 }}>
-                    <div ref={engagementTrendRef} className="chart-container">
+                    <div className="chart-container">
                         <div className="card-header">
                             <h3 className="card-title">Engagement Trend</h3>
-                            <div data-export-ignore="true">
-                                <SectionExportMenu sectionRef={engagementTrendRef} title="Engagement Trend" subtitle="Recent post engagement trend" />
-                            </div>
                         </div>
                         <ResponsiveContainer width="100%" height={200}>
                             <AreaChart data={chartData}>
@@ -1341,12 +1460,9 @@ export default function DashboardPage() {
                         </ResponsiveContainer>
                     </div>
 
-                    <div ref={likesCommentsRef} className="chart-container">
+                    <div className="chart-container">
                         <div className="card-header">
                             <h3 className="card-title">Likes vs Comments</h3>
-                            <div data-export-ignore="true">
-                                <SectionExportMenu sectionRef={likesCommentsRef} title="Likes vs Comments" subtitle="Comparison of likes and comments across recent posts" />
-                            </div>
                         </div>
                         <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={chartData}>
@@ -1451,13 +1567,10 @@ export default function DashboardPage() {
                 )}
 
                 {/* Recent Posts Table */}
-                <div ref={recentPostsRef} className="card">
+                <div className="card">
                     <div className="card-header">
                         <h3 className="card-title">Recent Posts</h3>
-                        <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                            <span className="badge badge-info">{recentPosts.length} posts</span>
-                            <SectionExportMenu sectionRef={recentPostsRef} title="Recent Posts" subtitle="Latest post performance snapshot" />
-                        </div>
+                        <span className="badge badge-info">{recentPosts.length} posts</span>
                     </div>
                     {recentPosts.length > 0 ? (
                         <table className="table">
