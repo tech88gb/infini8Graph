@@ -655,13 +655,15 @@ class InstagramService {
             // navigation insight is an object: { swipe_forward, tap_back, tap_exit, tap_replay }
             const navigation = storyInsights.navigation || {};
             const tapReplay = typeof navigation === 'object' ? (navigation.tap_replay || 0) : 0;
-            const swipeForward = typeof navigation === 'object' ? (navigation.swipe_forward || 0) : 0;
+            const swipeForward = typeof navigation === 'object' ? (navigation.swipe_forward || navigation.tap_forward || 0) : 0;
+            const navigationTapBack = typeof navigation === 'object' ? (navigation.tap_back || 0) : 0;
+            const navigationTapExit = typeof navigation === 'object' ? (navigation.tap_exit || 0) : 0;
 
             const impressions = storyInsights.impressions || storyInsights.views || 0;
             const reach = storyInsights.reach || 0;
             const tapsForward = storyInsights.taps_forward || swipeForward || 0;
-            const tapsBack = storyInsights.taps_back || 0;
-            const exits = storyInsights.exits || 0;
+            const tapsBack = storyInsights.taps_back || navigationTapBack || 0;
+            const exits = storyInsights.exits || navigationTapExit || 0;
 
             // Completion rate: viewers who did NOT exit early
             // Approximation: (reach - exits) / reach
