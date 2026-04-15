@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { instagramApi } from '@/lib/api';
-import { Download, FileJson, FileText, FileSpreadsheet, FileCode2, FileImage, Check, CalendarRange, Target, BarChart3, X, Sparkles } from 'lucide-react';
+import { Download, FileText, FileSpreadsheet, Check, CalendarRange, Target, BarChart3, X, Sparkles } from 'lucide-react';
 
-type ExportFormat = 'json' | 'csv' | 'tsv' | 'md' | 'html';
+type ExportFormat = 'excel' | 'html';
 
 const exportFormats: Array<{
     id: ExportFormat;
@@ -12,11 +12,8 @@ const exportFormats: Array<{
     description: string;
     icon: ComponentType<{ size?: number; className?: string }>;
 }> = [
-    { id: 'json', label: 'JSON Bundle', description: 'Complete nested dataset for BI tools and custom analysis.', icon: FileJson },
-    { id: 'csv', label: 'CSV Workbook', description: 'Spreadsheet-friendly flat tables for performance marketers.', icon: FileSpreadsheet },
-    { id: 'tsv', label: 'TSV Tables', description: 'Excel-safe tab-separated export with less quote cleanup.', icon: FileText },
-    { id: 'md', label: 'Markdown Brief', description: 'Readable strategy brief with KPI snapshots and table previews.', icon: FileCode2 },
-    { id: 'html', label: 'HTML Report', description: 'Polished report view for sharing with clients or teams.', icon: FileImage },
+    { id: 'excel', label: 'Excel Workbook', description: 'Spreadsheet-ready workbook export that opens cleanly in Excel.', icon: FileSpreadsheet },
+    { id: 'html', label: 'HTML Report', description: 'Polished report view for sharing with clients or teams.', icon: FileText },
 ];
 
 const exportOptions = [
@@ -49,7 +46,7 @@ function parseFileName(header?: string | null) {
 
 export default function ExportPage() {
     const [selectedMetrics, setSelectedMetrics] = useState<string[]>(recommendedExportMetrics);
-    const [format, setFormat] = useState<ExportFormat>('csv');
+    const [format, setFormat] = useState<ExportFormat>('excel');
     const [loading, setLoading] = useState(false);
     const [startDate, setStartDate] = useState(defaultStartDate());
     const [endDate, setEndDate] = useState(formatDateForInput(new Date()));
@@ -88,27 +85,22 @@ export default function ExportPage() {
         setLoading(true);
         setStatus(null);
         try {
-            const response = await instagramApi.exportData(format, selectedMetrics.join(','), startDate, endDate);
+            const backendFormat = 'html';
+            const response = await instagramApi.exportData(backendFormat, selectedMetrics.join(','), startDate, endDate);
 
-            if (format === 'json') {
-                const blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `infini8graph-export-${Date.now()}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-            } else {
-                const contentType = response.headers['content-type'] || 'text/plain';
-                const filename = parseFileName(response.headers['content-disposition']) || `infini8graph-export-${Date.now()}.${format}`;
-                const blob = new Blob([response.data], { type: contentType });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(url);
-            }
+            const extension = format === 'excel' ? 'xls' : 'html';
+            const contentType = format === 'excel'
+                ? 'application/vnd.ms-excel;charset=utf-8'
+                : (response.headers['content-type'] || 'text/html;charset=utf-8');
+            const fallbackName = `infini8graph-export-${Date.now()}.${extension}`;
+            const baseName = parseFileName(response.headers['content-disposition'])?.replace(/\.[a-z0-9]+$/i, '') || fallbackName.replace(/\.[a-z0-9]+$/i, '');
+            const blob = new Blob([response.data], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${baseName}.${extension}`;
+            a.click();
+            URL.revokeObjectURL(url);
 
             setStatus(`Export ready: ${selectedLabels.join(', ') || 'No datasets'} (${format.toUpperCase()})`);
         } catch (error) {
@@ -142,7 +134,7 @@ export default function ExportPage() {
                             <div>
                                 <div className="font-semibold text-white mb-1">Quick start tip</div>
                                 <p className="text-sm text-[var(--muted)] leading-6">
-                                    Pick `CSV Workbook` when you want spreadsheet-ready reporting, or `HTML Report` when you need a client-facing shareout. The export scope can mix KPI summaries, post tables, and content-intelligence in one run.
+                                    Pick `Excel Workbook` when you want spreadsheet-ready reporting, or `HTML Report` when you need a client-facing shareout. The export scope can mix KPI summaries, post tables, and content-intelligence in one run.
                                 </p>
                             </div>
                         </div>
