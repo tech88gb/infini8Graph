@@ -12,6 +12,7 @@ import {
     Download, ChevronDown, FileSpreadsheet, FileText
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import * as XLSX from 'xlsx';
 import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -58,15 +59,6 @@ function escapeHtml(value: string) {
         .replace(/'/g, '&#39;');
 }
 
-function escapeXml(value: string) {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-
 function downloadBlob(blob: Blob, fileName: string) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -109,92 +101,47 @@ type ExportSheet = {
     rows: Array<Array<string | number>>;
 };
 
-function buildWorkbookXml(title: string, sheets: ExportSheet[]) {
-    const styleSheet = `
-      <Styles>
-        <Style ss:ID="Default" ss:Name="Normal">
-          <Alignment ss:Vertical="Bottom"/>
-          <Borders/>
-          <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#111827"/>
-          <Interior/>
-          <NumberFormat/>
-          <Protection/>
-        </Style>
-        <Style ss:ID="Title">
-          <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="15" ss:Color="#111827"/>
-        </Style>
-        <Style ss:ID="Header">
-          <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="11" ss:Color="#FFFFFF"/>
-          <Interior ss:Color="#4F46E5" ss:Pattern="Solid"/>
-          <Borders>
-            <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
-            <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
-            <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
-            <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
-          </Borders>
-        </Style>
-        <Style ss:ID="Cell">
-          <Borders>
-            <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
-            <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
-            <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
-            <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
-          </Borders>
-        </Style>
-      </Styles>
-    `;
+function buildWorkbookBlob(title: string, sheets: ExportSheet[]) {
+    const workbook = XLSX.utils.book_new();
+    workbook.Props = {
+        Title: title,
+        Author: 'infini8Graph',
+        CreatedDate: new Date()
+    };
 
-    const worksheetXml = sheets.map((sheet) => {
+    sheets.forEach((sheet) => {
         const safeName = sheet.name.replace(/[\\/:*?[\]]/g, ' ').slice(0, 31) || 'Sheet';
+        const worksheet = XLSX.utils.aoa_to_sheet(sheet.rows);
         const columnCount = Math.max(...sheet.rows.map((row) => row.length), 1);
-        const columns = Array.from({ length: columnCount }, () => '<Column ss:AutoFitWidth="1" ss:Width="140"/>').join('');
-        const rowsXml = sheet.rows.map((row, rowIndex) => {
-            const styleId = rowIndex === 0 ? 'Header' : 'Cell';
-            const cells = row.map((cell) => {
-                const isNumber = typeof cell === 'number' && Number.isFinite(cell);
-                const dataType = isNumber ? 'Number' : 'String';
-                const content = isNumber ? String(cell) : escapeXml(formatExportValue(cell));
-                return `<Cell ss:StyleID="${styleId}"><Data ss:Type="${dataType}">${content}</Data></Cell>`;
-            }).join('');
-            return `<Row>${cells}</Row>`;
-        }).join('');
+        worksheet['!cols'] = Array.from({ length: columnCount }, (_, columnIndex) => {
+            const longest = Math.max(
+                ...sheet.rows.map((row) => {
+                    const value = row[columnIndex];
+                    return formatExportValue(value).length;
+                }),
+                12
+            );
+            return { wch: Math.min(longest + 2, 40) };
+        });
 
-        return `
-          <Worksheet ss:Name="${escapeXml(safeName)}">
-            <Table x:FullColumns="1" x:FullRows="1" ss:DefaultRowHeight="18">
-              ${columns}
-              <Row><Cell ss:MergeAcross="${Math.max(columnCount - 1, 0)}" ss:StyleID="Title"><Data ss:Type="String">${escapeXml(title)}</Data></Cell></Row>
-              <Row/>
-              ${rowsXml}
-            </Table>
-            <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-              <FreezePanes/>
-              <FrozenNoSplit/>
-              <SplitHorizontal>2</SplitHorizontal>
-              <TopRowBottomPane>2</TopRowBottomPane>
-              <ActivePane>2</ActivePane>
-              <ProtectObjects>False</ProtectObjects>
-              <ProtectScenarios>False</ProtectScenarios>
-            </WorksheetOptions>
-          </Worksheet>
-        `;
-    }).join('');
+        if (sheet.rows.length > 1) {
+            const endColumn = XLSX.utils.encode_col(columnCount - 1);
+            const endRow = sheet.rows.length;
+            worksheet['!autofilter'] = { ref: `A1:${endColumn}${endRow}` };
+        }
 
-    return `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
-  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-    <Title>${escapeXml(title)}</Title>
-    <Author>infini8Graph</Author>
-    <Created>${new Date().toISOString()}</Created>
-  </DocumentProperties>
-  ${styleSheet}
-  ${worksheetXml}
-</Workbook>`;
+        XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
+    });
+
+    const workbookArray = XLSX.write(workbook, {
+        bookType: 'xlsx',
+        type: 'array',
+        compression: true
+    });
+
+    return new Blob([workbookArray], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
 }
 
 function buildExportDocument(title: string, subtitle: string | undefined, sectionMarkup: string, format: SectionExportFormat) {
@@ -1325,10 +1272,10 @@ export default function DashboardPage() {
         const reportSubtitle = `Overview page export for ${dateRange.startDate} to ${dateRange.endDate}. Table data only.`;
 
         if (format === 'excel') {
-            const workbookXml = buildWorkbookXml(reportTitle, buildOverviewWorkbookSheets(reportData));
+            const workbookBlob = buildWorkbookBlob(reportTitle, buildOverviewWorkbookSheets(reportData));
             downloadBlob(
-                new Blob([workbookXml], { type: 'application/vnd.ms-excel;charset=utf-8' }),
-                `${sanitizeFileName(reportTitle)}-${dateRange.startDate}-to-${dateRange.endDate}.xml`
+                workbookBlob,
+                `${sanitizeFileName(reportTitle)}-${dateRange.startDate}-to-${dateRange.endDate}.xlsx`
             );
             return;
         }
