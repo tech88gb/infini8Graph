@@ -146,6 +146,127 @@ class AnalyticsService {
         return 0;
     }
 
+    getMetricRowByName(rows = [], metricName) {
+        if (!Array.isArray(rows)) return null;
+        return rows.find((row) => row?.name === metricName) || null;
+    }
+
+    buildAccountInsightWindows(startDate = null, endDate = null) {
+        if (!startDate && !endDate) {
+            return [{ since: null, until: null, startDate: null, endDate: null }];
+        }
+
+        const requestedStart = new Date(`${startDate || endDate}T00:00:00Z`);
+        const requestedEnd = new Date(`${endDate || startDate}T23:59:59Z`);
+        const rangeStart = requestedStart <= requestedEnd ? requestedStart : requestedEnd;
+        const rangeEnd = requestedStart <= requestedEnd ? requestedEnd : requestedStart;
+        const windows = [];
+        let cursor = new Date(rangeStart);
+
+        while (cursor <= rangeEnd) {
+            const windowStart = new Date(cursor);
+            const windowEnd = new Date(Date.UTC(
+                windowStart.getUTCFullYear(),
+                windowStart.getUTCMonth(),
+                windowStart.getUTCDate() + 29,
+                23,
+                59,
+                59
+            ));
+            const cappedEnd = windowEnd < rangeEnd ? windowEnd : new Date(rangeEnd);
+
+            windows.push({
+                since: Math.floor(windowStart.getTime() / 1000),
+                until: Math.floor(cappedEnd.getTime() / 1000),
+                startDate: windowStart.toISOString().split('T')[0],
+                endDate: cappedEnd.toISOString().split('T')[0]
+            });
+
+            cursor = new Date(cappedEnd.getTime() + 1000);
+        }
+
+        return windows;
+    }
+
+    parseFollowBreakdown(metricRow) {
+        const rows = metricRow?.total_value?.breakdowns?.[0]?.results || [];
+        const totals = { follows: 0, unfollows: 0 };
+
+        rows.forEach((row) => {
+            const key = String(row?.dimension_values?.[0] || '').toLowerCase();
+            const value = this.parseInsightMetricValue(row?.value);
+
+            // Meta currently returns FOLLOWER / NON_FOLLOWER buckets here.
+            // Based on live responses, the non-follower bucket behaves like unfollows/leaves.
+            if (key.includes('non') || key.includes('unfollow') || key.includes('leave')) {
+                totals.unfollows += value;
+            } else {
+                totals.follows += value;
+            }
+        });
+
+        return totals;
+    }
+
+    async getAccountAggregateMetrics(startDate = null, endDate = null) {
+        const windows = this.buildAccountInsightWindows(startDate, endDate);
+        const aggregates = {
+            totalViews: 0,
+            totalProfileViews: 0,
+            follows: 0,
+            unfollows: 0,
+            followerDelta: 0
+        };
+
+        for (const window of windows) {
+            const [visibilityResult, followsResult] = await Promise.allSettled([
+                this.instagram.getAccountInsights(
+                    'day',
+                    ['views', 'profile_views'],
+                    window.since,
+                    window.until,
+                    'total_value'
+                ),
+                this.instagram.getAccountInsights(
+                    'day',
+                    ['follows_and_unfollows'],
+                    window.since,
+                    window.until,
+                    'total_value',
+                    { breakdown: 'follow_type' }
+                )
+            ]);
+
+            if (visibilityResult.status === 'fulfilled') {
+                const rows = visibilityResult.value?.data || [];
+                const viewsRow = this.getMetricRowByName(rows, 'views');
+                const profileViewsRow = this.getMetricRowByName(rows, 'profile_views');
+                aggregates.totalViews += this.parseInsightMetricValue(viewsRow?.total_value);
+                aggregates.totalProfileViews += this.parseInsightMetricValue(profileViewsRow?.total_value);
+            } else {
+                console.warn(
+                    `[getAccountAggregateMetrics] visibility failed for ${window.startDate || 'default'}-${window.endDate || 'default'}:`,
+                    visibilityResult.reason?.message || visibilityResult.reason
+                );
+            }
+
+            if (followsResult.status === 'fulfilled') {
+                const followsRow = this.getMetricRowByName(followsResult.value?.data || [], 'follows_and_unfollows');
+                const followBreakdown = this.parseFollowBreakdown(followsRow);
+                aggregates.follows += followBreakdown.follows;
+                aggregates.unfollows += followBreakdown.unfollows;
+            } else {
+                console.warn(
+                    `[getAccountAggregateMetrics] follows_and_unfollows failed for ${window.startDate || 'default'}-${window.endDate || 'default'}:`,
+                    followsResult.reason?.message || followsResult.reason
+                );
+            }
+        }
+
+        aggregates.followerDelta = aggregates.follows - aggregates.unfollows;
+        return aggregates;
+    }
+
     normaliseSeries(values = []) {
         const numericValues = values.map((value) => Number(value || 0));
         const max = Math.max(...numericValues, 0);
@@ -190,7 +311,7 @@ class AnalyticsService {
      */
     async getOverview(startDate = null, endDate = null) {
         // Build a cache key that includes the dates
-        const dateKey = `v4_core_${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v5_core_${startDate || 'default'}_${endDate || 'default'}`;
         
         // Check cache first
         const cached = await this.checkCache('overview', dateKey);
@@ -208,6 +329,13 @@ class AnalyticsService {
         // Audience demographics are loaded separately so the dashboard can paint sooner.
         let media = [];
         let dailyMetrics = [];
+        let accountAggregates = {
+            totalViews: 0,
+            totalProfileViews: 0,
+            follows: 0,
+            unfollows: 0,
+            followerDelta: 0
+        };
         const fetchLimit = (startDate || endDate)
             ? MEDIA_FETCH_LIMITS.overview.ranged
             : MEDIA_FETCH_LIMITS.overview.default;
@@ -219,10 +347,11 @@ class AnalyticsService {
                 });
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
-            async () => this.getDailyAccountMetrics(startDate, endDate)
+            async () => this.getDailyAccountMetrics(startDate, endDate),
+            async () => this.getAccountAggregateMetrics(startDate, endDate)
         ];
 
-        const [mediaResult, dailyMetricsResult] = await runWithConcurrency(overviewTasks, 2);
+        const [mediaResult, dailyMetricsResult, accountAggregatesResult] = await runWithConcurrency(overviewTasks, 3);
 
         if (mediaResult.status === 'fulfilled') {
             media = mediaResult.value;
@@ -236,6 +365,12 @@ class AnalyticsService {
             console.warn('Overview account insights fetch failed:', dailyMetricsResult.reason?.message || dailyMetricsResult.reason);
         }
 
+        if (accountAggregatesResult.status === 'fulfilled') {
+            accountAggregates = accountAggregatesResult.value || accountAggregates;
+        } else {
+            console.warn('Overview aggregate account insights fetch failed:', accountAggregatesResult.reason?.message || accountAggregatesResult.reason);
+        }
+
         // Calculate engagement rate
         const totalEngagement = media.reduce((sum, post) => sum + post.engagement, 0);
         const avgEngagement = media.length > 0 ? totalEngagement / media.length : 0;
@@ -244,35 +379,28 @@ class AnalyticsService {
             : 0;
 
         // Calculate metrics
-        const totalImpressions = media.reduce((sum, post) => sum + post.impressions, 0);
-        const totalReach = media.reduce((sum, post) => sum + post.reach, 0);
+        const mediaImpressions = media.reduce((sum, post) => sum + post.impressions, 0);
+        const mediaReach = media.reduce((sum, post) => sum + post.reach, 0);
         const totalLikes = media.reduce((sum, post) => sum + post.likeCount, 0);
         const totalComments = media.reduce((sum, post) => sum + post.commentsCount, 0);
         const totalSaved = media.reduce((sum, post) => sum + post.saved, 0);
         const totalShares = media.reduce((sum, post) => sum + (post.shares || 0), 0);
-        const totalProfileViews = dailyMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0);
+        const accountLevelReach = dailyMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0);
+        const totalImpressions = accountAggregates.totalViews || mediaImpressions;
+        const totalReach = accountLevelReach || mediaReach;
+        const totalProfileViews = accountAggregates.totalProfileViews || 0;
         const avgShares = Math.round(totalShares / Math.max(media.length, 1));
-
-        const followerSeries = dailyMetrics
-            .filter((day) => typeof day.follower_count === 'number')
-            .sort((a, b) => a.date.localeCompare(b.date));
-
-        const followerTrend = followerSeries.length > 0
-            ? {
-                start: followerSeries[0].follower_count || 0,
-                end: followerSeries[followerSeries.length - 1].follower_count || 0,
-                delta: (followerSeries[followerSeries.length - 1].follower_count || 0) - (followerSeries[0].follower_count || 0),
-                deltaPercent: this.toPercent(
-                    (followerSeries[followerSeries.length - 1].follower_count || 0) - (followerSeries[0].follower_count || 0),
-                    followerSeries[0].follower_count || 0
-                )
-            }
-            : {
-                start: profile.followers_count || 0,
-                end: profile.followers_count || 0,
-                delta: 0,
-                deltaPercent: 0
-            };
+        const followerDelta = accountAggregates.followerDelta || 0;
+        const followerEnd = profile.followers_count || 0;
+        const followerStart = Math.max(followerEnd - followerDelta, 0);
+        const followerTrend = {
+            start: followerStart,
+            end: followerEnd,
+            delta: followerDelta,
+            deltaPercent: this.toPercent(followerDelta, followerStart),
+            follows: accountAggregates.follows || 0,
+            unfollows: accountAggregates.unfollows || 0
+        };
 
         // Get recent posts performance
         const recentPosts = media.slice(0, 10).map(post => ({
@@ -401,7 +529,7 @@ class AnalyticsService {
      * Get growth analytics
      */
     async getGrowth(startDate = null, endDate = null) {
-        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v4_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('growth', dateKey);
         if (cached) return cached;
 
@@ -411,6 +539,13 @@ class AnalyticsService {
             : MEDIA_FETCH_LIMITS.growth.default;
         let media = [];
         let accountMetrics = [];
+        let accountAggregates = {
+            totalViews: 0,
+            totalProfileViews: 0,
+            follows: 0,
+            unfollows: 0,
+            followerDelta: 0
+        };
         const growthTasks = [
             async () => {
                 const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
@@ -419,10 +554,11 @@ class AnalyticsService {
                 });
                 return this.filterMediaByDate(fetchedMedia, startDate, endDate);
             },
-            async () => this.getDailyAccountMetrics(startDate, endDate)
+            async () => this.getDailyAccountMetrics(startDate, endDate),
+            async () => this.getAccountAggregateMetrics(startDate, endDate)
         ];
 
-        const [mediaResult, metricsResult] = await runWithConcurrency(growthTasks, 2);
+        const [mediaResult, metricsResult, aggregatesResult] = await runWithConcurrency(growthTasks, 3);
 
         if (mediaResult.status === 'fulfilled') {
             media = mediaResult.value || [];
@@ -434,6 +570,12 @@ class AnalyticsService {
             accountMetrics = metricsResult.value || [];
         } else {
             console.warn('Growth account insights fetch failed:', metricsResult.reason?.message || metricsResult.reason);
+        }
+
+        if (aggregatesResult.status === 'fulfilled') {
+            accountAggregates = aggregatesResult.value || accountAggregates;
+        } else {
+            console.warn('Growth aggregate account insights fetch failed:', aggregatesResult.reason?.message || aggregatesResult.reason);
         }
 
         // Group posts by date for growth analysis
@@ -489,17 +631,14 @@ class AnalyticsService {
             ? ((thisWeekEngagement - lastWeekEngagement) / lastWeekEngagement * 100).toFixed(1)
             : 0;
 
-        const followerSeries = accountMetrics
-            .filter((day) => typeof day.follower_count === 'number')
-            .sort((a, b) => a.date.localeCompare(b.date));
-        const followerStart = followerSeries[0]?.follower_count || profile.followers_count || 0;
-        const followerEnd = followerSeries[followerSeries.length - 1]?.follower_count || profile.followers_count || 0;
-        const followerDelta = followerEnd - followerStart;
+        const followerDelta = accountAggregates.followerDelta || 0;
+        const followerEnd = profile.followers_count || 0;
+        const followerStart = Math.max(followerEnd - followerDelta, 0);
 
         const totalPostsInWindow = media.length;
         const totalReach = accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0);
-        const totalImpressions = accountMetrics.reduce((sum, day) => sum + Number(day.impressions || 0), 0);
-        const totalProfileViews = accountMetrics.reduce((sum, day) => sum + Number(day.profile_views || 0), 0);
+        const totalImpressions = accountAggregates.totalViews || 0;
+        const totalProfileViews = accountAggregates.totalProfileViews || 0;
 
         const growth = {
             currentFollowers: profile.followers_count,
@@ -524,6 +663,8 @@ class AnalyticsService {
                 followerEnd,
                 followerDelta,
                 followerDeltaPercent: this.toPercent(followerDelta, followerStart),
+                followersGained: accountAggregates.follows || 0,
+                unfollows: accountAggregates.unfollows || 0,
                 // === Advanced Growth Metrics ===
                 // True Follower Growth Rate: (new followers / start) * 100 in the period
                 trueFollowerGrowthRate: followerStart > 0
@@ -582,18 +723,18 @@ class AnalyticsService {
             })(),
             // === Post-to-Follower Growth Correlation ===
             // Cross-reference posting days with follower change (from daily snapshots)
-            postToFollowerGrowthCorrelation: (() => {
-                const postingDates = new Set(media.map((p) => p.timestamp.split('T')[0]));
-                return accountMetrics
-                    .filter((day) => typeof day.follower_count === 'number')
-                    .map((day, idx, arr) => ({
-                        date: day.date,
-                        hadPost: postingDates.has(day.date),
-                        followerChange: idx > 0 ? (day.follower_count - arr[idx - 1].follower_count) : 0
-                    }));
-            })(),
-            lastUpdated: new Date().toISOString()
-        };
+                postToFollowerGrowthCorrelation: (() => {
+                    const postingDates = new Set(media.map((p) => p.timestamp.split('T')[0]));
+                    return accountMetrics
+                        .filter((day) => typeof day.follower_count === 'number')
+                        .map((day) => ({
+                            date: day.date,
+                            hadPost: postingDates.has(day.date),
+                            followerChange: day.follower_count || 0
+                        }));
+                })(),
+                lastUpdated: new Date().toISOString()
+            };
 
         await this.updateCache('growth', dateKey, growth);
         return growth;
@@ -1933,58 +2074,42 @@ class AnalyticsService {
     }
 
     async getDailyAccountMetrics(startDate = null, endDate = null) {
-        let since = null;
-        let until = null;
-
-        if (startDate) since = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
-        if (endDate) {
-            const end = new Date(`${endDate}T23:59:59Z`);
-            until = Math.floor(end.getTime() / 1000);
-        }
-
         const dailyData = {};
-        // follower_count does NOT support since/until ranges on all API versions;
-        // profile_views, impressions, reach all support period=day with since/until.
-        const metricNames = ['follower_count', 'reach'];
+        const windows = this.buildAccountInsightWindows(startDate, endDate);
 
-        const settled = await Promise.allSettled(
-            metricNames.map((metricName) =>
-                this.instagram.getAccountInsights('day', [metricName], since, until)
-            )
-        );
+        for (const window of windows) {
+            try {
+                const rawResponse = await this.instagram.getAccountInsights(
+                    'day',
+                    ['reach', 'follower_count'],
+                    window.since,
+                    window.until,
+                    'time_series'
+                );
+                const metricRows = rawResponse?.data || [];
 
-        settled.forEach((result, index) => {
-            const metricName = metricNames[index];
+                metricRows.forEach((metric) => {
+                    if (!Array.isArray(metric.values) || metric.values.length === 0) return;
 
-            if (result.status !== 'fulfilled') {
-                console.warn(`[getDailyAccountMetrics] FAILED for ${metricName}:`, result.reason?.message || result.reason);
-                return;
-            }
-
-            const rawResponse = result.value;
-            const metricRows = rawResponse?.data || [];
-            console.log(`[getDailyAccountMetrics] ${metricName}: ${metricRows.length} row(s) returned`);
-            metricRows.forEach((metric) => {
-                // Meta returns insights in two formats:
-                // 1. Legacy format: metric.values = [{ value, end_time }, ...]
-                // 2. Newer format: metric.total_value = { value, breakdowns: [...] }
-                //    (often used for lifetime/aggregated metrics or when a date range gives one bucket)
-                if (Array.isArray(metric.values) && metric.values.length > 0) {
-                    // Per-day breakdown — the normal case for period=day + since/until
                     metric.values.forEach((val) => {
                         const date = (val.end_time || '').split('T')[0];
                         if (!date) return;
                         if (!dailyData[date]) dailyData[date] = { date };
-                        dailyData[date][metric.name] = this.parseInsightMetricValue(val.value);
+                        const parsedValue = this.parseInsightMetricValue(val.value);
+                        dailyData[date][metric.name] = parsedValue;
+
+                        if (metric.name === 'follower_count') {
+                            dailyData[date].followers_gained = parsedValue;
+                        }
                     });
-                } else if (metric.total_value !== undefined && metric.total_value !== null) {
-                    // Aggregate total — attribute to end date (best we can do)
-                    const dateKey = endDate || new Date().toISOString().split('T')[0];
-                    if (!dailyData[dateKey]) dailyData[dateKey] = { date: dateKey };
-                    dailyData[dateKey][metric.name] = this.parseInsightMetricValue(metric.total_value?.value ?? metric.total_value);
-                }
-            });
-        });
+                });
+            } catch (error) {
+                console.warn(
+                    `[getDailyAccountMetrics] FAILED for ${window.startDate || 'default'}-${window.endDate || 'default'}:`,
+                    error?.message || error
+                );
+            }
+        }
 
         return Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
     }

@@ -116,7 +116,7 @@ export default function GrowthPage() {
     const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
-    defaultStart.setDate(defaultStart.getDate() - 30);
+    defaultStart.setDate(defaultStart.getDate() - 29);
     const [dateRange, setDateRange] = useState({
         startDate: defaultStart.toISOString().split('T')[0],
         endDate: defaultEnd.toISOString().split('T')[0]
@@ -285,8 +285,8 @@ export default function GrowthPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                <span className="text-muted" style={{ fontSize: 12 }}>Follower Trend</span>
-                                <InfoTooltip text="Net follower movement across the selected date range, based on daily follower_count insights." />
+                                <span className="text-muted" style={{ fontSize: 12 }}>Net Follower Change</span>
+                                <InfoTooltip text="Estimated follows minus unfollows across the selected date range, based on Meta's follows_and_unfollows breakdown." />
                             </div>
                             <div style={{ fontSize: 24, fontWeight: 700, color: accountSummary.followerDelta >= 0 ? '#10b981' : '#ef4444' }}>
                                 {accountSummary.followerDelta >= 0 ? '+' : ''}{accountSummary.followerDelta || 0}
@@ -332,7 +332,7 @@ export default function GrowthPage() {
             </SectionCard>
 
             {growthData.some((day: any) => (day.followerCount || 0) > 0) && (
-                <SectionCard title="Follower Trend" subtitle="Daily follower_count returned by Meta account insights">
+                <SectionCard title="Follower Gains Trend" subtitle="Daily followers gained returned by Meta account insights">
                     <ResponsiveContainer width="100%" height={280}>
                         <LineChart data={growthData.slice(-30)}>
                             <XAxis
@@ -347,7 +347,7 @@ export default function GrowthPage() {
                                 contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
                                 labelFormatter={(val) => new Date(val).toLocaleDateString()}
                             />
-                            <Line type="monotone" dataKey="followerCount" stroke="#6366f1" strokeWidth={2} dot={false} name="Followers" />
+                            <Line type="monotone" dataKey="followerCount" stroke="#6366f1" strokeWidth={2} dot={false} name="Followers Gained" />
                         </LineChart>
                     </ResponsiveContainer>
                 </SectionCard>
@@ -375,7 +375,7 @@ export default function GrowthPage() {
             </SectionCard>
 
             {accountMetrics.length > 0 && (
-                <SectionCard title="Account Reach & Intent Trend" subtitle="Daily reach, impressions, and profile views returned by Meta">
+                <SectionCard title="Account Reach Trend" subtitle="Daily reach is time-series. Views and profile visits are aggregate totals for the selected range.">
                     <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={accountMetrics.slice(-30)}>
                             <XAxis
@@ -391,8 +391,6 @@ export default function GrowthPage() {
                                 labelFormatter={(val) => new Date(val).toLocaleDateString()}
                             />
                             <Line type="monotone" dataKey="reach" stroke="#10b981" strokeWidth={2} dot={false} name="Reach" />
-                            <Line type="monotone" dataKey="impressions" stroke="#6366f1" strokeWidth={2} dot={false} name="Impressions" />
-                            <Line type="monotone" dataKey="profile_views" stroke="#f59e0b" strokeWidth={2} dot={false} name="Profile Views" />
                         </LineChart>
                     </ResponsiveContainer>
                 </SectionCard>

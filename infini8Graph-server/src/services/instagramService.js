@@ -127,7 +127,7 @@ class InstagramService {
      * @param {string} period - 'day', 'week', 'days_28', or 'lifetime'
      * @param {Array} metrics - Array of metric names
      */
-    async getAccountInsights(period = 'day', metrics = [], since = null, until = null, metricType = null) {
+    async getAccountInsights(period = 'day', metrics = [], since = null, until = null, metricType = null, extraParams = {}) {
         const defaultMetrics = [
             'reach',
             'follower_count'
@@ -137,7 +137,8 @@ class InstagramService {
 
         const params = {
             metric: requestMetrics.join(','),
-            period: period
+            period: period,
+            ...extraParams
         };
 
         // Meta API v18+ requires metric_type for account insights

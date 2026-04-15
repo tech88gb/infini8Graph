@@ -546,7 +546,7 @@ export default function DashboardPage() {
     const { activeAccountId } = useAuth();
     const defaultEnd = new Date();
     const defaultStart = new Date();
-    defaultStart.setDate(defaultStart.getDate() - 30);
+    defaultStart.setDate(defaultStart.getDate() - 29);
 
     const [dateRange, setDateRange] = useState({
         startDate: defaultStart.toISOString().split('T')[0],
@@ -619,10 +619,8 @@ export default function DashboardPage() {
 
     const dailyChartData = (data?.dailyMetrics || []).map((day: any) => ({
         name: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        followers: day.follower_count || 0,
+        followers: day.followers_gained || day.follower_count || 0,
         reach: day.reach || 0,
-        impressions: day.impressions || 0,
-        profileViews: day.profile_views || 0,
     }));
 
     const countryData = [...(demographics.countries || [])]
@@ -861,7 +859,7 @@ export default function DashboardPage() {
                     <div className="chart-container" style={{ marginBottom: 24 }}>
                         <div className="card-header">
                             <h3 className="card-title">Daily Audience Metrics</h3>
-                            <p className="text-muted" style={{ fontSize: 12 }}>Follower count, reach, impressions, and profile views per day</p>
+                            <p className="text-muted" style={{ fontSize: 12 }}>Daily follower gains and reach returned by Meta. Views and profile visits are aggregate-only.</p>
                         </div>
                         <ResponsiveContainer width="100%" height={240}>
                             <AreaChart data={dailyChartData}>
@@ -882,10 +880,8 @@ export default function DashboardPage() {
                                         fontSize: 13
                                     }}
                                 />
-                                <Area yAxisId="left" type="monotone" dataKey="followers" name="Followers" stroke="#10b981" strokeWidth={2} fill="url(#followerGrad)" />
-                                <Area yAxisId="right" type="monotone" dataKey="impressions" name="Impressions" stroke="#6366f1" strokeWidth={2} fill="none" />
+                                <Area yAxisId="left" type="monotone" dataKey="followers" name="Followers Gained" stroke="#10b981" strokeWidth={2} fill="url(#followerGrad)" />
                                 <Area yAxisId="right" type="monotone" dataKey="reach" name="Reach" stroke="#0ea5e9" strokeWidth={2} fill="none" />
-                                <Area yAxisId="right" type="monotone" dataKey="profileViews" name="Profile Views" stroke="#ef4444" strokeWidth={2} fill="none" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
