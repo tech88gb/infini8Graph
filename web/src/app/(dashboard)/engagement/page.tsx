@@ -563,12 +563,14 @@ export default function EngagementPage() {
             )}
 
             {/* Story Engagement Metrics */}
-            {storySummary.activeStories > 0 && (
-                <SectionCard
-                    title="Story Engagement"
-                    subtitle="Real metrics from your currently active stories"
-                    timePeriod="Last 24 hours"
-                >
+            <SectionCard
+                title="Story Engagement"
+                subtitle={storySummary.activeStories > 0
+                    ? "Real metrics from your currently active stories"
+                    : "Live story metrics appear here when there are active Instagram stories"}
+                timePeriod="Last 24 hours"
+            >
+                {storySummary.activeStories > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
@@ -611,8 +613,21 @@ export default function EngagementPage() {
                             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>DM responses</div>
                         </div>
                     </div>
-                </SectionCard>
-            )}
+                ) : (
+                    <div style={{
+                        padding: '28px 20px',
+                        borderRadius: 12,
+                        background: 'var(--background)',
+                        border: '1px dashed var(--border)',
+                        textAlign: 'center'
+                    }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No active stories right now</div>
+                        <p className="text-muted" style={{ fontSize: 13, margin: 0, lineHeight: 1.6 }}>
+                            This panel shows live story metrics like taps forward, taps back, exits, and replies while your Instagram stories are still active.
+                        </p>
+                    </div>
+                )}
+            </SectionCard>
 
             {/* Posts Table */}
             <SectionCard
