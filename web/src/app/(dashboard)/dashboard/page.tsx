@@ -58,6 +58,15 @@ function escapeHtml(value: string) {
         .replace(/'/g, '&#39;');
 }
 
+function escapeXml(value: string) {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 function downloadBlob(blob: Blob, fileName: string) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -65,80 +74,6 @@ function downloadBlob(blob: Blob, fileName: string) {
     link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
-}
-
-async function svgToPngDataUrl(svg: SVGSVGElement) {
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    const bounds = svg.getBoundingClientRect();
-    const width = Math.max(Math.round(bounds.width || Number(svg.getAttribute('width')) || 600), 32);
-    const height = Math.max(Math.round(bounds.height || Number(svg.getAttribute('height')) || 240), 32);
-
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    clone.setAttribute('width', String(width));
-    clone.setAttribute('height', String(height));
-    if (!clone.getAttribute('viewBox')) {
-        clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    }
-
-    const serialized = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-
-    try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-            const img = new window.Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error('Unable to render SVG export'));
-            img.src = url;
-        });
-
-        const scale = Math.min(window.devicePixelRatio || 1, 2);
-        const canvas = document.createElement('canvas');
-        canvas.width = width * scale;
-        canvas.height = height * scale;
-        const context = canvas.getContext('2d');
-
-        if (!context) {
-            throw new Error('Canvas unavailable');
-        }
-
-        context.scale(scale, scale);
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, width, height);
-        context.drawImage(image, 0, 0, width, height);
-        return canvas.toDataURL('image/png');
-    } finally {
-        URL.revokeObjectURL(url);
-    }
-}
-
-async function buildExportableSection(section: HTMLElement) {
-    const clone = section.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('[data-export-ignore="true"]').forEach((node) => node.remove());
-    clone.querySelectorAll('.recharts-tooltip-wrapper').forEach((node) => node.remove());
-
-    const originalSvgs = Array.from(section.querySelectorAll('svg'));
-    const clonedSvgs = Array.from(clone.querySelectorAll('svg'));
-
-    for (let index = 0; index < Math.min(originalSvgs.length, clonedSvgs.length); index += 1) {
-        const originalSvg = originalSvgs[index] as SVGSVGElement;
-        const clonedSvg = clonedSvgs[index] as SVGSVGElement;
-
-        try {
-            const pngDataUrl = await svgToPngDataUrl(originalSvg);
-            const image = document.createElement('img');
-            image.src = pngDataUrl;
-            image.alt = '';
-            image.style.maxWidth = '100%';
-            image.style.height = 'auto';
-            image.style.display = 'block';
-            clonedSvg.replaceWith(image);
-        } catch {
-            // Leave the SVG in place if conversion fails so the export still completes.
-        }
-    }
-
-    return clone;
 }
 
 function formatExportValue(value: unknown) {
@@ -167,6 +102,99 @@ function buildTableMarkup(title: string, subtitle: string | undefined, headers: 
         </table>
       </section>
     `;
+}
+
+type ExportSheet = {
+    name: string;
+    rows: Array<Array<string | number>>;
+};
+
+function buildWorkbookXml(title: string, sheets: ExportSheet[]) {
+    const styleSheet = `
+      <Styles>
+        <Style ss:ID="Default" ss:Name="Normal">
+          <Alignment ss:Vertical="Bottom"/>
+          <Borders/>
+          <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#111827"/>
+          <Interior/>
+          <NumberFormat/>
+          <Protection/>
+        </Style>
+        <Style ss:ID="Title">
+          <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="15" ss:Color="#111827"/>
+        </Style>
+        <Style ss:ID="Header">
+          <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="11" ss:Color="#FFFFFF"/>
+          <Interior ss:Color="#4F46E5" ss:Pattern="Solid"/>
+          <Borders>
+            <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
+            <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
+            <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
+            <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DAE3"/>
+          </Borders>
+        </Style>
+        <Style ss:ID="Cell">
+          <Borders>
+            <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
+            <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
+            <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
+            <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7EB"/>
+          </Borders>
+        </Style>
+      </Styles>
+    `;
+
+    const worksheetXml = sheets.map((sheet) => {
+        const safeName = sheet.name.replace(/[\\/:*?[\]]/g, ' ').slice(0, 31) || 'Sheet';
+        const columnCount = Math.max(...sheet.rows.map((row) => row.length), 1);
+        const columns = Array.from({ length: columnCount }, () => '<Column ss:AutoFitWidth="1" ss:Width="140"/>').join('');
+        const rowsXml = sheet.rows.map((row, rowIndex) => {
+            const styleId = rowIndex === 0 ? 'Header' : 'Cell';
+            const cells = row.map((cell) => {
+                const isNumber = typeof cell === 'number' && Number.isFinite(cell);
+                const dataType = isNumber ? 'Number' : 'String';
+                const content = isNumber ? String(cell) : escapeXml(formatExportValue(cell));
+                return `<Cell ss:StyleID="${styleId}"><Data ss:Type="${dataType}">${content}</Data></Cell>`;
+            }).join('');
+            return `<Row>${cells}</Row>`;
+        }).join('');
+
+        return `
+          <Worksheet ss:Name="${escapeXml(safeName)}">
+            <Table x:FullColumns="1" x:FullRows="1" ss:DefaultRowHeight="18">
+              ${columns}
+              <Row><Cell ss:MergeAcross="${Math.max(columnCount - 1, 0)}" ss:StyleID="Title"><Data ss:Type="String">${escapeXml(title)}</Data></Cell></Row>
+              <Row/>
+              ${rowsXml}
+            </Table>
+            <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+              <FreezePanes/>
+              <FrozenNoSplit/>
+              <SplitHorizontal>2</SplitHorizontal>
+              <TopRowBottomPane>2</TopRowBottomPane>
+              <ActivePane>2</ActivePane>
+              <ProtectObjects>False</ProtectObjects>
+              <ProtectScenarios>False</ProtectScenarios>
+            </WorksheetOptions>
+          </Worksheet>
+        `;
+    }).join('');
+
+    return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+    <Title>${escapeXml(title)}</Title>
+    <Author>infini8Graph</Author>
+    <Created>${new Date().toISOString()}</Created>
+  </DocumentProperties>
+  ${styleSheet}
+  ${worksheetXml}
+</Workbook>`;
 }
 
 function buildExportDocument(title: string, subtitle: string | undefined, sectionMarkup: string, format: SectionExportFormat) {
@@ -351,8 +379,7 @@ function buildOverviewReportMarkup({
     cityData,
     genderAgeData,
     audienceInsights,
-    dateRange,
-    visiblePageMarkup
+    dateRange
 }: {
     profile: any;
     metrics: any;
@@ -363,7 +390,6 @@ function buildOverviewReportMarkup({
     genderAgeData: Array<{ name: string; shortName: string; value: number }>;
     audienceInsights: any;
     dateRange: { startDate: string; endDate: string };
-    visiblePageMarkup: string;
 }) {
     const executiveRows = [
         ['Date Range', `${dateRange.startDate} to ${dateRange.endDate}`, 'Reporting window used for every metric below'],
@@ -414,16 +440,129 @@ function buildOverviewReportMarkup({
       ${countryRows.length > 0 ? buildTableMarkup('Top Countries', 'Audience distribution by country.', ['Country', 'Followers'], countryRows) : ''}
       ${cityRows.length > 0 ? buildTableMarkup('Top Cities', 'Audience distribution by city.', ['City', 'Followers'], cityRows) : ''}
       ${demographicRows.length > 0 ? buildTableMarkup('Top Demographics', 'Highest concentration follower cohorts.', ['Demographic', 'Followers'], demographicRows) : ''}
-      <section class="export-section">
-        <div class="export-section-header">
-          <div>
-            <h2>Full Page Visual Export</h2>
-            <p>The rendered page is included below so charts, cards, and paid media widgets stay attached to the report.</p>
-          </div>
-        </div>
-        ${visiblePageMarkup}
-      </section>
     `;
+}
+
+function buildOverviewWorkbookSheets({
+    profile,
+    metrics,
+    recentPosts,
+    dailyChartData,
+    countryData,
+    cityData,
+    genderAgeData,
+    audienceInsights,
+    dateRange
+}: {
+    profile: any;
+    metrics: any;
+    recentPosts: any[];
+    dailyChartData: Array<{ name: string; followers: number; reach: number }>;
+    countryData: Array<{ name: string; value: number }>;
+    cityData: Array<{ name: string; value: number }>;
+    genderAgeData: Array<{ name: string; shortName: string; value: number }>;
+    audienceInsights: any;
+    dateRange: { startDate: string; endDate: string };
+}): ExportSheet[] {
+    const summarySheet: ExportSheet = {
+        name: 'Executive Summary',
+        rows: [
+            ['Metric', 'Value', 'Why it matters'],
+            ['Date Range', `${dateRange.startDate} to ${dateRange.endDate}`, 'Reporting window used for every metric below'],
+            ['Account', `@${profile.username || 'instagram'}`, 'Primary Instagram profile in view'],
+            ['Followers', metrics.followers || 0, 'Current follower base'],
+            ['Engagement Rate', `${metrics.engagementRate || 0}%`, 'Follower-level engagement efficiency'],
+            ['Profile Views', metrics.totalProfileViews || 0, 'Profile intent generated in this period'],
+            ['Total Reach', metrics.totalReach || 0, 'Unique accounts reached'],
+            ['Total Saves', metrics.totalSaved || 0, 'High-intent content signal'],
+            ['Total Shares', metrics.totalShares || 0, 'Distribution beyond direct viewers'],
+            ['Follower Delta', `${metrics.followerDelta >= 0 ? '+' : ''}${metrics.followerDelta || 0}`, 'Net audience movement']
+        ]
+    };
+
+    const advancedSheet: ExportSheet = {
+        name: 'Advanced Metrics',
+        rows: [
+            ['Metric', 'Value', 'Performance marketer read'],
+            ['True Follower Growth Rate', `${(metrics.trueFollowerGrowthRate || 0) >= 0 ? '+' : ''}${metrics.trueFollowerGrowthRate ?? 0}%`, 'New followers relative to the starting audience'],
+            ['Content ROI Score', metrics.contentRoiScore ?? 0, 'Total engagement generated per post'],
+            ['Reach-to-Follower Ratio', `${metrics.reachToFollowerRatio ?? 0}x`, 'How strongly content breaks beyond followers'],
+            ['Save Rate', `${metrics.saveRate ?? 0}%`, 'Evergreen or reference-worthy content signal'],
+            ['Profile Visit Rate', `${metrics.profileVisitRate ?? 0}%`, 'How efficiently reach becomes account intent'],
+            ['True Engagement Rate', `${metrics.engagementRate || 0}%`, 'Reach-based engagement read']
+        ]
+    };
+
+    const audienceSheet: ExportSheet = {
+        name: 'Audience Snapshot',
+        rows: [
+            ['Signal', 'Value', 'Volume / Note'],
+            ['Top Country', audienceInsights.topCountry?.label || '-', audienceInsights.topCountry?.value || 0],
+            ['Top City', audienceInsights.topCity?.label?.split(',')[0] || '-', audienceInsights.topCity?.value || 0],
+            ['Top Demographic', audienceInsights.topGenderAge ? `${audienceInsights.topGenderAge.gender} ${audienceInsights.topGenderAge.age}` : '-', audienceInsights.topGenderAge?.value || 0],
+            ['Peak Follower Hours', (audienceInsights.peakFollowerHours || []).slice(0, 3).map((item: any) => item.label).join(', ') || '-', 'Follower activity insight']
+        ]
+    };
+
+    const sheets: ExportSheet[] = [summarySheet, advancedSheet, audienceSheet];
+
+    if (dailyChartData.length > 0) {
+        sheets.push({
+            name: 'Daily Audience',
+            rows: [
+                ['Date', 'Followers Gained', 'Reach'],
+                ...dailyChartData.map((day) => [day.name, day.followers, day.reach])
+            ]
+        });
+    }
+
+    if (recentPosts.length > 0) {
+        sheets.push({
+            name: 'Recent Posts',
+            rows: [
+                ['Publish Date', 'Format', 'Likes', 'Comments', 'Engagement'],
+                ...recentPosts.slice(0, 5).map((post: any) => [
+                    new Date(post.timestamp).toLocaleDateString(),
+                    post.type || '-',
+                    post.likes || 0,
+                    post.comments || 0,
+                    post.engagement || 0
+                ])
+            ]
+        });
+    }
+
+    if (countryData.length > 0) {
+        sheets.push({
+            name: 'Countries',
+            rows: [
+                ['Country', 'Followers'],
+                ...countryData.map((item) => [item.name, item.value])
+            ]
+        });
+    }
+
+    if (cityData.length > 0) {
+        sheets.push({
+            name: 'Cities',
+            rows: [
+                ['City', 'Followers'],
+                ...cityData.map((item) => [item.name, item.value])
+            ]
+        });
+    }
+
+    if (genderAgeData.length > 0) {
+        sheets.push({
+            name: 'Demographics',
+            rows: [
+                ['Demographic', 'Followers'],
+                ...genderAgeData.map((item) => [item.name || item.shortName, item.value])
+            ]
+        });
+    }
+
+    return sheets;
 }
 
 // ==================== TOOLTIP COMPONENT ====================
@@ -507,7 +646,7 @@ function PageExportMenu({
                 style={{ minWidth: 104, justifyContent: 'center' }}
             >
                 {isExporting ? (
-                    isExporting === 'excel' ? 'Exporting XLS' : 'Exporting HTML'
+                    isExporting === 'excel' ? 'Exporting Excel' : 'Exporting HTML'
                 ) : (
                     <>
                         <Download size={14} />
@@ -1053,7 +1192,6 @@ function MetaAdsWidget() {
 
 export default function DashboardPage() {
     const { activeAccountId } = useAuth();
-    const pageExportRef = useRef<HTMLDivElement>(null);
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 29);
@@ -1172,10 +1310,7 @@ export default function DashboardPage() {
         : '0';
 
     const handlePageExport = async (format: SectionExportFormat) => {
-        if (!pageExportRef.current) return;
-
-        const exportablePage = await buildExportableSection(pageExportRef.current);
-        const reportMarkup = buildOverviewReportMarkup({
+        const reportData = {
             profile,
             metrics,
             recentPosts,
@@ -1184,25 +1319,30 @@ export default function DashboardPage() {
             cityData,
             genderAgeData,
             audienceInsights,
-            dateRange,
-            visiblePageMarkup: exportablePage.outerHTML
-        });
+            dateRange
+        };
         const reportTitle = `${profile.username ? `@${profile.username} ` : ''}Overview Report`;
-        const reportSubtitle = `Overview page export for ${dateRange.startDate} to ${dateRange.endDate}`;
-        const documentMarkup = buildExportDocument(reportTitle, reportSubtitle, reportMarkup, format);
-        const extension = format === 'excel' ? 'xls' : 'html';
-        const mimeType = format === 'excel'
-            ? 'application/vnd.ms-excel;charset=utf-8'
-            : 'text/html;charset=utf-8';
+        const reportSubtitle = `Overview page export for ${dateRange.startDate} to ${dateRange.endDate}. Table data only.`;
 
+        if (format === 'excel') {
+            const workbookXml = buildWorkbookXml(reportTitle, buildOverviewWorkbookSheets(reportData));
+            downloadBlob(
+                new Blob([workbookXml], { type: 'application/vnd.ms-excel;charset=utf-8' }),
+                `${sanitizeFileName(reportTitle)}-${dateRange.startDate}-to-${dateRange.endDate}.xml`
+            );
+            return;
+        }
+
+        const reportMarkup = buildOverviewReportMarkup(reportData);
+        const documentMarkup = buildExportDocument(reportTitle, reportSubtitle, reportMarkup, format);
         downloadBlob(
-            new Blob([documentMarkup], { type: mimeType }),
-            `${sanitizeFileName(reportTitle)}-${dateRange.startDate}-to-${dateRange.endDate}.${extension}`
+            new Blob([documentMarkup], { type: 'text/html;charset=utf-8' }),
+            `${sanitizeFileName(reportTitle)}-${dateRange.startDate}-to-${dateRange.endDate}.html`
         );
     };
 
     return (
-        <div ref={pageExportRef} style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <div>
