@@ -85,7 +85,8 @@ class InstagramService {
         const commentsCount = node?.comments_count || 0;
         const saved = mergedInsights.saved || 0;
         const shares = mergedInsights.shares || 0;
-        const plays = mergedInsights.plays || mergedInsights.views || 0;
+        const views = mergedInsights.views || 0;
+        const plays = mergedInsights.plays || views || 0;
         const totalInteractions = mergedInsights.total_interactions || 0;
         const computedEngagement = likeCount + commentsCount + saved + shares;
 
@@ -101,7 +102,7 @@ class InstagramService {
             timestamp: node?.timestamp,
             likeCount,
             commentsCount,
-            impressions: mergedInsights.impressions || 0,
+            impressions: mergedInsights.impressions || views || 0,
             reach: mergedInsights.reach || 0,
             saved,
             shares,
@@ -126,11 +127,9 @@ class InstagramService {
      * @param {string} period - 'day', 'week', 'days_28', or 'lifetime'
      * @param {Array} metrics - Array of metric names
      */
-    async getAccountInsights(period = 'day', metrics = [], since = null, until = null) {
+    async getAccountInsights(period = 'day', metrics = [], since = null, until = null, metricType = null) {
         const defaultMetrics = [
-            'impressions',
             'reach',
-            'profile_views',
             'follower_count'
         ];
 
@@ -141,10 +140,28 @@ class InstagramService {
             period: period
         };
 
+        // Meta API v18+ requires metric_type for account insights
+        // 'time_series' = daily breakdowns, 'total_value' = aggregated total
+        if (metricType) {
+            params.metric_type = metricType;
+        } else if (period === 'day') {
+            params.metric_type = 'time_series';
+        }
+
         if (since) params.since = since;
         if (until) params.until = until;
 
-        return this.apiRequest(`/${this.instagramUserId}/insights`, params);
+        // Try with metric_type first, fall back without it for older API versions
+        try {
+            return await this.apiRequest(`/${this.instagramUserId}/insights`, params);
+        } catch (err) {
+            if (params.metric_type) {
+                console.warn(`Account insights failed with metric_type=${params.metric_type}, retrying without it...`);
+                delete params.metric_type;
+                return this.apiRequest(`/${this.instagramUserId}/insights`, params);
+            }
+            throw err;
+        }
     }
 
     /**
@@ -236,7 +253,7 @@ class InstagramService {
         // shares is a valid per-media insight but only returned by the /insights edge,
         // NOT via inline insights on the media list endpoint. We fetch it separately.
         const params = {
-            fields: `${basicFields},insights.metric(impressions,reach,saved)`,
+            fields: `${basicFields},insights.metric(views,reach,saved)`,
             limit: limit
         };
 
@@ -256,6 +273,7 @@ class InstagramService {
                 errorMsg.includes('Unsupported get request');
 
             if (isInsightsError) {
+                console.warn('[getMedia] Inline insights failed, falling back to basic fields:', errorMsg.substring(0, 100));
                 // Retry without insights
                 const fallbackParams = {
                     fields: basicFields,
@@ -276,7 +294,7 @@ class InstagramService {
      */
     async getMediaShares(mediaId, mediaType = 'IMAGE') {
         // Reels already get shares via getMediaInsights; call this for non-reels
-        const metricSets = ['shares', 'impressions,reach,saved,shares'];
+        const metricSets = ['shares', 'views,reach,saved,shares', 'reach,saved,shares'];
         for (const metrics of metricSets) {
             try {
                 const result = await this.apiRequest(`/${mediaId}/insights`, { metric: metrics });
@@ -368,19 +386,15 @@ class InstagramService {
     async getMediaInsights(mediaId, mediaType = 'IMAGE') {
         const metricSets = (mediaType === 'REEL' || mediaType === 'VIDEO')
             ? [
-                'impressions,reach,saved,shares,plays,total_interactions,profile_activity',
-                'impressions,reach,saved,shares,plays,total_interactions',
-                'impressions,reach,saved,shares,plays',
-                'impressions,reach,saved,shares,views,total_interactions',
-                'impressions,reach,saved,shares,views',
-                'impressions,reach,saved,shares',
-                'impressions,reach,saved,plays,total_interactions',
-                'impressions,reach,saved,views,total_interactions',
-                'impressions,reach,saved,plays',
-                'impressions,reach,saved,views',
-                'impressions,reach,saved'
+                'views,reach,saved,shares,total_interactions,profile_activity',
+                'views,reach,saved,shares,total_interactions',
+                'views,reach,saved,shares',
+                'views,reach,saved',
+                'reach,saved,shares,total_interactions',
+                'reach,saved,shares',
+                'reach,saved'
             ]
-            : ['impressions,reach,saved,profile_activity', 'impressions,reach,saved'];
+            : ['views,reach,saved,profile_activity', 'views,reach,saved', 'reach,saved'];
 
         let lastError = null;
 
@@ -420,11 +434,13 @@ class InstagramService {
      */
     async getStoryInsights(storyId) {
         const metricSets = [
-            'impressions,reach,replies,taps_forward,taps_back,exits,navigation',
-            'impressions,reach,replies,taps_forward,taps_back,exits',
-            'impressions,reach,taps_forward,taps_back,exits',
-            'impressions,reach,replies',
-            'impressions,reach'
+            'views,reach,replies,taps_forward,taps_back,exits,navigation',
+            'views,reach,replies,taps_forward,taps_back,exits',
+            'views,reach,taps_forward,taps_back,exits',
+            'views,reach,replies',
+            'views,reach',
+            'reach,replies',
+            'reach'
         ];
 
         let lastError = null;
@@ -545,6 +561,29 @@ class InstagramService {
 
         const normalisedBatch = rawMedia.map((media) => this.normaliseMediaNode(media));
 
+        // If inline insights failed (all reach=0), try fetching insights individually
+        const inlineInsightsMissing = normalisedBatch.length > 0 &&
+            normalisedBatch.every(m => m.reach === 0 && m.impressions === 0);
+        if (inlineInsightsMissing && !includeDetailedVideoInsights) {
+            console.warn('[getMediaPageWithInsights] Inline insights returned all zeros — fetching individually');
+            await settleWithConcurrency(
+                normalisedBatch.map((media, index) => ({ media, index })),
+                detailedInsightConcurrency,
+                async ({ media, index }) => {
+                    try {
+                        const detailed = await this.getMediaInsights(media.id, media.mediaType);
+                        const detailedInsights = this.extractInsightsMap(detailed?.data);
+                        normalisedBatch[index] = {
+                            ...media,
+                            ...this.normaliseMediaNode(rawMedia[index], detailedInsights),
+                        };
+                    } catch (err) {
+                        console.warn(`  Individual insights failed for ${media.id}:`, err.message?.substring(0, 80));
+                    }
+                }
+            );
+        }
+
         if (includeDetailedVideoInsights) {
             // For REELs/VIDEO: full getMediaInsights already returns shares
             const videoItems = normalisedBatch
@@ -617,7 +656,7 @@ class InstagramService {
             const tapReplay = typeof navigation === 'object' ? (navigation.tap_replay || 0) : 0;
             const swipeForward = typeof navigation === 'object' ? (navigation.swipe_forward || 0) : 0;
 
-            const impressions = storyInsights.impressions || 0;
+            const impressions = storyInsights.impressions || storyInsights.views || 0;
             const reach = storyInsights.reach || 0;
             const tapsForward = storyInsights.taps_forward || swipeForward || 0;
             const tapsBack = storyInsights.taps_back || 0;

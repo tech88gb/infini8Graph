@@ -1945,7 +1945,7 @@ class AnalyticsService {
         const dailyData = {};
         // follower_count does NOT support since/until ranges on all API versions;
         // profile_views, impressions, reach all support period=day with since/until.
-        const metricNames = ['follower_count', 'impressions', 'reach', 'profile_views'];
+        const metricNames = ['follower_count', 'reach'];
 
         const settled = await Promise.allSettled(
             metricNames.map((metricName) =>
@@ -1957,11 +1957,13 @@ class AnalyticsService {
             const metricName = metricNames[index];
 
             if (result.status !== 'fulfilled') {
-                console.warn(`Account insight metric unavailable for ${metricName}:`, result.reason?.message || result.reason);
+                console.warn(`[getDailyAccountMetrics] FAILED for ${metricName}:`, result.reason?.message || result.reason);
                 return;
             }
 
-            const metricRows = result.value?.data || [];
+            const rawResponse = result.value;
+            const metricRows = rawResponse?.data || [];
+            console.log(`[getDailyAccountMetrics] ${metricName}: ${metricRows.length} row(s) returned`);
             metricRows.forEach((metric) => {
                 // Meta returns insights in two formats:
                 // 1. Legacy format: metric.values = [{ value, end_time }, ...]
