@@ -1283,7 +1283,7 @@ export default function AdsPage() {
                                                     <div key={i} style={{ padding: 16, background: m.warn ? 'rgba(239,68,68,0.06)' : 'var(--background)', borderRadius: 8, textAlign: 'center', border: m.warn ? '1px solid rgba(239,68,68,0.25)' : 'none' }}>
                                                         <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</div>
                                                         <div style={{ fontSize: 24, fontWeight: 700, color: m.col }}>{m.value}</div>
-                                                        {m.warn && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 4, fontWeight: 600 }}>âš  Review landing pages</div>}
+                                                        {m.warn && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 4, fontWeight: 600 }}>{`\u26A0 Review landing pages`}</div>}
                                                     </div>
                                                 ))}
                                             </div>
@@ -1330,7 +1330,8 @@ export default function AdsPage() {
                                                         </tbody>
                                                     </table>
                                                     <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(239,68,68,0.05)', borderRadius: 6, fontSize: 12, color: 'var(--muted)', borderLeft: '3px solid #ef4444' }}>
-                                                        <strong style={{ color: 'var(--foreground)' }}>ðŸ’¡ Fix High-Bounce Campaigns:</strong> Match landing page messaging to ad copy, improve load speed (&lt;2s), and add trust signals. A 10-point bounce reduction typically yields a 15â€“25% conversion lift.
+                                                        <strong style={{ color: 'var(--foreground)' }}>{`\uD83D\uDCA1 Fix High-Bounce Campaigns:`}</strong>
+                                                        {` Match landing page messaging to ad copy, improve load speed (<2s), and add trust signals. A 10-point bounce reduction typically yields a 15\u201325% conversion lift.`}
                                                     </div>
                                                 </div>
                                             ) : (
