@@ -1214,7 +1214,7 @@ export default function DashboardPage() {
 
     const dailyChartData = (data?.dailyMetrics || []).map((day: any) => ({
         name: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        followers: day.followers_gained || day.follower_count || 0,
+        followers: day.follower_count || 0,
         reach: day.reach || 0,
     }));
 

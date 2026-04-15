@@ -208,6 +208,44 @@ class AnalyticsService {
         return totals;
     }
 
+    buildFollowerTrendFromDailyMetrics(dailyMetrics = [], fallbackAggregates = {}) {
+        const snapshots = (dailyMetrics || [])
+            .filter((day) => typeof day?.follower_count === 'number' && Number.isFinite(day.follower_count))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        if (snapshots.length >= 2) {
+            const first = snapshots[0];
+            const last = snapshots[snapshots.length - 1];
+            const delta = Number(last.follower_count || 0) - Number(first.follower_count || 0);
+
+            return {
+                start: Number(first.follower_count || 0),
+                end: Number(last.follower_count || 0),
+                delta,
+                deltaPercent: this.toPercent(delta, Number(first.follower_count || 0)),
+                follows: fallbackAggregates.follows || 0,
+                unfollows: fallbackAggregates.unfollows || 0,
+                source: 'daily_snapshots'
+            };
+        }
+
+        const fallbackDelta = Number(fallbackAggregates.followerDelta || 0);
+        const fallbackEnd = snapshots.length === 1
+            ? Number(snapshots[0].follower_count || 0)
+            : Number(fallbackAggregates.followerEnd || 0);
+        const fallbackStart = Math.max(fallbackEnd - fallbackDelta, 0);
+
+        return {
+            start: fallbackStart,
+            end: fallbackEnd,
+            delta: fallbackDelta,
+            deltaPercent: this.toPercent(fallbackDelta, fallbackStart),
+            follows: fallbackAggregates.follows || 0,
+            unfollows: fallbackAggregates.unfollows || 0,
+            source: 'aggregates_fallback'
+        };
+    }
+
     async getAccountAggregateMetrics(startDate = null, endDate = null) {
         const windows = this.buildAccountInsightWindows(startDate, endDate);
         const aggregates = {
@@ -390,17 +428,10 @@ class AnalyticsService {
         const totalReach = accountLevelReach || mediaReach;
         const totalProfileViews = accountAggregates.totalProfileViews || 0;
         const avgShares = Math.round(totalShares / Math.max(media.length, 1));
-        const followerDelta = accountAggregates.followerDelta || 0;
-        const followerEnd = profile.followers_count || 0;
-        const followerStart = Math.max(followerEnd - followerDelta, 0);
-        const followerTrend = {
-            start: followerStart,
-            end: followerEnd,
-            delta: followerDelta,
-            deltaPercent: this.toPercent(followerDelta, followerStart),
-            follows: accountAggregates.follows || 0,
-            unfollows: accountAggregates.unfollows || 0
-        };
+        const followerTrend = this.buildFollowerTrendFromDailyMetrics(dailyMetrics, {
+            ...accountAggregates,
+            followerEnd: profile.followers_count || 0
+        });
 
         // Get recent posts performance
         const recentPosts = media.slice(0, 10).map(post => ({
@@ -631,9 +662,13 @@ class AnalyticsService {
             ? ((thisWeekEngagement - lastWeekEngagement) / lastWeekEngagement * 100).toFixed(1)
             : 0;
 
-        const followerDelta = accountAggregates.followerDelta || 0;
-        const followerEnd = profile.followers_count || 0;
-        const followerStart = Math.max(followerEnd - followerDelta, 0);
+        const followerTrend = this.buildFollowerTrendFromDailyMetrics(accountMetrics, {
+            ...accountAggregates,
+            followerEnd: profile.followers_count || 0
+        });
+        const followerDelta = followerTrend.delta || 0;
+        const followerEnd = followerTrend.end || profile.followers_count || 0;
+        const followerStart = followerTrend.start || 0;
 
         const totalPostsInWindow = media.length;
         const totalReach = accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0);
@@ -662,9 +697,9 @@ class AnalyticsService {
                 followerStart,
                 followerEnd,
                 followerDelta,
-                followerDeltaPercent: this.toPercent(followerDelta, followerStart),
-                followersGained: accountAggregates.follows || 0,
-                unfollows: accountAggregates.unfollows || 0,
+                followerDeltaPercent: followerTrend.deltaPercent,
+                followersGained: followerTrend.follows || 0,
+                unfollows: followerTrend.unfollows || 0,
                 // === Advanced Growth Metrics ===
                 // True Follower Growth Rate: (new followers / start) * 100 in the period
                 trueFollowerGrowthRate: followerStart > 0
@@ -2097,10 +2132,6 @@ class AnalyticsService {
                         if (!dailyData[date]) dailyData[date] = { date };
                         const parsedValue = this.parseInsightMetricValue(val.value);
                         dailyData[date][metric.name] = parsedValue;
-
-                        if (metric.name === 'follower_count') {
-                            dailyData[date].followers_gained = parsedValue;
-                        }
                     });
                 });
             } catch (error) {
