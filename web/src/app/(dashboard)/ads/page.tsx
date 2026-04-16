@@ -63,6 +63,391 @@ function toTitleCase(value: string) {
     return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function findMetricEntry(entries: any[] = [], candidates: string[] = []) {
+    return entries.find((entry: any) => {
+        const type = String(entry?.type || entry?.action_type || '').toLowerCase();
+        return candidates.some((candidate) => type.includes(candidate));
+    }) || null;
+}
+
+function buildMetaAdsOverviewMetrics({
+    accountProfile,
+    summary,
+    roas,
+    clickMetrics,
+    conversions,
+    actionValues,
+    costPerAction
+}: {
+    accountProfile: any;
+    summary: any;
+    roas: any;
+    clickMetrics: any;
+    conversions: any[];
+    actionValues: any[];
+    costPerAction: any[];
+}) {
+    const purchaseMetric = findMetricEntry(conversions, ['purchase']);
+    const purchaseValueMetric = findMetricEntry(actionValues, ['purchase']);
+    const purchaseCostMetric = findMetricEntry(costPerAction, ['purchase']);
+    const leadMetric = findMetricEntry(conversions, ['lead']);
+    const leadCostMetric = findMetricEntry(costPerAction, ['lead']);
+    const engagementMetric = findMetricEntry(conversions, ['post_engagement', 'page_engagement']);
+    const engagementCostMetric = findMetricEntry(costPerAction, ['post_engagement', 'page_engagement']);
+    const appInstallMetric = findMetricEntry(conversions, ['app_install', 'mobile_app_install']);
+    const appInstallCostMetric = findMetricEntry(costPerAction, ['app_install', 'mobile_app_install']);
+
+    const configByType: Record<string, Array<any>> = {
+        sales: [
+            {
+                label: 'Total Spend',
+                value: formatCurrency(summary.spend),
+                icon: IndianRupee,
+                color: '#10b981',
+                trend: summary.comparison?.spendTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Total amount spent on ads for this account'
+            },
+            {
+                label: 'Purchase ROAS',
+                value: formatRoas(roas.purchaseRoas || 0),
+                icon: TrendingUp,
+                color: '#22c55e',
+                tooltip: 'Return on ad spend from tracked purchases'
+            },
+            {
+                label: 'Purchase Value',
+                value: formatCurrency((purchaseValueMetric?.value || 0) * 100),
+                icon: CreditCard,
+                color: '#8b5cf6',
+                tooltip: 'Tracked revenue value attributed to ads'
+            },
+            {
+                label: 'Purchases',
+                value: formatNumber(purchaseMetric?.value || 0),
+                icon: Package,
+                color: '#f59e0b',
+                tooltip: 'Tracked purchase actions attributed to ads'
+            },
+            {
+                label: 'Cost / Purchase',
+                value: formatCurrency((purchaseCostMetric?.value || 0) * 100),
+                icon: DollarSign,
+                color: '#ef4444',
+                tooltip: 'Average spend required to drive one purchase'
+            },
+            {
+                label: 'CTR',
+                value: formatPercent(summary.ctr),
+                icon: MousePointer,
+                color: '#0ea5e9',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Click-through rate across all ads'
+            }
+        ],
+        leads: [
+            {
+                label: 'Total Spend',
+                value: formatCurrency(summary.spend),
+                icon: IndianRupee,
+                color: '#10b981',
+                trend: summary.comparison?.spendTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Total amount spent on ads for this account'
+            },
+            {
+                label: 'Leads',
+                value: formatNumber(leadMetric?.value || 0),
+                icon: Target,
+                color: '#6366f1',
+                tooltip: 'Tracked lead conversions from campaigns'
+            },
+            {
+                label: 'Cost / Lead',
+                value: formatCurrency((leadCostMetric?.value || 0) * 100),
+                icon: DollarSign,
+                color: '#f97316',
+                tooltip: 'Average spend required to drive one lead'
+            },
+            {
+                label: 'CTR',
+                value: formatPercent(summary.ctr),
+                icon: MousePointer,
+                color: '#0ea5e9',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Click-through rate across all ads'
+            },
+            {
+                label: 'Reach',
+                value: formatNumber(summary.reach),
+                icon: Users,
+                color: '#8b5cf6',
+                trend: summary.comparison?.reachTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of unique people who saw your ads'
+            },
+            {
+                label: 'Impressions',
+                value: formatNumber(summary.impressions),
+                icon: Eye,
+                color: '#ec4899',
+                trend: summary.comparison?.impressionsTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of times your ads were shown on screen'
+            }
+        ],
+        traffic: [
+            {
+                label: 'Total Spend',
+                value: formatCurrency(summary.spend),
+                icon: IndianRupee,
+                color: '#10b981',
+                trend: summary.comparison?.spendTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Total amount spent on ads for this account'
+            },
+            {
+                label: 'Outbound Clicks',
+                value: formatNumber(clickMetrics.outboundClicks || 0),
+                icon: ArrowRight,
+                color: '#0ea5e9',
+                tooltip: 'Clicks that sent people off Meta to your destination'
+            },
+            {
+                label: 'Cost / Link Click',
+                value: formatCurrency((clickMetrics.costPerInlineLinkClick || summary.cpc || 0) * 100),
+                icon: DollarSign,
+                color: '#8b5cf6',
+                tooltip: 'Average cost per click to your destination'
+            },
+            {
+                label: 'CTR',
+                value: formatPercent(summary.ctr),
+                icon: MousePointer,
+                color: '#f59e0b',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Click-through rate across all ads'
+            },
+            {
+                label: 'Reach',
+                value: formatNumber(summary.reach),
+                icon: Users,
+                color: '#6366f1',
+                trend: summary.comparison?.reachTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of unique people who saw your ads'
+            },
+            {
+                label: 'Impressions',
+                value: formatNumber(summary.impressions),
+                icon: Eye,
+                color: '#ec4899',
+                trend: summary.comparison?.impressionsTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of times your ads were shown on screen'
+            }
+        ],
+        awareness: [
+            {
+                label: 'Reach',
+                value: formatNumber(summary.reach),
+                icon: Users,
+                color: '#8b5cf6',
+                trend: summary.comparison?.reachTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of unique people who saw your ads'
+            },
+            {
+                label: 'Impressions',
+                value: formatNumber(summary.impressions),
+                icon: Eye,
+                color: '#0ea5e9',
+                trend: summary.comparison?.impressionsTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of times your ads were shown on screen'
+            },
+            {
+                label: 'CPM',
+                value: formatCurrency(parseFloat(summary.cpm || 0) * 100),
+                icon: DollarSign,
+                color: '#ec4899',
+                tooltip: 'Cost per 1,000 impressions'
+            },
+            {
+                label: 'Frequency',
+                value: parseFloat(summary.frequency || 0).toFixed(2),
+                icon: Activity,
+                color: '#14b8a6',
+                tooltip: 'Average number of times each person saw your ad'
+            },
+            {
+                label: 'Total Spend',
+                value: formatCurrency(summary.spend),
+                icon: IndianRupee,
+                color: '#10b981',
+                trend: summary.comparison?.spendTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Total amount spent on ads for this account'
+            },
+            {
+                label: 'CTR',
+                value: formatPercent(summary.ctr),
+                icon: MousePointer,
+                color: '#f59e0b',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Click-through rate across all ads'
+            }
+        ],
+        engagement: [
+            {
+                label: 'Total Spend',
+                value: formatCurrency(summary.spend),
+                icon: IndianRupee,
+                color: '#10b981',
+                trend: summary.comparison?.spendTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Total amount spent on ads for this account'
+            },
+            {
+                label: 'Engagements',
+                value: formatNumber(engagementMetric?.value || 0),
+                icon: Activity,
+                color: '#ec4899',
+                tooltip: 'Tracked engagement actions from campaigns'
+            },
+            {
+                label: 'Cost / Engagement',
+                value: formatCurrency((engagementCostMetric?.value || 0) * 100),
+                icon: DollarSign,
+                color: '#f97316',
+                tooltip: 'Average spend required to drive one engagement'
+            },
+            {
+                label: 'Reach',
+                value: formatNumber(summary.reach),
+                icon: Users,
+                color: '#6366f1',
+                trend: summary.comparison?.reachTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of unique people who saw your ads'
+            },
+            {
+                label: 'Impressions',
+                value: formatNumber(summary.impressions),
+                icon: Eye,
+                color: '#0ea5e9',
+                trend: summary.comparison?.impressionsTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of times your ads were shown on screen'
+            },
+            {
+                label: 'CTR',
+                value: formatPercent(summary.ctr),
+                icon: MousePointer,
+                color: '#f59e0b',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Click-through rate across all ads'
+            }
+        ],
+        app_promotion: [
+            {
+                label: 'Total Spend',
+                value: formatCurrency(summary.spend),
+                icon: IndianRupee,
+                color: '#10b981',
+                trend: summary.comparison?.spendTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Total amount spent on ads for this account'
+            },
+            {
+                label: 'App Installs',
+                value: formatNumber(appInstallMetric?.value || 0),
+                icon: Smartphone,
+                color: '#0ea5e9',
+                tooltip: 'Tracked app install actions from campaigns'
+            },
+            {
+                label: 'Cost / Install',
+                value: formatCurrency((appInstallCostMetric?.value || 0) * 100),
+                icon: DollarSign,
+                color: '#f97316',
+                tooltip: 'Average spend required to drive one app install'
+            },
+            {
+                label: 'CTR',
+                value: formatPercent(summary.ctr),
+                icon: MousePointer,
+                color: '#f59e0b',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Click-through rate across all ads'
+            },
+            {
+                label: 'Reach',
+                value: formatNumber(summary.reach),
+                icon: Users,
+                color: '#6366f1',
+                trend: summary.comparison?.reachTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of unique people who saw your ads'
+            },
+            {
+                label: 'Impressions',
+                value: formatNumber(summary.impressions),
+                icon: Eye,
+                color: '#ec4899',
+                trend: summary.comparison?.impressionsTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of times your ads were shown on screen'
+            }
+        ]
+    };
+
+    return configByType[accountProfile?.type || 'mixed'] || [
+        {
+            label: 'Total Spend',
+            value: formatCurrency(summary.spend),
+            icon: IndianRupee,
+            color: '#10b981',
+            trend: summary.comparison?.spendTrend,
+            trendLabel: summary.comparison?.label,
+            tooltip: 'Total amount spent on ads for this account'
+        },
+        {
+            label: 'Impressions',
+            value: formatNumber(summary.impressions),
+            icon: Eye,
+            color: '#0ea5e9',
+            trend: summary.comparison?.impressionsTrend,
+            trendLabel: summary.comparison?.label,
+            tooltip: 'Number of times your ads were shown on screen'
+        },
+        {
+            label: 'Reach',
+            value: formatNumber(summary.reach),
+            icon: Users,
+            color: '#8b5cf6',
+            trend: summary.comparison?.reachTrend,
+            trendLabel: summary.comparison?.label,
+            tooltip: 'Number of unique people who saw your ads'
+        },
+        {
+            label: 'Clicks',
+            value: formatNumber(summary.clicks),
+            icon: MousePointer,
+            color: '#f59e0b',
+            trend: summary.comparison?.clicksTrend,
+            trendLabel: summary.comparison?.label,
+            tooltip: 'Number of clicks on your ads'
+        }
+    ];
+}
+
 function buildAdsExportTables({
     accountName,
     accountId,
@@ -469,6 +854,7 @@ export default function AdsPage() {
     const actionValues = insightsData?.data?.actionValues || [];
     const costPerAction = insightsData?.data?.costPerAction || [];
     const campaigns = campaignsData?.data?.campaigns || [];
+    const accountProfile = insightsData?.data?.accountProfile || null;
 
     // Chart data
     const dailyChartData = daily.map((d: any) => ({
@@ -493,6 +879,20 @@ export default function AdsPage() {
     }));
 
     const selectedAccountMeta = adAccounts.find((account: any) => account.account_id === effectiveAccount);
+    const objectiveMixLabel = accountProfile?.objectiveMix?.slice?.(0, 2)?.map((entry: any) => `${entry.label} ${entry.share}%`)?.join(' • ');
+    const overviewMetricCards = buildMetaAdsOverviewMetrics({
+        accountProfile,
+        summary,
+        roas,
+        clickMetrics,
+        conversions,
+        actionValues,
+        costPerAction
+    });
+    const showRoasSection = ['sales', 'mixed'].includes(accountProfile?.type) || Number(roas.purchaseRoas || 0) > 0 || Number(roas.websitePurchaseRoas || 0) > 0;
+    const showConversionsSection = accountProfile?.type !== 'awareness';
+    const showDiagnosticsSection = accountProfile?.type !== 'app_promotion';
+    const showVideoRetentionSection = ['awareness', 'engagement', 'mixed'].includes(accountProfile?.type) || Object.values(videoViews || {}).some((value) => Number(value || 0) > 0);
 
     const handlePageExport = async (format: SectionExportFormat) => {
         if (!effectiveAccount) return;
@@ -613,43 +1013,56 @@ export default function AdsPage() {
             )}
 
             {/* Summary Metrics */}
+            {accountProfile?.label && (
+                <div
+                    className="card"
+                    style={{
+                        marginBottom: 20,
+                        padding: 18,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 16,
+                        flexWrap: 'wrap',
+                        border: '1px solid rgba(99,102,241,0.22)',
+                        background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(16,185,129,0.08))'
+                    }}
+                >
+                    <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: 6 }}>
+                            Account Focus
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{accountProfile.label}</div>
+                        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>
+                            {accountProfile.description}
+                            {objectiveMixLabel ? ` ${objectiveMixLabel}.` : ''}
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {(accountProfile.recommendedMetrics || []).slice(0, 6).map((metricKey: string) => (
+                            <span
+                                key={metricKey}
+                                style={{
+                                    padding: '6px 10px',
+                                    borderRadius: 999,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    background: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    color: 'var(--foreground)'
+                                }}
+                            >
+                                {toTitleCase(metricKey)}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="grid-metrics" style={{ marginBottom: 24, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
-                <MetricCard
-                    label="Total Spend"
-                    value={formatCurrency(summary.spend)}
-                    icon={IndianRupee}
-                    color="#10b981"
-                    trend={summary.comparison?.spendTrend}
-                    trendLabel={summary.comparison?.label}
-                    tooltip="Total amount spent on ads for this account"
-                />
-                <MetricCard
-                    label="Impressions"
-                    value={formatNumber(summary.impressions)}
-                    icon={Eye}
-                    color="#0ea5e9"
-                    trend={summary.comparison?.impressionsTrend}
-                    trendLabel={summary.comparison?.label}
-                    tooltip="Number of times your ads were shown on screen"
-                />
-                <MetricCard
-                    label="Reach"
-                    value={formatNumber(summary.reach)}
-                    icon={Users}
-                    color="#8b5cf6"
-                    trend={summary.comparison?.reachTrend}
-                    trendLabel={summary.comparison?.label}
-                    tooltip="Number of unique people who saw your ads"
-                />
-                <MetricCard
-                    label="Clicks"
-                    value={formatNumber(summary.clicks)}
-                    icon={MousePointer}
-                    color="#f59e0b"
-                    trend={summary.comparison?.clicksTrend}
-                    trendLabel={summary.comparison?.label}
-                    tooltip="Number of clicks on your ads"
-                />
+                {overviewMetricCards.map((metric) => (
+                    <MetricCard key={metric.label} {...metric} />
+                ))}
             </div>
 
             {/* Tabs */}
@@ -688,7 +1101,7 @@ export default function AdsPage() {
                 <div style={{ display: 'grid', gap: 20 }}>
 
                     {/* Ad Relevance Diagnostics */}
-                    <SectionCard
+                    {showDiagnosticsSection && <SectionCard
                         title="Ad Relevance Diagnostics"
                         subtitle={`Aggregated from ${relevanceDiagnostics.adsWithData || 0} of ${relevanceDiagnostics.adsAnalyzed || 0} ads with ranking data`}
                     >
@@ -718,10 +1131,10 @@ export default function AdsPage() {
                                 <RankingBadge value={relevanceDiagnostics.conversionRateRanking || 'N/A'} type="conversion" />
                             </div>
                         </div>
-                    </SectionCard>
+                    </SectionCard>}
 
                     {/* ROAS & Value Metrics */}
-                    <SectionCard
+                    {showRoasSection && <SectionCard
                         title="ROAS & Value Metrics"
                         subtitle={roas.purchaseRoas > 0 || roas.websitePurchaseRoas > 0
                             ? "Return on ad spend and monetary value from conversions"
@@ -776,10 +1189,19 @@ export default function AdsPage() {
                                 <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCurrency(parseFloat(clickMetrics.socialSpend || 0) * 100)}</div>
                             </div>
                         </div>
-                    </SectionCard>
+                    </SectionCard>}
 
                     {/* Performance Metrics */}
-                    <SectionCard title="Performance Metrics" subtitle="Key performance indicators for your ads">
+                    <SectionCard
+                        title="Performance Metrics"
+                        subtitle={accountProfile?.type === 'awareness'
+                            ? 'Delivery and cost efficiency signals for awareness-focused campaigns'
+                            : accountProfile?.type === 'traffic'
+                                ? 'Click efficiency and delivery quality for traffic-oriented campaigns'
+                                : accountProfile?.type === 'leads'
+                                    ? 'Lead generation efficiency alongside delivery quality'
+                                    : 'Key performance indicators for your ads'}
+                    >
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -836,6 +1258,7 @@ export default function AdsPage() {
 
                     {/* Video Retention & Conversions */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                        {showVideoRetentionSection ? (
                         <SectionCard title="Video Retention" subtitle="How much of your videos people watched">
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                                 {[
@@ -851,8 +1274,30 @@ export default function AdsPage() {
                                 ))}
                             </div>
                         </SectionCard>
+                        ) : (
+                        <SectionCard title="Delivery Mix" subtitle="Awareness-oriented accounts care more about delivery quality than conversion tracking">
+                            <div style={{ display: 'grid', gap: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="text-muted" style={{ fontSize: 12 }}>Reach</span>
+                                    <strong>{formatNumber(summary.reach)}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="text-muted" style={{ fontSize: 12 }}>Impressions</span>
+                                    <strong>{formatNumber(summary.impressions)}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="text-muted" style={{ fontSize: 12 }}>Frequency</span>
+                                    <strong>{parseFloat(summary.frequency || 0).toFixed(2)}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="text-muted" style={{ fontSize: 12 }}>CPM</span>
+                                    <strong>{formatCurrency(parseFloat(summary.cpm || 0) * 100)}</strong>
+                                </div>
+                            </div>
+                        </SectionCard>
+                        )}
 
-                        <SectionCard title="Conversions" subtitle="Actions people took after seeing your ads">
+                        {showConversionsSection && <SectionCard title="Conversions" subtitle="Actions people took after seeing your ads">
                             {conversions.length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {conversions.slice(0, 5).map((c: any, i: number) => (
@@ -865,7 +1310,7 @@ export default function AdsPage() {
                             ) : (
                                 <p className="text-muted">No conversion data available</p>
                             )}
-                        </SectionCard>
+                        </SectionCard>}
                     </div>
 
                     {/* Device Performance */}
