@@ -730,6 +730,45 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     );
 }
 
+const TAB_META: Record<string, { label: string; tooltip: string }> = {
+    overview: {
+        label: 'Overview',
+        tooltip: 'Your high-level ad account snapshot with the most important KPIs for the selected period.'
+    },
+    funnel: {
+        label: 'Conversion Funnel',
+        tooltip: 'Tracks the path from click to purchase using Meta standard events like landing page view, view content, add to cart, checkout, and purchase.'
+    },
+    intelligence: {
+        label: 'Optimize',
+        tooltip: 'Prioritisation layer for timing, placements, and campaigns. Useful when deciding what to scale, protect, or deprioritise.'
+    },
+    advanced: {
+        label: 'Health',
+        tooltip: 'Diagnostic view for fatigue, learning phase, quality signals, and other delivery or creative health indicators.'
+    },
+    deep: {
+        label: 'Diagnostics',
+        tooltip: 'Detailed forensic views like bounce gaps, nurture patterns, hook performance, and placement inefficiencies.'
+    },
+    campaigns: {
+        label: 'Campaigns',
+        tooltip: 'Campaign-level breakdown of spend and delivery.'
+    },
+    demographics: {
+        label: 'Demographics',
+        tooltip: 'Audience performance by age and gender.'
+    },
+    placements: {
+        label: 'Placements',
+        tooltip: 'Breakdown by platform and placement position.'
+    },
+    geo: {
+        label: 'Geography',
+        tooltip: 'Performance by country and region.'
+    }
+};
+
 // ==================== MAIN PAGE ====================
 
 export default function AdsPage() {
@@ -1135,31 +1174,31 @@ export default function AdsPage() {
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
                 <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>
-                    <BarChart3 size={14} /> Overview
+                    <BarChart3 size={14} /> {TAB_META.overview.label} <InfoTooltip text={TAB_META.overview.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'funnel'} onClick={() => setActiveTab('funnel')}>
-                    <Filter size={14} /> Funnel
+                    <Filter size={14} /> {TAB_META.funnel.label} <InfoTooltip text={TAB_META.funnel.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'intelligence'} onClick={() => setActiveTab('intelligence')}>
-                    <Brain size={14} /> Intelligence
+                    <Brain size={14} /> {TAB_META.intelligence.label} <InfoTooltip text={TAB_META.intelligence.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'advanced'} onClick={() => setActiveTab('advanced')}>
-                    <Zap size={14} /> Advanced
+                    <Zap size={14} /> {TAB_META.advanced.label} <InfoTooltip text={TAB_META.advanced.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'deep'} onClick={() => setActiveTab('deep')}>
-                    <Activity size={14} /> Deep
+                    <Activity size={14} /> {TAB_META.deep.label} <InfoTooltip text={TAB_META.deep.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'campaigns'} onClick={() => setActiveTab('campaigns')}>
-                    <Target size={14} /> Campaigns
+                    <Target size={14} /> {TAB_META.campaigns.label} <InfoTooltip text={TAB_META.campaigns.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'demographics'} onClick={() => setActiveTab('demographics')}>
-                    <Users size={14} /> Demographics
+                    <Users size={14} /> {TAB_META.demographics.label} <InfoTooltip text={TAB_META.demographics.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'placements'} onClick={() => setActiveTab('placements')}>
-                    <Layers size={14} /> Placements
+                    <Layers size={14} /> {TAB_META.placements.label} <InfoTooltip text={TAB_META.placements.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'geo'} onClick={() => setActiveTab('geo')}>
-                    <Globe size={14} /> Geography
+                    <Globe size={14} /> {TAB_META.geo.label} <InfoTooltip text={TAB_META.geo.tooltip} />
                 </TabButton>
             </div>
 
@@ -2148,7 +2187,7 @@ export default function AdsPage() {
                                             ))}
                                         </div>
 
-                                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                                    <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
                                             Placements are sorted by an opportunity score built from real ROAS, purchase volume, CPC efficiency, and spend share so the list is useful for budget decisions, not just vanity ranking.
                                         </div>
 
@@ -2157,13 +2196,13 @@ export default function AdsPage() {
                                                 <thead>
                                                     <tr>
                                                         <th>Placement</th>
-                                                        <th>Opportunity</th>
-                                                        <th>ROAS</th>
-                                                        <th>Spend Share</th>
-                                                        <th>Purchases</th>
-                                                        <th>Cost / Purchase</th>
-                                                        <th>CPC</th>
-                                                        <th>Confidence</th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Opportunity <InfoTooltip text="A prioritisation score from 0 to 100. It blends real ROAS, purchase volume, CPC efficiency, and spend share to highlight placements that are both efficient and material enough to act on." /></span></th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>ROAS <InfoTooltip text="Return on ad spend for that placement, calculated from real purchase value divided by spend." /></span></th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend Share <InfoTooltip text="How much of total spend this placement consumed in the selected period." /></span></th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Purchases <InfoTooltip text="Tracked purchase actions attributed to this placement in Meta." /></span></th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Cost / Purchase <InfoTooltip text="Spend divided by purchases for this placement. Lower is usually better if attribution quality is consistent." /></span></th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPC <InfoTooltip text="Average cost per click for that placement." /></span></th>
+                                                        <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Confidence <InfoTooltip text="Confidence reflects how much evidence is behind the result. It rises when a placement has enough spend, clicks, and purchase volume to trust the signal." /></span></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -2279,11 +2318,23 @@ export default function AdsPage() {
 
                                                         <div style={{ textAlign: 'right' }}>
                                                             <div style={{ fontSize: 28, fontWeight: 800, color: scoreTone.color, lineHeight: 1 }}>{Math.round(c.efficiencyScore || 0)}</div>
-                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Performance score</div>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'inline-flex', alignItems: 'center' }}>
+                                                                Performance score
+                                                                <InfoTooltip text="Performance score is a blended prioritisation score from 0 to 100 built from real Meta values: ROAS, purchase volume, CTR, CPC efficiency, and spend confidence. It is meant to help rank what to scale first, not replace the raw metrics." />
+                                                            </div>
                                                             <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>ROAS {c.scoreComponents?.roas ?? 0}</div>
-                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Volume {c.scoreComponents?.volume ?? 0}</div>
-                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>CPC {c.scoreComponents?.cpcEfficiency ?? 0}</div>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                                                    ROAS {c.scoreComponents?.roas ?? 0}
+                                                                    <InfoTooltip text="ROAS contribution shows how strong this campaign's ROAS is relative to the best campaign in the current selection." />
+                                                                </div>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                                                    Volume {c.scoreComponents?.volume ?? 0}
+                                                                    <InfoTooltip text="Volume contribution reflects purchase count relative to the strongest converting campaign in this view." />
+                                                                </div>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                                                    CPC {c.scoreComponents?.cpcEfficiency ?? 0}
+                                                                    <InfoTooltip text="CPC contribution rewards campaigns that generate clicks more efficiently than peers." />
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
