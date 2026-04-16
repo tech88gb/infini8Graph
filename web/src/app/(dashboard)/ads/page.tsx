@@ -448,6 +448,15 @@ function buildMetaAdsOverviewMetrics({
     ];
 }
 
+const FUNNEL_STAGE_EXPLANATIONS: Record<string, string> = {
+    landing_page_view: 'People who clicked the ad and successfully loaded the landing page.',
+    view_content: 'People who viewed a tracked product or content page after landing.',
+    add_to_cart: 'People who added at least one item to cart.',
+    initiate_checkout: 'People who started the checkout flow.',
+    add_payment_info: 'People who reached the payment-details step.',
+    purchase: 'Completed purchase events tracked by Meta Pixel or Conversions API.'
+};
+
 function buildAdsExportTables({
     accountName,
     accountId,
@@ -1712,16 +1721,28 @@ export default function AdsPage() {
                         </div>
                     ) : funnelData?.data ? (
                         <>
+                            {(() => {
+                                const funnelStages = funnelData.data.funnel || [];
+                                const lpvStage = funnelStages.find((s: any) => s.stage === 'landing_page_view');
+                                const vcStage = funnelStages.find((s: any) => s.stage === 'view_content');
+                                const lpv = lpvStage?.count || 0;
+                                const vc = vcStage?.count || 0;
+                                const bounceComparable = lpv > 0 && vc <= lpv;
+                                const overallBounce = bounceComparable ? (((lpv - vc) / lpv) * 100) : null;
+                                const contentContinuationRate = lpv > 0 ? ((vc / lpv) * 100) : null;
+
+                                return (
+                                    <>
                             {/* Funnel Summary */}
                             <SectionCard
-                                title={<span style={{ display: 'flex', alignItems: 'center' }}>Conversion Funnel Overview <InfoTooltip text="Shows the step-by-step customer journey. Key metrics like ROAS (Return On Ad Spend) indicate profitability, while Cost/Purchase shows acquisition efficiency." /></span>}
-                                subtitle="Track user journey from ad click to purchase — data from Meta's standard events"
+                                title={<span style={{ display: 'flex', alignItems: 'center' }}>Conversion Funnel Overview <InfoTooltip text="This funnel is built from Meta standard events. It shows where people move from landing-page load through purchase, using real tracked event counts and derived conversion rates." /></span>}
+                                subtitle="Track the journey from landing-page visit to purchase using Meta tracked events and calculated step-to-step conversion rates."
                             >
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
                                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
                                             <span className="text-muted" style={{ fontSize: 12 }}>Total Spend</span>
-                                            <InfoTooltip text="Total amount spent during the last 90 days across all campaigns in this ad account." />
+                                            <InfoTooltip text="Real Meta spend for the selected date preset across this ad account." />
                                         </div>
                                         <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
                                             {formatCurrency(funnelData.data.summary?.totalSpend || 0)}
@@ -1730,7 +1751,7 @@ export default function AdsPage() {
                                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
                                             <span className="text-muted" style={{ fontSize: 12 }}>Overall Conversion</span>
-                                            <InfoTooltip text="Purchases ÷ Landing Page Views. This is the percentage of users who saw your landing page and completed a purchase." />
+                                            <InfoTooltip text="Calculated as Purchases divided by Landing Page Views for the selected period. This estimates how much paid landing-page traffic turns into purchases." />
                                         </div>
                                         <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>
                                             {funnelData.data.summary?.overallConversionRate || 0}%
@@ -1739,7 +1760,7 @@ export default function AdsPage() {
                                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
                                             <span className="text-muted" style={{ fontSize: 12 }}>ROAS</span>
-                                            <InfoTooltip text="Return On Ad Spend. Revenue ÷ Spend. A ROAS of 2x means you earned ₹2 for every ₹1 spent. Above 1x is profitable." />
+                                            <InfoTooltip text="Calculated as purchase value divided by spend. A ROAS of 3x means about ₹3 in tracked purchase value for every ₹1 spent." />
                                         </div>
                                         <div style={{ fontSize: 24, fontWeight: 700, color: funnelData.data.summary?.roas > 1 ? '#10b981' : '#f59e0b' }}>
                                             {funnelData.data.summary?.roas || 0}x
@@ -1748,17 +1769,20 @@ export default function AdsPage() {
                                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
                                             <span className="text-muted" style={{ fontSize: 12 }}>Cost/Purchase</span>
-                                            <InfoTooltip text="Average cost to acquire one purchase. Total Spend ÷ Total Purchases. Lower is better." />
+                                            <InfoTooltip text="Calculated as Total Spend divided by total Purchase events in the selected period." />
                                         </div>
                                         <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>
                                             {formatCurrency(funnelData.data.summary?.costPerPurchase || 0)}
                                         </div>
                                     </div>
                                 </div>
+                                <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: 8, fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+                                    <strong style={{ color: 'var(--foreground)' }}>How to read this funnel:</strong> each stage is a real Meta event count. The conversion percentage on each step is calculated from the previous step, so you can see where the biggest drop-offs happen in the customer journey.
+                                </div>
                             </SectionCard>
 
                             {/* Visual Funnel */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Conversion Funnel Visualization <InfoTooltip text="Visual representation of drop-off rates at each stage of your funnel. Bottlenecks highlight where you lose the most potential conversions." /></span>} subtitle="Watch where users drop off">
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Conversion Funnel Visualization <InfoTooltip text="Each block is a real event count from Meta. The drop-off between blocks is calculated from the previous stage, which helps isolate the biggest leak in the journey." /></span>} subtitle="Step-by-step view of where users continue and where they drop off.">
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
                                     {(funnelData.data.funnel || []).map((stage: any, i: number) => {
                                         const maxCount = Math.max(...(funnelData.data.funnel || []).map((s: any) => s.count || 1));
@@ -1795,7 +1819,10 @@ export default function AdsPage() {
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                                         <Icon size={20} />
                                                         <div>
-                                                            <div style={{ fontWeight: 600, fontSize: 14 }}>{stage.label}</div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                                <div style={{ fontWeight: 600, fontSize: 14 }}>{stage.label}</div>
+                                                                <InfoTooltip text={FUNNEL_STAGE_EXPLANATIONS[stage.stage] || 'Tracked Meta event in the conversion journey.'} />
+                                                            </div>
                                                             <div style={{ fontSize: 11, opacity: 0.8 }}>
                                                                 {formatCurrency(stage.costPerAction || 0)} per action
                                                             </div>
@@ -1862,34 +1889,11 @@ export default function AdsPage() {
                             <SectionCard
                                 title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     Bounce Rate per Campaign
-                                    <InfoTooltip text="Bounce Rate = % of ad clicks that didn't result in any downstream action (View Content, Add to Cart, etc.). A high bounce rate means your landing page does not match what the ad promised. Requires: analytics.readonly permission + Meta Pixel ViewContent event." />
+                                    <InfoTooltip text="This section compares upper-funnel page events to downstream content events. When View Content exceeds Landing Page Views, Meta event counting is not directly comparable, so bounce is shown as unavailable instead of a misleading negative number." />
                                 </span>}
-                                subtitle="Full Funnel Analysis - Identifies which campaigns are sending traffic to poor-performing landing pages"
+                                subtitle="Landing-page quality view using real Meta event counts plus campaign-level directional signals"
                             >
-                                <div style={{
-                                    padding: '12px 16px',
-                                    background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(16,185,129,0.05))',
-                                    borderRadius: 8, border: '1px solid rgba(99,102,241,0.2)',
-                                    marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 10
-                                }}>
-                                    <HelpCircle size={15} style={{ color: '#6366f1', flexShrink: 0, marginTop: 1 }} />
-                                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-                                        <strong style={{ color: 'var(--foreground)' }}>Permission Required:</strong>{' '}
-                                        <code style={{ background: 'rgba(99,102,241,0.12)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>analytics.readonly</code>
-                                        {' - '}Correlates Meta Pixel Landing Page Views vs ViewContent event per campaign.
-                                        Campaigns above <span style={{ color: '#ef4444', fontWeight: 600 }}>70% bounce</span> have landing pages
-                                        that are mismatched with their ad creatives.
-                                    </div>
-                                </div>
-
                                 {(() => {
-                                    const funnelStages = funnelData.data.funnel || [];
-                                    const lpvStage = funnelStages.find((s: any) => s.stage === 'landing_page_view');
-                                    const vcStage  = funnelStages.find((s: any) => s.stage === 'view_content');
-                                    const lpv = lpvStage?.count || 0;
-                                    const vc  = vcStage?.count  || 0;
-                                    const overallBounce = lpv > 0 ? (((lpv - vc) / lpv) * 100) : null;
-
                                     const campaignRows = (campaigns || [])
                                         .filter((c: any) => parseInt(c.insights?.data?.[0]?.clicks || 0) > 0)
                                         .slice(0, 12)
@@ -1912,12 +1916,33 @@ export default function AdsPage() {
                                         <div>
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
                                                 {[
-                                                    { label: 'Landing Page Views', value: formatNumber(lpv), col: '#6366f1' },
-                                                    { label: 'Continued to Content', value: formatNumber(vc), col: '#10b981' },
-                                                    { label: 'Overall Bounce Rate', value: overallBounce !== null ? `${overallBounce.toFixed(1)}%` : 'N/A', col: overallBounce !== null && overallBounce > 70 ? '#ef4444' : '#f59e0b', warn: overallBounce !== null && overallBounce > 70 },
+                                                    {
+                                                        label: 'Landing Page Views',
+                                                        value: formatNumber(lpv),
+                                                        col: '#6366f1',
+                                                        helper: 'Users who loaded the landing page after ad click.'
+                                                    },
+                                                    {
+                                                        label: 'Continued to Content',
+                                                        value: formatNumber(vc),
+                                                        col: '#10b981',
+                                                        helper: contentContinuationRate !== null ? `${contentContinuationRate.toFixed(1)}% of LPV volume` : 'Meta content-view events recorded.'
+                                                    },
+                                                    {
+                                                        label: 'Overall Bounce Rate',
+                                                        value: overallBounce !== null ? `${overallBounce.toFixed(1)}%` : 'Not comparable',
+                                                        col: overallBounce !== null && overallBounce > 70 ? '#ef4444' : '#f59e0b',
+                                                        warn: overallBounce !== null && overallBounce > 70,
+                                                        helper: overallBounce !== null
+                                                            ? 'Calculated as (Landing Page Views - Continued to Content) / Landing Page Views.'
+                                                            : 'View Content exceeds Landing Page Views, so Meta event counts are not directly comparable for a bounce calculation here.'
+                                                    },
                                                 ].map((m: any, i: number) => (
                                                     <div key={i} style={{ padding: 16, background: m.warn ? 'rgba(239,68,68,0.06)' : 'var(--background)', borderRadius: 8, textAlign: 'center', border: m.warn ? '1px solid rgba(239,68,68,0.25)' : 'none' }}>
-                                                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</div>
+                                                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+                                                            {m.label}
+                                                            <InfoTooltip text={m.helper} />
+                                                        </div>
                                                         <div style={{ fontSize: 24, fontWeight: 700, color: m.col }}>{m.value}</div>
                                                         {m.warn && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 4, fontWeight: 600 }}>{`\u26A0 Review landing pages`}</div>}
                                                     </div>
@@ -1979,6 +2004,9 @@ export default function AdsPage() {
                                     );
                                 })()}
                             </SectionCard>
+                                    </>
+                                );
+                            })()}
                         </>
                     ) : (
                         <div style={{ textAlign: 'center', padding: 40 }}>
