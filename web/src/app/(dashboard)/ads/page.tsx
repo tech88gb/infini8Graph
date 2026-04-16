@@ -63,6 +63,24 @@ function toTitleCase(value: string) {
     return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatCompactPercent(value: string | number, digits = 1) {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(num)) return '0%';
+    return `${num.toFixed(digits)}%`;
+}
+
+function getScoreTone(value: number) {
+    if (value >= 75) return { bg: 'rgba(16, 185, 129, 0.16)', border: 'rgba(16, 185, 129, 0.35)', color: '#34d399', label: 'Strong' };
+    if (value >= 45) return { bg: 'rgba(245, 158, 11, 0.14)', border: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24', label: 'Promising' };
+    return { bg: 'rgba(239, 68, 68, 0.14)', border: 'rgba(239, 68, 68, 0.28)', color: '#f87171', label: 'Watch' };
+}
+
+function getConfidenceTone(label: string) {
+    if (label === 'High confidence') return { bg: 'rgba(16, 185, 129, 0.14)', color: '#86efac' };
+    if (label === 'Medium confidence') return { bg: 'rgba(59, 130, 246, 0.14)', color: '#93c5fd' };
+    return { bg: 'rgba(148, 163, 184, 0.16)', color: '#cbd5e1' };
+}
+
 function findMetricEntry(entries: any[] = [], candidates: string[] = []) {
     return entries.find((entry: any) => {
         const type = String(entry?.type || entry?.action_type || '').toLowerCase();
@@ -2086,92 +2104,195 @@ export default function AdsPage() {
                             )}
 
                             {/* Placement ROAS Matrix */}
-                            {(intelligenceData.data.placementMatrix || []).length > 0 && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Placement ROAS Matrix <InfoTooltip text="Maps out Return On Ad Spend by placement to identify your most profitable ad slots." /></span>} subtitle="Find your most profitable placements">
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table className="table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Platform</th>
-                                                    <th>Position</th>
-                                                    <th>ROAS</th>
-                                                    <th>Spend</th>
-                                                    <th>Revenue</th>
-                                                    <th>CPC</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {(intelligenceData.data.placementMatrix || []).slice(0, 10).map((p: any, i: number) => (
-                                                    <tr key={i}>
-                                                        <td style={{ fontWeight: 500, textTransform: 'capitalize' }}>{p.platform}</td>
-                                                        <td style={{ textTransform: 'capitalize' }}>{(p.position || '').replace(/_/g, ' ')}</td>
-                                                        <td>
-                                                            <span style={{
-                                                                padding: '4px 10px',
-                                                                borderRadius: 20,
-                                                                background: parseFloat(p.roas) >= 1 ? '#dcfce7' : '#fee2e2',
-                                                                color: parseFloat(p.roas) >= 1 ? '#166534' : '#991b1b',
-                                                                fontWeight: 600,
-                                                                fontSize: 13
-                                                            }}>
-                                                                {p.roas}x
-                                                            </span>
-                                                        </td>
-                                                        <td>{formatCurrency(p.spend)}</td>
-                                                        <td>{formatCurrency(p.revenue)}</td>
-                                                        <td>{formatCurrency(parseFloat(p.cpc))}</td>
+                            {(() => {
+                                const placements = (intelligenceData.data.placementMatrix || []).filter((p: any) => p.spend > 0);
+                                if (!placements.length) return null;
+
+                                const topByRoas = [...placements].sort((a: any, b: any) => b.roas - a.roas)[0];
+                                const topByScale = [...placements].sort((a: any, b: any) => b.revenue - a.revenue)[0];
+                                const topByCpc = [...placements]
+                                    .filter((p: any) => p.clicks > 0)
+                                    .sort((a: any, b: any) => a.cpc - b.cpc)[0];
+
+                                return (
+                                    <SectionCard
+                                        title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Placement Profitability Map <InfoTooltip text="Uses real placement-level spend, clicks, purchases, and purchase value from Meta. Ranked with a blended score so tiny low-spend outliers do not overpower placements that drive meaningful scale." /></span>}
+                                        subtitle="Read this as where to scale, where to protect, and where to watch"
+                                    >
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 16 }}>
+                                            {[
+                                                {
+                                                    title: 'Highest ROAS',
+                                                    value: `${toTitleCase(topByRoas.platform)} ${toTitleCase(topByRoas.position)}`,
+                                                    meta: `${formatRoas(topByRoas.roas)} on ${formatCurrency(topByRoas.spend)}`,
+                                                    color: '#10b981'
+                                                },
+                                                {
+                                                    title: 'Largest Revenue Driver',
+                                                    value: `${toTitleCase(topByScale.platform)} ${toTitleCase(topByScale.position)}`,
+                                                    meta: `${formatCurrency(topByScale.revenue)} revenue from ${topByScale.purchases} purchases`,
+                                                    color: '#6366f1'
+                                                },
+                                                {
+                                                    title: 'Cheapest Clicks',
+                                                    value: topByCpc ? `${toTitleCase(topByCpc.platform)} ${toTitleCase(topByCpc.position)}` : 'No click data',
+                                                    meta: topByCpc ? `${formatCurrency(topByCpc.cpc)} CPC with ${formatNumber(topByCpc.clicks)} clicks` : 'No eligible placements',
+                                                    color: '#f59e0b'
+                                                }
+                                            ].map((item) => (
+                                                <div key={item.title} style={{ padding: 16, borderRadius: 12, background: 'var(--background)', border: `1px solid ${item.color}33` }}>
+                                                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: item.color, marginBottom: 8 }}>{item.title}</div>
+                                                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{item.value}</div>
+                                                    <div className="text-muted" style={{ fontSize: 12 }}>{item.meta}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                                            Placements are sorted by an opportunity score built from real ROAS, purchase volume, CPC efficiency, and spend share so the list is useful for budget decisions, not just vanity ranking.
+                                        </div>
+
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table className="table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Placement</th>
+                                                        <th>Opportunity</th>
+                                                        <th>ROAS</th>
+                                                        <th>Spend Share</th>
+                                                        <th>Purchases</th>
+                                                        <th>Cost / Purchase</th>
+                                                        <th>CPC</th>
+                                                        <th>Confidence</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </SectionCard>
-                            )}
+                                                </thead>
+                                                <tbody>
+                                                    {placements.slice(0, 8).map((p: any, i: number) => {
+                                                        const scoreTone = getScoreTone(p.rankScore || 0);
+                                                        const confidenceTone = getConfidenceTone(p.confidenceLabel || '');
+                                                        return (
+                                                            <tr key={`${p.platform}-${p.position}-${i}`}>
+                                                                <td>
+                                                                    <div style={{ fontWeight: 600 }}>{toTitleCase(p.platform)} {toTitleCase(p.position)}</div>
+                                                                    <div className="text-muted" style={{ fontSize: 12 }}>{formatCurrency(p.spend)} spend • {formatCurrency(p.revenue)} revenue</div>
+                                                                </td>
+                                                                <td>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                                        <div style={{ minWidth: 42, fontWeight: 700, color: scoreTone.color }}>{Math.round(p.rankScore || 0)}</div>
+                                                                        <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden' }}>
+                                                                            <div style={{ width: `${Math.min(p.rankScore || 0, 100)}%`, height: '100%', background: scoreTone.color }} />
+                                                                        </div>
+                                                                    </div>
+                                                                    <div style={{ fontSize: 11, color: scoreTone.color, marginTop: 4 }}>{scoreTone.label}</div>
+                                                                </td>
+                                                                <td>{formatRoas(p.roas)}</td>
+                                                                <td>{formatCompactPercent(p.spendShare || 0)}</td>
+                                                                <td>{formatNumber(p.purchases || 0)}</td>
+                                                                <td>{p.costPerPurchase ? formatCurrency(p.costPerPurchase) : '—'}</td>
+                                                                <td>{p.clicks > 0 ? formatCurrency(p.cpc) : '—'}</td>
+                                                                <td>
+                                                                    <span style={{ padding: '4px 10px', borderRadius: 999, background: confidenceTone.bg, color: confidenceTone.color, fontSize: 12, fontWeight: 600 }}>
+                                                                        {p.confidenceLabel}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </SectionCard>
+                                );
+                            })()}
 
                             {/* Top Campaigns by Efficiency */}
-                            {(intelligenceData.data.campaigns || []).length > 0 && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🏆 Top Campaigns by Efficiency <InfoTooltip text="Lists your best campaigns based on our proprietary efficiency score combining CTR, conversions, and cost metrics." /></span>} subtitle="Campaigns ranked by our efficiency score">
-                                    <div style={{ display: 'grid', gap: 12 }}>
-                                        {(intelligenceData.data.campaigns || []).slice(0, 5).map((c: any, i: number) => (
-                                            <div key={c.id} style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 16,
-                                                padding: 16,
-                                                background: 'var(--background)',
-                                                borderRadius: 8,
-                                                borderLeft: `4px solid ${COLORS[i % COLORS.length]}`
-                                            }}>
-                                                <div style={{
-                                                    width: 32,
-                                                    height: 32,
-                                                    borderRadius: '50%',
-                                                    background: COLORS[i % COLORS.length],
-                                                    color: 'white',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    fontWeight: 700
-                                                }}>
-                                                    {i + 1}
-                                                </div>
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{c.name}</div>
-                                                    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--muted)' }}>
-                                                        <span>Spend: {formatCurrency(c.spend)}</span>
-                                                        <span>Purchases: {c.purchases}</span>
-                                                        <span>ROAS: {c.roas.toFixed(2)}x</span>
+                            {(() => {
+                                const campaigns = (intelligenceData.data.campaigns || []).filter((c: any) => c.spend > 0);
+                                if (!campaigns.length) return null;
+
+                                return (
+                                    <SectionCard
+                                        title={<span style={{ display: 'flex', alignItems: 'center' }}>🏆 Campaigns to Scale First <InfoTooltip text="This score is formulated from real campaign metrics returned by Meta: ROAS, purchase volume, CTR, CPC efficiency, and spend confidence. It is meant to help prioritise scaling, not replace raw metrics." /></span>}
+                                        subtitle="Ranked by a blended performance score built from real Meta signals"
+                                    >
+                                        <div className="text-muted" style={{ fontSize: 12, marginBottom: 14 }}>
+                                            A high score means the campaign is combining efficiency with enough delivery volume to trust the result. Low-spend campaigns can still have strong ROAS, but they will show lower confidence until they prove at scale.
+                                        </div>
+
+                                        <div style={{ display: 'grid', gap: 12 }}>
+                                            {campaigns.slice(0, 5).map((c: any, i: number) => {
+                                                const scoreTone = getScoreTone(c.efficiencyScore || 0);
+                                                return (
+                                                    <div key={c.id} style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '40px minmax(0, 1.4fr) minmax(320px, 1fr) 110px',
+                                                        gap: 16,
+                                                        alignItems: 'center',
+                                                        padding: 16,
+                                                        background: 'var(--background)',
+                                                        borderRadius: 12,
+                                                        border: `1px solid ${scoreTone.border}`
+                                                    }}>
+                                                        <div style={{
+                                                            width: 36,
+                                                            height: 36,
+                                                            borderRadius: '50%',
+                                                            background: COLORS[i % COLORS.length],
+                                                            color: 'white',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            fontWeight: 700
+                                                        }}>
+                                                            {i + 1}
+                                                        </div>
+
+                                                        <div style={{ minWidth: 0 }}>
+                                                            <div style={{ fontWeight: 700, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#a5b4fc', fontSize: 12 }}>
+                                                                    {toTitleCase((c.objective || '').replace('OUTCOME_', '').toLowerCase()) || 'Unknown Objective'}
+                                                                </span>
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: c.status === 'ACTIVE' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.16)', color: c.status === 'ACTIVE' ? '#86efac' : '#cbd5e1', fontSize: 12 }}>
+                                                                    {c.status}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+                                                            <div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>Spend</div>
+                                                                <div style={{ fontWeight: 700 }}>{formatCurrency(c.spend)}</div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>CPA {c.costPerPurchase ? formatCurrency(c.costPerPurchase) : '—'}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>Purchases</div>
+                                                                <div style={{ fontWeight: 700 }}>{formatNumber(c.purchases || 0)}</div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>CVR {formatCompactPercent(c.conversionRate || 0)}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>ROAS</div>
+                                                                <div style={{ fontWeight: 700 }}>{formatRoas(c.roas)}</div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>CTR {formatCompactPercent(c.ctr || 0, 2)}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ textAlign: 'right' }}>
+                                                            <div style={{ fontSize: 28, fontWeight: 800, color: scoreTone.color, lineHeight: 1 }}>{Math.round(c.efficiencyScore || 0)}</div>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Performance score</div>
+                                                            <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>ROAS {c.scoreComponents?.roas ?? 0}</div>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Volume {c.scoreComponents?.volume ?? 0}</div>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>CPC {c.scoreComponents?.cpcEfficiency ?? 0}</div>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ fontSize: 20, fontWeight: 700, color: '#6366f1' }}>{c.efficiencyScore}</div>
-                                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>Efficiency Score</div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </SectionCard>
-                            )}
+                                                );
+                                            })}
+                                        </div>
+                                    </SectionCard>
+                                );
+                            })()}
                         </>
                     ) : (
                         <div style={{ textAlign: 'center', padding: 40 }}>

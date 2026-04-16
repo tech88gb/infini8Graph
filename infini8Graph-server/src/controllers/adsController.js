@@ -906,18 +906,19 @@ export async function getCampaignIntelligence(req, res) {
         // Process campaigns
         let campaigns = [];
         if (campaignsRes.status === 'fulfilled') {
-            campaigns = (campaignsRes.value.data.data || []).map(c => {
+            const rawCampaigns = (campaignsRes.value.data.data || []).map(c => {
                 const insights = c.insights?.data?.[0] || {};
                 const purchases = (insights.actions || []).find(a => a.action_type === 'purchase');
                 const purchaseValue = (insights.action_values || []).find(a => a.action_type === 'purchase');
                 const spend = parseFloat(insights.spend || 0);
                 const purchaseCount = purchases ? parseInt(purchases.value) : 0;
                 const revenue = purchaseValue ? parseFloat(purchaseValue.value) : 0;
-
-                // Calculate efficiency score: (ROAS × Conversion Volume) / Spend
-                const roas = insights.purchase_roas?.[0]?.value || (spend > 0 ? revenue / spend : 0);
-                const efficiencyScore = spend > 0 ? ((roas * purchaseCount) / spend * 100).toFixed(2) : 0;
+                const roas = parseFloat(insights.purchase_roas?.[0]?.value || (spend > 0 ? revenue / spend : 0));
                 const budgetUtilization = c.daily_budget ? ((spend / (parseFloat(c.daily_budget) / 100 * 30)) * 100).toFixed(1) : null;
+                const clicks = parseInt(insights.clicks || 0);
+                const cpc = parseFloat(insights.cpc || 0);
+                const ctr = parseFloat(insights.ctr || 0);
+                const frequency = parseFloat(insights.frequency || 0);
 
                 return {
                     id: c.id,
@@ -926,15 +927,46 @@ export async function getCampaignIntelligence(req, res) {
                     objective: c.objective,
                     spend,
                     impressions: parseInt(insights.impressions || 0),
-                    clicks: parseInt(insights.clicks || 0),
-                    ctr: parseFloat(insights.ctr || 0),
-                    cpc: parseFloat(insights.cpc || 0),
-                    frequency: parseFloat(insights.frequency || 0),
+                    clicks,
+                    ctr,
+                    cpc,
+                    frequency,
                     purchases: purchaseCount,
                     revenue,
-                    roas: parseFloat(roas),
-                    efficiencyScore: parseFloat(efficiencyScore),
+                    roas,
+                    costPerPurchase: purchaseCount > 0 ? spend / purchaseCount : null,
+                    conversionRate: clicks > 0 ? (purchaseCount / clicks) * 100 : 0,
                     budgetUtilization: budgetUtilization ? parseFloat(budgetUtilization) : null
+                };
+            });
+
+            const scoredCampaigns = rawCampaigns.filter(c => c.spend > 0);
+            const maxRoas = Math.max(...scoredCampaigns.map(c => c.roas), 0);
+            const maxPurchases = Math.max(...scoredCampaigns.map(c => c.purchases), 0);
+            const maxCtr = Math.max(...scoredCampaigns.map(c => c.ctr), 0);
+            const maxSpend = Math.max(...scoredCampaigns.map(c => c.spend), 0);
+            const minCpc = Math.min(...scoredCampaigns.filter(c => c.cpc > 0).map(c => c.cpc), Number.POSITIVE_INFINITY);
+
+            campaigns = rawCampaigns.map(c => {
+                const roasScore = maxRoas > 0 ? c.roas / maxRoas : 0;
+                const volumeScore = maxPurchases > 0 ? c.purchases / maxPurchases : 0;
+                const ctrScore = maxCtr > 0 ? c.ctr / maxCtr : 0;
+                const cpcScore = Number.isFinite(minCpc) && c.cpc > 0 ? Math.min(minCpc / c.cpc, 1) : 0;
+                const spendConfidence = maxSpend > 0 ? Math.log10(c.spend + 1) / Math.log10(maxSpend + 1) : 0;
+                const performanceScore = c.spend > 0
+                    ? ((roasScore * 0.45) + (volumeScore * 0.25) + (ctrScore * 0.15) + (cpcScore * 0.1) + (spendConfidence * 0.05)) * 100
+                    : 0;
+
+                return {
+                    ...c,
+                    efficiencyScore: parseFloat(performanceScore.toFixed(2)),
+                    scoreComponents: {
+                        roas: parseFloat((roasScore * 100).toFixed(1)),
+                        volume: parseFloat((volumeScore * 100).toFixed(1)),
+                        ctr: parseFloat((ctrScore * 100).toFixed(1)),
+                        cpcEfficiency: parseFloat((cpcScore * 100).toFixed(1)),
+                        spendConfidence: parseFloat((spendConfidence * 100).toFixed(1))
+                    }
                 };
             }).sort((a, b) => b.efficiencyScore - a.efficiencyScore);
         }
@@ -997,25 +1029,55 @@ export async function getCampaignIntelligence(req, res) {
         // Process placement matrix
         let placementMatrix = [];
         if (placementMatrixRes.status === 'fulfilled') {
-            placementMatrix = (placementMatrixRes.value.data.data || []).map(d => {
+            const rawPlacements = (placementMatrixRes.value.data.data || []).map(d => {
                 const purchases = (d.actions || []).find(a => a.action_type === 'purchase');
                 const purchaseValue = (d.action_values || []).find(a => a.action_type === 'purchase');
                 const spend = parseFloat(d.spend || 0);
                 const revenue = purchaseValue ? parseFloat(purchaseValue.value) : 0;
+                const clicks = parseInt(d.clicks || 0);
+                const purchaseCount = purchases ? parseInt(purchases.value) : 0;
 
                 return {
                     platform: d.publisher_platform,
                     position: d.platform_position,
                     spend,
                     impressions: parseInt(d.impressions || 0),
-                    clicks: parseInt(d.clicks || 0),
+                    clicks,
                     reach: parseInt(d.reach || 0),
-                    purchases: purchases ? parseInt(purchases.value) : 0,
+                    purchases: purchaseCount,
                     revenue,
-                    roas: spend > 0 ? (revenue / spend).toFixed(2) : 0,
-                    cpc: d.clicks > 0 ? (spend / parseInt(d.clicks)).toFixed(2) : 0
+                    roas: spend > 0 ? revenue / spend : 0,
+                    cpc: clicks > 0 ? spend / clicks : 0,
+                    costPerPurchase: purchaseCount > 0 ? spend / purchaseCount : null
                 };
-            }).sort((a, b) => parseFloat(b.roas) - parseFloat(a.roas));
+            });
+
+            const totalPlacementSpend = rawPlacements.reduce((sum, p) => sum + p.spend, 0);
+            const maxPlacementRoas = Math.max(...rawPlacements.map(p => p.roas), 0);
+            const maxPlacementPurchases = Math.max(...rawPlacements.map(p => p.purchases), 0);
+            const maxPlacementSpend = Math.max(...rawPlacements.map(p => p.spend), 0);
+            const minPlacementCpc = Math.min(...rawPlacements.filter(p => p.cpc > 0).map(p => p.cpc), Number.POSITIVE_INFINITY);
+
+            placementMatrix = rawPlacements.map(p => {
+                const spendShare = totalPlacementSpend > 0 ? (p.spend / totalPlacementSpend) * 100 : 0;
+                const roasScore = maxPlacementRoas > 0 ? p.roas / maxPlacementRoas : 0;
+                const purchaseScore = maxPlacementPurchases > 0 ? p.purchases / maxPlacementPurchases : 0;
+                const spendScore = maxPlacementSpend > 0 ? p.spend / maxPlacementSpend : 0;
+                const cpcScore = Number.isFinite(minPlacementCpc) && p.cpc > 0 ? Math.min(minPlacementCpc / p.cpc, 1) : 0;
+                const rankScore = p.spend > 0
+                    ? ((roasScore * 0.55) + (purchaseScore * 0.2) + (spendScore * 0.15) + (cpcScore * 0.1)) * 100
+                    : 0;
+                const confidenceScore = (Math.min(p.spend / 5000, 1) * 0.4) + (Math.min(p.purchases / 10, 1) * 0.35) + (Math.min(p.clicks / 500, 1) * 0.25);
+                const confidenceLabel = confidenceScore >= 0.75 ? 'High confidence' : confidenceScore >= 0.45 ? 'Medium confidence' : 'Low confidence';
+
+                return {
+                    ...p,
+                    spendShare: parseFloat(spendShare.toFixed(1)),
+                    rankScore: parseFloat(rankScore.toFixed(1)),
+                    confidenceScore: parseFloat((confidenceScore * 100).toFixed(1)),
+                    confidenceLabel
+                };
+            }).sort((a, b) => b.rankScore - a.rankScore);
         }
 
         // Find best performing times
