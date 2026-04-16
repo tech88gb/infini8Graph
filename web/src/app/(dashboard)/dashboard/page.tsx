@@ -1052,6 +1052,64 @@ function MetaAdsWidget() {
     }
 
     const summary = insightsData?.data?.summary;
+    const accountProfile = insightsData?.data?.accountProfile;
+    const conversions = insightsData?.data?.conversions || [];
+    const actionValues = insightsData?.data?.actionValues || [];
+    const costPerAction = insightsData?.data?.costPerAction || [];
+    const roas = insightsData?.data?.roas || {};
+    const clickMetrics = insightsData?.data?.clickMetrics || {};
+
+    const findMetricEntry = (entries: any[], candidates: string[]) => {
+        return entries.find((entry: any) => {
+            const type = String(entry?.type || '').toLowerCase();
+            return candidates.some((candidate) => type.includes(candidate));
+        });
+    };
+
+    const purchaseMetric = findMetricEntry(conversions, ['purchase']);
+    const purchaseValueMetric = findMetricEntry(actionValues, ['purchase']);
+    const purchaseCostMetric = findMetricEntry(costPerAction, ['purchase']);
+    const leadMetric = findMetricEntry(conversions, ['lead']);
+    const leadCostMetric = findMetricEntry(costPerAction, ['lead']);
+    const engagementMetric = findMetricEntry(conversions, ['post_engagement', 'page_engagement']);
+    const engagementCostMetric = findMetricEntry(costPerAction, ['post_engagement', 'page_engagement']);
+    const appInstallMetric = findMetricEntry(conversions, ['app_install', 'mobile_app_install']);
+    const appInstallCostMetric = findMetricEntry(costPerAction, ['app_install', 'mobile_app_install']);
+
+    const formatCurrencyValue = (value: string | number, digits = 0) => {
+        const numeric = parseFloat(String(value || 0));
+        return `\u20B9${(numeric / 100).toFixed(digits)}`;
+    };
+
+    const metricCatalog: Record<string, any> = {
+        impressions: { label: 'Impressions', value: parseInt(summary?.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
+        clicks: { label: 'Clicks', value: parseInt(summary?.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
+        spend: { label: 'Spend', value: formatCurrencyValue(summary?.spend || 0), icon: DollarSign, color: '#10b981' },
+        ctr: { label: 'CTR', value: `${parseFloat(summary?.ctr || 0).toFixed(2)}%`, icon: Zap, color: '#ec4899' },
+        reach: { label: 'Reach', value: parseInt(summary?.reach || 0).toLocaleString(), icon: Users, color: '#f59e0b' },
+        cpm: { label: 'CPM', value: formatCurrencyValue(summary?.cpm || 0, 2), icon: TrendingUp, color: '#8b5cf6' },
+        frequency: { label: 'Frequency', value: parseFloat(summary?.frequency || 0).toFixed(2), icon: BarChart2, color: '#14b8a6' },
+        purchase_roas: { label: 'Purchase ROAS', value: `${parseFloat(roas?.purchaseRoas || 0).toFixed(2)}x`, icon: TrendingUp, color: '#10b981' },
+        purchase_value: { label: 'Purchase Value', value: formatCurrencyValue(purchaseValueMetric?.value || 0), icon: DollarSign, color: '#22c55e' },
+        purchases: { label: 'Purchases', value: parseInt(purchaseMetric?.value || 0).toLocaleString(), icon: BarChart2, color: '#f59e0b' },
+        cost_per_purchase: { label: 'Cost / Purchase', value: formatCurrencyValue(purchaseCostMetric?.value || 0, 2), icon: DollarSign, color: '#ef4444' },
+        leads: { label: 'Leads', value: parseInt(leadMetric?.value || 0).toLocaleString(), icon: Users, color: '#6366f1' },
+        cost_per_lead: { label: 'Cost / Lead', value: formatCurrencyValue(leadCostMetric?.value || 0, 2), icon: DollarSign, color: '#f97316' },
+        outbound_clicks: { label: 'Outbound Clicks', value: parseInt(clickMetrics?.outboundClicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
+        cost_per_link_click: { label: 'Cost / Link Click', value: formatCurrencyValue(clickMetrics?.costPerInlineLinkClick || summary?.cpc || 0, 2), icon: DollarSign, color: '#8b5cf6' },
+        engagement_results: { label: 'Engagements', value: parseInt(engagementMetric?.value || 0).toLocaleString(), icon: Heart, color: '#ec4899' },
+        cost_per_engagement: { label: 'Cost / Engagement', value: formatCurrencyValue(engagementCostMetric?.value || 0, 2), icon: DollarSign, color: '#ef4444' },
+        app_installs: { label: 'App Installs', value: parseInt(appInstallMetric?.value || 0).toLocaleString(), icon: Download, color: '#0ea5e9' },
+        cost_per_app_install: { label: 'Cost / Install', value: formatCurrencyValue(appInstallCostMetric?.value || 0, 2), icon: DollarSign, color: '#f97316' }
+    };
+
+    const visibleMetricKeys = accountProfile?.recommendedMetrics?.length
+        ? accountProfile.recommendedMetrics
+        : ['impressions', 'clicks', 'spend', 'ctr', 'reach', 'cpm'];
+    const visibleMetrics = visibleMetricKeys
+        .map((key: string) => metricCatalog[key])
+        .filter(Boolean);
+    const objectiveMixLabel = accountProfile?.objectiveMix?.slice?.(0, 2)?.map((entry: any) => `${entry.label} ${entry.share}%`)?.join(' • ');
 
     return (
         <div
@@ -1072,6 +1130,11 @@ function MetaAdsWidget() {
                         <p className="text-muted" style={{ fontSize: 11 }}>
                             {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
                         </p>
+                        {accountProfile?.label && (
+                            <p className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                {accountProfile.label}{objectiveMixLabel ? ` • ${objectiveMixLabel}` : ''}
+                            </p>
+                        )}
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -1109,15 +1172,14 @@ function MetaAdsWidget() {
             )}
 
             {!insightsLoading && summary && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
-                    {[
-                        { label: 'Impressions', value: parseInt(summary.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
-                        { label: 'Clicks', value: parseInt(summary.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
-                        { label: 'Spend', value: `\u20B9${((parseFloat(summary.spend || 0)) / 100).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
-                        { label: 'CTR', value: `${parseFloat(summary.ctr || 0).toFixed(2)}%`, icon: Zap, color: '#ec4899' },
-                        { label: 'Reach', value: parseInt(summary.reach || 0).toLocaleString(), icon: Users, color: '#f59e0b' },
-                        { label: 'CPM', value: `\u20B9${((parseFloat(summary.cpm || 0)) / 100).toFixed(2)}`, icon: TrendingUp, color: '#8b5cf6' },
-                    ].map((m) => (
+                <>
+                    {accountProfile?.description && (
+                        <p className="text-muted" style={{ fontSize: 12, marginBottom: 14 }}>
+                            {accountProfile.description}
+                        </p>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                    {visibleMetrics.map((m: any) => (
                         <div key={m.label} style={{
                             padding: '12px 14px', background: 'var(--background)',
                             borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)',
@@ -1129,7 +1191,8 @@ function MetaAdsWidget() {
                             <div style={{ fontSize: 18, fontWeight: 700, color: m.color }}>{m.value}</div>
                         </div>
                     ))}
-                </div>
+                    </div>
+                </>
             )}
         </div>
     );

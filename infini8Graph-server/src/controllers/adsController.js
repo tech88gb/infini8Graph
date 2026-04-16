@@ -19,6 +19,22 @@ const META_CACHE_TTL = {
     deep: parseInt(process.env.META_ADS_CACHE_TTL_DEEP || '300', 10)
 };
 
+const OBJECTIVE_GROUPS = {
+    sales: ['outcome_sales', 'sales', 'conversions', 'catalog_sales', 'store_visits'],
+    leads: ['outcome_leads', 'lead_generation', 'leads', 'messages'],
+    traffic: ['outcome_traffic', 'traffic', 'link_clicks'],
+    awareness: ['outcome_awareness', 'awareness', 'brand_awareness', 'reach', 'video_views'],
+    engagement: ['outcome_engagement', 'engagement', 'post_engagement', 'page_likes', 'event_responses'],
+    app_promotion: ['outcome_app_promotion', 'app_installs', 'app_promotion']
+};
+
+const ACTION_CANDIDATES = {
+    purchases: ['purchase', 'omni_purchase', 'onsite_web_purchase', 'offsite_conversion.fb_pixel_purchase'],
+    leads: ['lead', 'onsite_conversion.lead_grouped', 'offsite_conversion.fb_pixel_lead', 'omni_lead'],
+    engagement: ['post_engagement', 'page_engagement', 'post_reaction', 'comment', 'share', 'link_click'],
+    appInstalls: ['app_install', 'mobile_app_install', 'omni_app_install']
+};
+
 function getMetaCacheEntry(key) {
     const entry = META_CACHE.get(key);
     if (!entry) return null;
@@ -49,6 +65,137 @@ async function withMetaCache(key, ttlSeconds, fetcher) {
     const data = await fetcher();
     setMetaCacheEntry(key, data, ttlSeconds);
     return data;
+}
+
+function mapObjectiveGroup(objective = '') {
+    const normalized = String(objective || '').trim().toLowerCase();
+    if (!normalized) return 'general';
+
+    for (const [group, matches] of Object.entries(OBJECTIVE_GROUPS)) {
+        if (matches.some((match) => normalized.includes(match))) {
+            return group;
+        }
+    }
+
+    return 'general';
+}
+
+function getTopProfileGroup(counts = {}) {
+    return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || 'general';
+}
+
+function parseMetricNumber(value) {
+    const parsed = Number(value || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function findActionMetric(entries = [], candidates = []) {
+    return entries.find((entry) => {
+        const type = String(entry?.type || entry?.action_type || '').toLowerCase();
+        return candidates.some((candidate) => type.includes(candidate));
+    }) || null;
+}
+
+function buildRecommendedMetrics(profileGroup) {
+    switch (profileGroup) {
+        case 'sales':
+            return ['spend', 'purchase_roas', 'purchase_value', 'purchases', 'cost_per_purchase', 'ctr'];
+        case 'leads':
+            return ['spend', 'leads', 'cost_per_lead', 'ctr', 'reach', 'impressions'];
+        case 'traffic':
+            return ['spend', 'outbound_clicks', 'cost_per_link_click', 'ctr', 'reach', 'impressions'];
+        case 'awareness':
+            return ['reach', 'impressions', 'cpm', 'frequency', 'spend', 'ctr'];
+        case 'engagement':
+            return ['spend', 'engagement_results', 'cost_per_engagement', 'reach', 'impressions', 'ctr'];
+        case 'app_promotion':
+            return ['spend', 'app_installs', 'cost_per_app_install', 'ctr', 'reach', 'impressions'];
+        default:
+            return ['impressions', 'clicks', 'spend', 'ctr', 'reach', 'cpm'];
+    }
+}
+
+function buildAccountProfile(campaigns = [], context = {}) {
+    const activeCampaigns = campaigns.filter((campaign) => {
+        const status = String(campaign?.effective_status || campaign?.status || '').toUpperCase();
+        return status !== 'ARCHIVED' && status !== 'DELETED';
+    });
+
+    const objectiveCounts = activeCampaigns.reduce((acc, campaign) => {
+        const group = mapObjectiveGroup(campaign?.objective);
+        acc[group] = (acc[group] || 0) + 1;
+        return acc;
+    }, {});
+
+    const totalCampaigns = activeCampaigns.length;
+    const topGroup = getTopProfileGroup(objectiveCounts);
+    const topCount = objectiveCounts[topGroup] || 0;
+    const dominantShare = totalCampaigns > 0 ? topCount / totalCampaigns : 0;
+
+    let profileGroup = topGroup;
+    if (totalCampaigns === 0) {
+        profileGroup = 'general';
+    } else if (Object.keys(objectiveCounts).length > 1 && dominantShare < 0.6) {
+        profileGroup = 'mixed';
+    }
+
+    const purchaseMetric = findActionMetric(context.conversions, ACTION_CANDIDATES.purchases);
+    const leadMetric = findActionMetric(context.conversions, ACTION_CANDIDATES.leads);
+    const engagementMetric = findActionMetric(context.conversions, ACTION_CANDIDATES.engagement);
+    const appInstallMetric = findActionMetric(context.conversions, ACTION_CANDIDATES.appInstalls);
+
+    if (profileGroup === 'general') {
+        if (parseMetricNumber(context.roas?.purchaseRoas) > 0 || parseMetricNumber(purchaseMetric?.value) > 0) {
+            profileGroup = 'sales';
+        } else if (parseMetricNumber(leadMetric?.value) > 0) {
+            profileGroup = 'leads';
+        } else if (parseMetricNumber(context.clickMetrics?.outboundClicks) > 0) {
+            profileGroup = 'traffic';
+        } else if (parseMetricNumber(engagementMetric?.value) > 0) {
+            profileGroup = 'engagement';
+        } else if (parseMetricNumber(appInstallMetric?.value) > 0) {
+            profileGroup = 'app_promotion';
+        }
+    }
+
+    const labels = {
+        sales: 'Sales-Focused',
+        leads: 'Lead Gen',
+        traffic: 'Traffic',
+        awareness: 'Awareness',
+        engagement: 'Engagement',
+        app_promotion: 'App Promotion',
+        mixed: 'Mixed Objectives',
+        general: 'General Performance'
+    };
+
+    const descriptions = {
+        sales: 'Optimized for purchase and revenue efficiency.',
+        leads: 'Prioritize lead volume and cost per lead.',
+        traffic: 'Focus on visits, clicks, and click efficiency.',
+        awareness: 'Focus on delivery, reach, and frequency.',
+        engagement: 'Track engagement output and cost per interaction.',
+        app_promotion: 'Prioritize app install volume and efficiency.',
+        mixed: 'Blend of multiple campaign goals. Showing balanced KPIs.',
+        general: 'Showing the universal ad account KPIs.'
+    };
+
+    return {
+        type: profileGroup,
+        label: labels[profileGroup] || labels.general,
+        description: descriptions[profileGroup] || descriptions.general,
+        totalCampaigns,
+        objectiveMix: Object.entries(objectiveCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([group, count]) => ({
+                type: group,
+                label: labels[group] || group,
+                count,
+                share: totalCampaigns > 0 ? Number(((count / totalCampaigns) * 100).toFixed(1)) : 0
+            })),
+        recommendedMetrics: buildRecommendedMetrics(profileGroup)
+    };
 }
 
 function getComparisonDatePreset(datePreset) {
@@ -156,6 +303,13 @@ export async function getAdInsights(req, res) {
                         time_increment: 1
                     }
                 }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,objective,status,effective_status',
+                        limit: 200
+                    }
+                }),
                 axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     params: {
                         access_token: accessToken,
@@ -185,10 +339,11 @@ export async function getAdInsights(req, res) {
             }
 
             const results = await Promise.allSettled(requests);
-            const [relevanceRes, summaryRes, dailyRes, deviceRes, positionRes, comparisonRes] = results;
+            const [relevanceRes, summaryRes, dailyRes, campaignsRes, deviceRes, positionRes, comparisonRes] = results;
             const adRelevanceData = relevanceRes.status === 'fulfilled' ? relevanceRes.value.data.data || [] : [];
             const summary = summaryRes.status === 'fulfilled' ? summaryRes.value.data.data?.[0] : null;
             const daily = dailyRes.status === 'fulfilled' ? dailyRes.value.data.data : [];
+            const campaigns = campaignsRes.status === 'fulfilled' ? campaignsRes.value.data.data || [] : [];
             const devices = deviceRes.status === 'fulfilled' ? deviceRes.value.data.data : [];
             const positions = positionRes.status === 'fulfilled' ? positionRes.value.data.data : [];
 
@@ -298,6 +453,15 @@ export async function getAdInsights(req, res) {
                 };
             }
 
+            const accountProfile = buildAccountProfile(campaigns, {
+                conversions,
+                actionValues,
+                costPerAction,
+                roas,
+                clickMetrics,
+                summary
+            });
+
             return {
                 summary: {
                     spend: summary?.spend || '0',
@@ -317,6 +481,7 @@ export async function getAdInsights(req, res) {
                 costPerAction,
                 videoViews,
                 conversions,
+                accountProfile,
                 daily,
                 devices,
                 positions
