@@ -1166,7 +1166,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,objective,insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,ctr,actions,action_values,frequency}',
+                    fields: 'id,name,status,objective,insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,ctr,cpc,cpm,actions,action_values,frequency}',
                     limit: 500
                 }
             }),
@@ -1174,7 +1174,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'spend,impressions,clicks,ctr,cpc,frequency,actions',
+                    fields: 'spend,impressions,clicks,ctr,cpc,cpm,frequency,actions',
                     date_preset: datePreset,
                     time_increment: 1
                 }
@@ -1191,7 +1191,17 @@ export async function getAdvancedAnalytics(req, res) {
         ]);
 
         // ==================== 1. FATIGUE DETECTION ====================
-        let fatigueAnalysis = { status: 'unknown', score: 0, indicators: [], trend: [] };
+        let fatigueAnalysis = {
+            status: 'unknown',
+            score: 0,
+            indicators: [],
+            trend: [],
+            framework: [],
+            metrics: {},
+            missingSignals: [],
+            statusLabel: 'Unknown',
+            recommendation: 'Not enough evidence yet to evaluate fatigue.'
+        };
 
         if (dailyRes.status === 'fulfilled') {
             const daily = dailyRes.value.data.data || [];
@@ -1209,61 +1219,136 @@ export async function getAdvancedAnalytics(req, res) {
                 const avgCpc2 = secondHalf.length > 0 ? secondHalf.reduce((s, d) => s + parseFloat(d.cpc || 0), 0) / secondHalf.length : 0;
                 const cpcIncrease = avgCpc1 > 0 ? ((avgCpc2 - avgCpc1) / avgCpc1 * 100) : 0;
 
+                const avgCpm1 = firstHalf.length > 0 ? firstHalf.reduce((s, d) => s + parseFloat(d.cpm || 0), 0) / firstHalf.length : 0;
+                const avgCpm2 = secondHalf.length > 0 ? secondHalf.reduce((s, d) => s + parseFloat(d.cpm || 0), 0) / secondHalf.length : 0;
+                const cpmIncrease = avgCpm1 > 0 ? ((avgCpm2 - avgCpm1) / avgCpm1 * 100) : 0;
+
+                const getDailyConversions = (rows) => rows.reduce((sum, d) => {
+                    const conversions = (d.actions || []).reduce((actionSum, a) =>
+                        ['purchase', 'lead', 'complete_registration'].includes(a.action_type) ? actionSum + parseInt(a.value) : actionSum, 0);
+                    return sum + conversions;
+                }, 0);
+
+                const conv1 = getDailyConversions(firstHalf);
+                const conv2 = getDailyConversions(secondHalf);
+                const cpr1 = conv1 > 0 ? firstHalf.reduce((s, d) => s + parseFloat(d.spend || 0), 0) / conv1 : null;
+                const cpr2 = conv2 > 0 ? secondHalf.reduce((s, d) => s + parseFloat(d.spend || 0), 0) / conv2 : null;
+                const cprIncrease = cpr1 && cpr2 && cpr1 > 0 ? ((cpr2 - cpr1) / cpr1 * 100) : null;
+
                 const latestFrequency = parseFloat(daily[daily.length - 1]?.frequency || 0);
                 const avgFrequency = daily.length > 0 ? daily.reduce((s, d) => s + parseFloat(d.frequency || 0), 0) / daily.length : 0;
 
-                // Calculate fatigue score (0-100)
+                const scaleRatio = (value, low, high) => {
+                    if (value === null || value === undefined || Number.isNaN(value)) return 0;
+                    if (value <= low) return 0;
+                    if (value >= high) return 100;
+                    return ((value - low) / (high - low)) * 100;
+                };
+
                 let fatigueScore = 0;
                 const indicators = [];
+                const framework = [];
+                const missingSignals = [];
 
-                if (ctrDecay > 20) {
-                    fatigueScore += 35;
-                    indicators.push({ type: 'ctr_decay', severity: 'high', message: `CTR dropped ${ctrDecay.toFixed(1)}% over period`, value: ctrDecay });
-                } else if (ctrDecay > 10) {
-                    fatigueScore += 20;
-                    indicators.push({ type: 'ctr_decay', severity: 'medium', message: `CTR declining ${ctrDecay.toFixed(1)}%`, value: ctrDecay });
+                const ctrScore = scaleRatio(ctrDecay, 8, 30);
+                const cpmScore = scaleRatio(cpmIncrease, 10, 35);
+                const cpcScore = scaleRatio(cpcIncrease, 10, 35);
+                const cprScore = cprIncrease === null ? 0 : scaleRatio(cprIncrease, 10, 40);
+                const frequencyScore = scaleRatio(latestFrequency, 1.8, 4.5);
+
+                framework.push(
+                    {
+                        key: 'ctr_decay',
+                        label: 'CTR',
+                        description: 'Falling CTR often means the audience is seeing the same idea too often or the creative is losing stopping power.',
+                        score: parseFloat(ctrScore.toFixed(1)),
+                        value: `${ctrDecay.toFixed(1)}% decay`,
+                        weight: 22
+                    },
+                    {
+                        key: 'cpm',
+                        label: 'CPM',
+                        description: 'Rising CPM can signal auction pressure or audience saturation, especially when creative engagement weakens at the same time.',
+                        score: parseFloat(cpmScore.toFixed(1)),
+                        value: `${cpmIncrease.toFixed(1)}% change`,
+                        weight: 18
+                    },
+                    {
+                        key: 'cpc',
+                        label: 'CPC',
+                        description: 'CPC pressure captures when clicks are getting more expensive, which often happens before clear conversion deterioration.',
+                        score: parseFloat(cpcScore.toFixed(1)),
+                        value: `${cpcIncrease.toFixed(1)}% change`,
+                        weight: 15
+                    },
+                    {
+                        key: 'cpr',
+                        label: 'CPR',
+                        description: 'Cost per result is the marketer-facing reality check. When CPR rises while CTR or hook weakens, fatigue is more credible.',
+                        score: parseFloat(cprScore.toFixed(1)),
+                        value: cprIncrease === null ? 'Not enough conversion volume' : `${cprIncrease.toFixed(1)}% change`,
+                        weight: 25
+                    },
+                    {
+                        key: 'frequency',
+                        label: 'Frequency',
+                        description: 'High repeat exposure can wear out the audience even when spend is stable.',
+                        score: parseFloat(frequencyScore.toFixed(1)),
+                        value: `${latestFrequency.toFixed(2)}x current`,
+                        weight: 20
+                    }
+                );
+
+                fatigueScore += (ctrScore * 0.22) + (cpmScore * 0.18) + (cpcScore * 0.15) + (cprScore * 0.25) + (frequencyScore * 0.2);
+
+                if (ctrScore >= 60) indicators.push({ type: 'ctr_decay', severity: 'high', message: `CTR dropped ${ctrDecay.toFixed(1)}% versus earlier in the window`, value: ctrDecay });
+                else if (ctrScore >= 35) indicators.push({ type: 'ctr_decay', severity: 'medium', message: `CTR is softening by ${ctrDecay.toFixed(1)}%`, value: ctrDecay });
+
+                if (cpmScore >= 60) indicators.push({ type: 'cpm_pressure', severity: 'high', message: `CPM increased ${cpmIncrease.toFixed(1)}%`, value: cpmIncrease });
+                else if (cpmScore >= 35) indicators.push({ type: 'cpm_pressure', severity: 'medium', message: `CPM pressure is building (${cpmIncrease.toFixed(1)}%)`, value: cpmIncrease });
+
+                if (cprIncrease === null) {
+                    missingSignals.push('CPR trend is unavailable because there were not enough conversion events in both halves of the selected period.');
+                } else if (cprScore >= 60) {
+                    indicators.push({ type: 'cpr_pressure', severity: 'high', message: `Cost per result rose ${cprIncrease.toFixed(1)}%`, value: cprIncrease });
+                } else if (cprScore >= 35) {
+                    indicators.push({ type: 'cpr_pressure', severity: 'medium', message: `Cost per result is getting worse (${cprIncrease.toFixed(1)}%)`, value: cprIncrease });
                 }
 
-                if (cpcIncrease > 30) {
-                    fatigueScore += 35;
-                    indicators.push({ type: 'cpc_increase', severity: 'high', message: `CPC increased ${cpcIncrease.toFixed(1)}%`, value: cpcIncrease });
-                } else if (cpcIncrease > 15) {
-                    fatigueScore += 20;
-                    indicators.push({ type: 'cpc_increase', severity: 'medium', message: `CPC rising ${cpcIncrease.toFixed(1)}%`, value: cpcIncrease });
-                }
-
-                if (latestFrequency > 4) {
-                    fatigueScore += 30;
-                    indicators.push({ type: 'frequency', severity: 'high', message: `High frequency: ${latestFrequency.toFixed(1)}x`, value: latestFrequency });
-                } else if (latestFrequency > 2.5) {
-                    fatigueScore += 15;
-                    indicators.push({ type: 'frequency', severity: 'medium', message: `Frequency building: ${latestFrequency.toFixed(1)}x`, value: latestFrequency });
-                }
+                if (frequencyScore >= 60) indicators.push({ type: 'frequency', severity: 'high', message: `Frequency is high at ${latestFrequency.toFixed(1)}x`, value: latestFrequency });
+                else if (frequencyScore >= 35) indicators.push({ type: 'frequency', severity: 'medium', message: `Frequency is building at ${latestFrequency.toFixed(1)}x`, value: latestFrequency });
 
                 fatigueAnalysis = {
-                    score: Math.min(fatigueScore, 100),
+                    score: Math.min(parseFloat(fatigueScore.toFixed(1)), 100),
                     status: fatigueScore >= 60 ? 'critical' : fatigueScore >= 30 ? 'warning' : 'healthy',
                     statusEmoji: fatigueScore >= 60 ? '🔴' : fatigueScore >= 30 ? '🟡' : '🟢',
                     statusLabel: fatigueScore >= 60 ? 'Fatigue Critical' : fatigueScore >= 30 ? 'Fatigue Building' : 'Healthy',
                     indicators,
+                    framework,
+                    missingSignals,
                     metrics: {
                         ctrDecay: ctrDecay.toFixed(1),
+                        cpmIncrease: cpmIncrease.toFixed(1),
                         cpcIncrease: cpcIncrease.toFixed(1),
+                        cprIncrease: cprIncrease !== null ? cprIncrease.toFixed(1) : null,
                         currentFrequency: latestFrequency.toFixed(2),
                         avgFrequency: avgFrequency.toFixed(2)
                     },
                     trend: daily.slice(-14).map(d => ({
                         date: d.date_start,
                         ctr: parseFloat(d.ctr || 0).toFixed(2),
+                        cpm: parseFloat(d.cpm || 0).toFixed(2),
                         cpc: parseFloat(d.cpc || 0).toFixed(2),
                         frequency: parseFloat(d.frequency || 0).toFixed(2)
                     })),
                     recommendation: fatigueScore >= 60
-                        ? 'Urgent: Refresh creatives and expand audience immediately'
+                        ? 'Creative or audience fatigue is likely. Refresh top-spend creatives, widen audience pools, and check whether CPM and CPR are still climbing.'
                         : fatigueScore >= 30
-                            ? 'Warning: Consider rotating creatives or adjusting audience'
-                            : 'Your ads are performing well, continue monitoring'
+                            ? 'Some fatigue signals are emerging. Rotate creatives selectively and watch whether CPM or CPR continue worsening.'
+                            : 'No major fatigue pressure right now. Keep monitoring, especially if frequency keeps climbing.'
                 };
+            } else {
+                fatigueAnalysis.missingSignals = ['At least 7 daily rows are needed for a reliable fatigue read on trend-based metrics.'];
             }
         }
 
@@ -1316,6 +1401,7 @@ export async function getAdvancedAnalytics(req, res) {
                 const insights = ad.insights.data[0];
                 const ctr = parseFloat(insights.ctr || 0);
                 const cpc = parseFloat(insights.cpc || 0);
+                const cpm = parseFloat(insights.cpm || 0);
                 const impressions = parseInt(insights.impressions || 0);
                 const clicks = parseInt(insights.clicks || 0);
                 const spend = parseFloat(insights.spend || 0);
@@ -1332,13 +1418,15 @@ export async function getAdvancedAnalytics(req, res) {
                 const leads = parseInt((insights.actions || []).find(a => a.action_type === 'lead')?.value || 0);
                 const purchases = parseInt((insights.actions || []).find(a => a.action_type === 'purchase')?.value || 0);
                 const conversions = leads + purchases;
+                const costPerConversion = conversions > 0 ? spend / conversions : null;
+                const hookRate = hasVideo && impressions > 0 ? (v25 / impressions * 100) : null;
+                const completionRate = hasVideo && v25 > 0 ? (v100 / v25 * 100) : null;
 
                 // Determine creative pattern
                 let pattern = { type: 'unknown', label: 'Analyzing...', color: '#6b7280', insight: '' };
 
                 if (hasVideo) {
-                    const hookRate = impressions > 0 ? (v25 / impressions * 100) : 0;
-                    const retentionRate = v25 > 0 ? (v100 / v25 * 100) : 0;
+                    const retentionRate = completionRate || 0;
 
                     if (v25 > 500 && conversions < 3) {
                         pattern = {
@@ -1391,8 +1479,13 @@ export async function getAdvancedAnalytics(req, res) {
 
                 // Fatigue status per creative
                 let creativeFatigue = 'healthy';
+                const fatigueReasons = [];
                 if (frequency > 4) creativeFatigue = 'critical';
                 else if (frequency > 2.5) creativeFatigue = 'warning';
+                if (frequency > 2.5) fatigueReasons.push(`Frequency ${frequency.toFixed(2)}x`);
+                if (hookRate !== null && hookRate < 10) fatigueReasons.push(`Weak hook ${hookRate.toFixed(1)}%`);
+                if (costPerConversion !== null && costPerConversion > 1500) fatigueReasons.push(`High CPR ₹${costPerConversion.toFixed(0)}`);
+                if (cpm > 350) fatigueReasons.push(`High CPM ₹${cpm.toFixed(0)}`);
 
                 return {
                     id: ad.id,
@@ -1403,28 +1496,88 @@ export async function getAdvancedAnalytics(req, res) {
                     clicks,
                     ctr: ctr.toFixed(2),
                     cpc: cpc.toFixed(2),
+                    cpm: cpm.toFixed(2),
                     spend,
                     frequency: frequency.toFixed(2),
                     conversions,
                     leads,
                     purchases,
-                    costPerConversion: conversions > 0 ? (spend / conversions).toFixed(2) : null,
+                    costPerConversion: costPerConversion !== null ? costPerConversion.toFixed(2) : null,
                     hasVideo,
                     videoMetrics: hasVideo ? {
-                        hookRate: impressions > 0 ? (v25 / impressions * 100).toFixed(1) : 0,
+                        hookRate: hookRate !== null ? hookRate.toFixed(1) : 0,
                         retention25: v25,
                         retention50: v50,
                         retention75: v75,
                         retention100: v100,
-                        completionRate: v25 > 0 ? (v100 / v25 * 100).toFixed(1) : 0
+                        completionRate: completionRate !== null ? completionRate.toFixed(1) : 0
                     } : null,
                     pattern,
                     fatigue: {
                         status: creativeFatigue,
-                        frequency
+                        frequency,
+                        reasons: fatigueReasons
                     }
                 };
             }).sort((a, b) => b.conversions - a.conversions);
+
+            const videoCreatives = creativeForensics.filter(ad => ad.hasVideo && ad.videoMetrics && ad.spend > 0);
+            if (videoCreatives.length > 0) {
+                const totalVideoSpend = videoCreatives.reduce((sum, ad) => sum + ad.spend, 0);
+                const weightedHook = totalVideoSpend > 0
+                    ? videoCreatives.reduce((sum, ad) => sum + (parseFloat(ad.videoMetrics.hookRate || 0) * ad.spend), 0) / totalVideoSpend
+                    : 0;
+                const weightedCompletion = totalVideoSpend > 0
+                    ? videoCreatives.reduce((sum, ad) => sum + (parseFloat(ad.videoMetrics.completionRate || 0) * ad.spend), 0) / totalVideoSpend
+                    : 0;
+                const hookScore = weightedHook < 5 ? 100 : weightedHook < 10 ? 70 : weightedHook < 15 ? 40 : 0;
+                const completionScore = weightedCompletion < 12 ? 100 : weightedCompletion < 20 ? 65 : weightedCompletion < 30 ? 35 : 0;
+                const creativePressure = Math.round((hookScore * 0.65) + (completionScore * 0.35));
+
+                fatigueAnalysis.framework = [
+                    ...fatigueAnalysis.framework,
+                    {
+                        key: 'hook',
+                        label: 'Hook',
+                        description: 'Spend-weighted video hook rate across active creatives. Weak hooks usually point to creative fatigue before conversion performance fully collapses.',
+                        score: creativePressure,
+                        value: `${weightedHook.toFixed(1)}% hook • ${weightedCompletion.toFixed(1)}% completion`,
+                        weight: 20
+                    }
+                ];
+                fatigueAnalysis.score = Math.min(100, parseFloat((fatigueAnalysis.score + (creativePressure * 0.2)).toFixed(1)));
+
+                if (creativePressure >= 60) {
+                    fatigueAnalysis.indicators.push({
+                        type: 'hook_pressure',
+                        severity: 'high',
+                        message: `Video hook quality is weak (${weightedHook.toFixed(1)}% weighted hook rate)`,
+                        value: weightedHook
+                    });
+                } else if (creativePressure >= 35) {
+                    fatigueAnalysis.indicators.push({
+                        type: 'hook_pressure',
+                        severity: 'medium',
+                        message: `Video hook quality is softening (${weightedHook.toFixed(1)}% weighted hook rate)`,
+                        value: weightedHook
+                    });
+                }
+
+                fatigueAnalysis.metrics = {
+                    ...fatigueAnalysis.metrics,
+                    weightedHookRate: weightedHook.toFixed(1),
+                    weightedCompletionRate: weightedCompletion.toFixed(1)
+                };
+            } else {
+                fatigueAnalysis.missingSignals = [
+                    ...(fatigueAnalysis.missingSignals || []),
+                    'No meaningful video-watch data was available, so the fatigue model could not use hook or completion quality.'
+                ];
+            }
+
+            fatigueAnalysis.status = fatigueAnalysis.score >= 60 ? 'critical' : fatigueAnalysis.score >= 30 ? 'warning' : 'healthy';
+            fatigueAnalysis.statusEmoji = fatigueAnalysis.score >= 60 ? '🔴' : fatigueAnalysis.score >= 30 ? '🟡' : '🟢';
+            fatigueAnalysis.statusLabel = fatigueAnalysis.score >= 60 ? 'Fatigue Critical' : fatigueAnalysis.score >= 30 ? 'Fatigue Building' : 'Healthy';
         }
 
         // ==================== 4. LEARNING PHASE STATUS ====================
@@ -1504,7 +1657,7 @@ export async function getAdvancedAnalytics(req, res) {
             const campaigns = campaignsRes.value.data.data || [];
 
             // Heuristic: campaigns with "retarget", "remarket", "warm" in name are retargeting
-            const retargetKeywords = ['retarget', 'remarket', 'warm', 'remarketing', 'website visitor', 'engaged', 'lookalike'];
+            const retargetKeywords = ['retarget', 'remarket', 'warm', 'remarketing', 'website visitor', 'engaged', 'cart', 'abandon'];
             const coldKeywords = ['cold', 'prospecting', 'broad', 'interest', 'new audience'];
 
             const retargetCampaigns = campaigns.filter(c =>
@@ -1518,30 +1671,30 @@ export async function getAdvancedAnalytics(req, res) {
             if (retargetCampaigns.length > 0 && coldCampaigns.length > 0) {
                 const coldMetrics = coldCampaigns.reduce((acc, c) => {
                     const insights = c.insights?.data?.[0] || {};
-                    const reach = parseInt(insights.reach || 0);
+                    const clicks = parseInt(insights.clicks || 0);
                     const conversions = (insights.actions || []).reduce((sum, a) =>
                         ['purchase', 'lead'].includes(a.action_type) ? sum + parseInt(a.value) : sum, 0);
                     return {
-                        reach: acc.reach + reach,
+                        clicks: acc.clicks + clicks,
                         conversions: acc.conversions + conversions,
                         spend: acc.spend + parseFloat(insights.spend || 0)
                     };
-                }, { reach: 0, conversions: 0, spend: 0 });
+                }, { clicks: 0, conversions: 0, spend: 0 });
 
                 const retargetMetrics = retargetCampaigns.reduce((acc, c) => {
                     const insights = c.insights?.data?.[0] || {};
-                    const reach = parseInt(insights.reach || 0);
+                    const clicks = parseInt(insights.clicks || 0);
                     const conversions = (insights.actions || []).reduce((sum, a) =>
                         ['purchase', 'lead'].includes(a.action_type) ? sum + parseInt(a.value) : sum, 0);
                     return {
-                        reach: acc.reach + reach,
+                        clicks: acc.clicks + clicks,
                         conversions: acc.conversions + conversions,
                         spend: acc.spend + parseFloat(insights.spend || 0)
                     };
-                }, { reach: 0, conversions: 0, spend: 0 });
+                }, { clicks: 0, conversions: 0, spend: 0 });
 
-                const coldConvRate = coldMetrics.reach > 0 ? (coldMetrics.conversions / coldMetrics.reach * 100) : 0;
-                const retargetConvRate = retargetMetrics.reach > 0 ? (retargetMetrics.conversions / retargetMetrics.reach * 100) : 0;
+                const coldConvRate = coldMetrics.clicks > 0 ? (coldMetrics.conversions / coldMetrics.clicks * 100) : 0;
+                const retargetConvRate = retargetMetrics.clicks > 0 ? (retargetMetrics.conversions / retargetMetrics.clicks * 100) : 0;
                 const lift = coldConvRate > 0 ? ((retargetConvRate - coldConvRate) / coldConvRate * 100) : 0;
 
                 let insight = '';
@@ -1565,20 +1718,21 @@ export async function getAdvancedAnalytics(req, res) {
                     coldCampaigns: coldCampaigns.length,
                     retargetCampaigns: retargetCampaigns.length,
                     cold: {
-                        reach: coldMetrics.reach,
+                        clicks: coldMetrics.clicks,
                         conversions: coldMetrics.conversions,
                         spend: coldMetrics.spend,
                         conversionRate: coldConvRate.toFixed(3),
                         cpa: coldMetrics.conversions > 0 ? (coldMetrics.spend / coldMetrics.conversions).toFixed(2) : null
                     },
                     retarget: {
-                        reach: retargetMetrics.reach,
+                        clicks: retargetMetrics.clicks,
                         conversions: retargetMetrics.conversions,
                         spend: retargetMetrics.spend,
                         conversionRate: retargetConvRate.toFixed(3),
                         cpa: retargetMetrics.conversions > 0 ? (retargetMetrics.spend / retargetMetrics.conversions).toFixed(2) : null
                     },
                     lift: lift.toFixed(1),
+                    denominator: 'clicks',
                     status,
                     insight
                 };
@@ -1592,24 +1746,43 @@ export async function getAdvancedAnalytics(req, res) {
             const campaigns = campaignsRes.value.data.data || [];
 
             // Calculate LQS per campaign
-            const campaignLQS = campaigns.filter(c => c.insights?.data?.[0]).map(c => {
+            const campaignBase = campaigns.filter(c => c.insights?.data?.[0]).map(c => {
                 const insights = c.insights.data[0];
                 const ctr = parseFloat(insights.ctr || 0);
-                const reach = parseInt(insights.reach || 0);
-                const impressions = parseInt(insights.impressions || 0);
+                const clicks = parseInt(insights.clicks || 0);
                 const frequency = parseFloat(insights.frequency || 0);
                 const spend = parseFloat(insights.spend || 0);
+                const cpc = parseFloat(insights.cpc || 0);
 
                 const conversions = (insights.actions || []).reduce((sum, a) =>
                     ['purchase', 'lead', 'complete_registration'].includes(a.action_type) ? sum + parseInt(a.value) : sum, 0);
 
-                const conversionRate = reach > 0 ? (conversions / reach * 100) : 0;
+                const conversionRate = clicks > 0 ? (conversions / clicks * 100) : 0;
+                const cpa = conversions > 0 ? spend / conversions : null;
 
-                // Calculate volatility (frequency as proxy)
-                const volatilityPenalty = frequency > 3 ? 20 : frequency > 2 ? 10 : 0;
+                return {
+                    id: c.id,
+                    name: c.name,
+                    objective: c.objective,
+                    ctr,
+                    conversionRate,
+                    frequency,
+                    spend,
+                    conversions,
+                    cpc,
+                    cpa
+                };
+            });
 
-                // Base LQS formula
-                const rawLQS = (ctr * 10) + (conversionRate * 50) - volatilityPenalty;
+            const bestCPA = Math.min(...campaignBase.filter(c => c.cpa && c.cpa > 0).map(c => c.cpa), Number.POSITIVE_INFINITY);
+            const campaignLQS = campaignBase.map(c => {
+                const ctrScore = Math.min((c.ctr / 5) * 28, 28);
+                const conversionScore = Math.min((c.conversionRate / 3) * 38, 38);
+                const cpaScore = Number.isFinite(bestCPA) && c.cpa ? Math.min((bestCPA / c.cpa) * 22, 22) : 0;
+                const spendConfidence = c.spend > 0 ? Math.min((Math.log10(c.spend + 1) / 4) * 12, 12) : 0;
+                const frequencyPenalty = c.frequency > 3.5 ? 12 : c.frequency > 2.5 ? 6 : 0;
+
+                const rawLQS = ctrScore + conversionScore + cpaScore + spendConfidence - frequencyPenalty;
                 const lqs = Math.max(0, Math.min(100, rawLQS));
 
                 let grade = 'D';
@@ -1626,13 +1799,19 @@ export async function getAdvancedAnalytics(req, res) {
                     grade,
                     gradeColor,
                     metrics: {
-                        ctr: ctr.toFixed(2),
-                        conversionRate: conversionRate.toFixed(3),
-                        frequency: frequency.toFixed(2),
-                        volatilityPenalty
+                        ctr: c.ctr.toFixed(2),
+                        conversionRate: c.conversionRate.toFixed(3),
+                        frequency: c.frequency.toFixed(2),
+                        cpc: c.cpc.toFixed(2),
+                        cpa: c.cpa ? c.cpa.toFixed(2) : null,
+                        ctrScore: ctrScore.toFixed(1),
+                        conversionScore: conversionScore.toFixed(1),
+                        cpaScore: cpaScore.toFixed(1),
+                        spendConfidence: spendConfidence.toFixed(1),
+                        frequencyPenalty
                     },
-                    spend,
-                    conversions
+                    spend: c.spend,
+                    conversions: c.conversions
                 };
             }).sort((a, b) => parseFloat(b.lqs) - parseFloat(a.lqs));
 

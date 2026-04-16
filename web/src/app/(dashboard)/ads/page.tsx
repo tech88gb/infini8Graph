@@ -2365,10 +2365,11 @@ export default function AdsPage() {
                         <>
                             {/* Fatigue Early Warning */}
                             <SectionCard
-                                title={<span style={{ display: 'flex', alignItems: 'center' }}>🚨 Fatigue Early Warning System <InfoTooltip text="Tracks ad frequency and engagement drop-offs to predict when an ad creative is burning out and needs refreshing." /></span>}
-                                subtitle="Real-time monitoring of ad fatigue indicators"
+                                title={<span style={{ display: 'flex', alignItems: 'center' }}>🚨 Fatigue Framework <InfoTooltip text="A blended fatigue read built from real Meta trend signals: CTR decay, CPM pressure, CPC pressure, CPR pressure, frequency, and when available, video hook quality. This is meant to distinguish audience fatigue from creative fatigue more credibly than a single metric." /></span>}
+                                subtitle="Uses marketer-facing pressure signals like hook, CPR, CPM, CTR, and frequency"
                             >
-                                <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
+                                <div style={{ display: 'grid', gap: 20 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
                                     {/* Fatigue Score Circle */}
                                     <div style={{ textAlign: 'center' }}>
                                         <div style={{
@@ -2449,11 +2450,41 @@ export default function AdsPage() {
                                         )}
                                     </div>
                                 </div>
+
+                                    {(advancedData.data.fatigueAnalysis?.framework || []).length > 0 && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                                            {(advancedData.data.fatigueAnalysis.framework || []).map((item: any) => {
+                                                const tone = getScoreTone(item.score || 0);
+                                                return (
+                                                    <div key={item.key} style={{ padding: 14, borderRadius: 12, background: 'var(--background)', border: `1px solid ${tone.border}` }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                            <div style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
+                                                                {item.label}
+                                                                <InfoTooltip text={item.description} />
+                                                            </div>
+                                                            <div style={{ color: tone.color, fontWeight: 700 }}>{Math.round(item.score || 0)}</div>
+                                                        </div>
+                                                        <div style={{ height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 8 }}>
+                                                            <div style={{ width: `${Math.min(item.score || 0, 100)}%`, height: '100%', background: tone.color }} />
+                                                        </div>
+                                                        <div className="text-muted" style={{ fontSize: 12 }}>{item.value}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {(advancedData.data.fatigueAnalysis?.missingSignals || []).length > 0 && (
+                                        <div style={{ padding: '12px 16px', background: 'rgba(148, 163, 184, 0.12)', borderRadius: 10, fontSize: 12 }}>
+                                            <strong>Missing or limited data:</strong> {(advancedData.data.fatigueAnalysis.missingSignals || []).join(' ')}
+                                        </div>
+                                    )}
+                                </div>
                             </SectionCard>
 
                             {/* Lead Quality Score */}
                             {advancedData.data.leadQualityScore && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Lead Quality Score (LQS) <InfoTooltip text="An aggregated score out of 100 measuring the true quality of incoming traffic based on conversion intent rather than just cheap clicks." /></span>} subtitle="Campaign quality ranking based on CTR, conversion rate, and engagement depth">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Lead Quality Score (LQS) <InfoTooltip text="LQS is a campaign quality score built from real CTR, click-to-conversion rate, CPA efficiency, spend confidence, and a frequency penalty. It is better read as traffic and conversion quality than as a pure lead metric." /></span>} subtitle="Ranks campaigns by traffic quality, conversion efficiency, and cost discipline">
                                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24 }}>
                                         <div style={{ textAlign: 'center' }}>
                                             <div style={{
@@ -2492,10 +2523,15 @@ export default function AdsPage() {
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ fontWeight: 500, fontSize: 13 }}>{c.name}</div>
                                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                            CTR: {c.metrics.ctr}% • Conv: {c.metrics.conversionRate}%
+                                                            CTR: {c.metrics.ctr}% • Click CVR: {c.metrics.conversionRate}% • CPA: {c.metrics.cpa ? formatCurrency(parseFloat(c.metrics.cpa)) : '—'}
                                                         </div>
                                                     </div>
-                                                    <div style={{ fontWeight: 700, color: c.gradeColor }}>{c.lqs}</div>
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ fontWeight: 700, color: c.gradeColor }}>{c.lqs}</div>
+                                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                            CTR {c.metrics.ctrScore} • CVR {c.metrics.conversionScore}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -2505,7 +2541,7 @@ export default function AdsPage() {
 
                             {/* Creative Forensics */}
                             {(advancedData.data.creativeForensics || []).length > 0 && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Analyzes individual ad creatives to identify winners, clickbait risks, and hidden gems based on CTR vs. Conversion patterns." /></span>} subtitle="Pattern detection for each creative — based on CTR vs conversions matrix">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Evaluates each creative with real performance metrics and labels patterns like winner, clickbait risk, hidden gem, or underperformer. Where video data exists, it also surfaces hook and completion quality." /></span>} subtitle="Creative-by-creative read on CTR, conversions, CPR, CPM, and video hook quality">
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                                         {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
                                             // Determine pattern based on data if not provided
@@ -2561,19 +2597,27 @@ export default function AdsPage() {
                                                         <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 8 }}>{ad.name}</div>
                                                         <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>{pattern.insight}</p>
 
-                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center' }}>
                                                             <div>
                                                                 <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.ctr}%</div>
                                                                 <div style={{ fontSize: 10, color: 'var(--muted)' }}>CTR</div>
                                                             </div>
                                                             <div>
                                                                 <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.conversions}</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Conv</div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Results</div>
                                                             </div>
                                                             <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(ad.spend)}</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Spend</div>
+                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.costPerConversion ? formatCurrency(parseFloat(ad.costPerConversion)) : '—'}</div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPR</div>
                                                             </div>
+                                                            <div>
+                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(parseFloat(ad.cpm || 0))}</div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPM</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
+                                                            Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x
                                                         </div>
 
                                                         {ad.hasVideo && ad.videoMetrics && (
@@ -2583,6 +2627,16 @@ export default function AdsPage() {
                                                                     Hook: <strong>{ad.videoMetrics.hookRate}%</strong> •
                                                                     Complete: <strong>{ad.videoMetrics.completionRate}%</strong>
                                                                 </div>
+                                                            </div>
+                                                        )}
+                                                        {!ad.hasVideo && (
+                                                            <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(148, 163, 184, 0.12)', borderRadius: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                                                No video hook or completion data for this creative.
+                                                            </div>
+                                                        )}
+                                                        {ad.fatigue?.reasons?.length > 0 && (
+                                                            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
+                                                                Watchouts: {ad.fatigue.reasons.join(' • ')}
                                                             </div>
                                                         )}
                                                     </div>
@@ -2676,7 +2730,7 @@ export default function AdsPage() {
 
                             {/* Retargeting Lift */}
                             {advancedData.data.retargetingLift && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔄 Retargeting Lift Analysis <InfoTooltip text="Measures how much more effectively your ads convert when shown to users who have already interacted with your brand." /></span>} subtitle="Compare cold vs retargeting performance to diagnose acquisition quality">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔄 Retargeting Lift Analysis <InfoTooltip text="Measures whether retargeting converts better than cold traffic for the selected window. This uses click-to-conversion rate, not reach-to-conversion rate, so the comparison is closer to what performance marketers usually expect." /></span>} subtitle="Compares cold vs retargeting click-to-conversion efficiency and CPA">
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 24, alignItems: 'center' }}>
                                         {/* Cold Traffic */}
                                         <div style={{ textAlign: 'center', padding: 20, background: 'rgba(99, 102, 241, 0.1)', borderRadius: 12 }}>
@@ -2685,9 +2739,12 @@ export default function AdsPage() {
                                             <div style={{ fontSize: 28, fontWeight: 700, color: '#6366f1', marginTop: 8 }}>
                                                 {advancedData.data.retargetingLift.cold.conversionRate}%
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Conv Rate</div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Click CVR</div>
                                             <div style={{ marginTop: 12, fontSize: 12 }}>
                                                 CPA: {advancedData.data.retargetingLift.cold.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.cold.cpa)) : 'N/A'}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                                                {formatNumber(advancedData.data.retargetingLift.cold.clicks || 0)} clicks
                                             </div>
                                         </div>
 
@@ -2712,9 +2769,12 @@ export default function AdsPage() {
                                             <div style={{ fontSize: 28, fontWeight: 700, color: '#10b981', marginTop: 8 }}>
                                                 {advancedData.data.retargetingLift.retarget.conversionRate}%
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Conv Rate</div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Click CVR</div>
                                             <div style={{ marginTop: 12, fontSize: 12 }}>
                                                 CPA: {advancedData.data.retargetingLift.retarget.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.retarget.cpa)) : 'N/A'}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                                                {formatNumber(advancedData.data.retargetingLift.retarget.clicks || 0)} clicks
                                             </div>
                                         </div>
                                     </div>
@@ -2742,7 +2802,7 @@ export default function AdsPage() {
 
                             {/* Placement Intent */}
                             {(advancedData.data.placementIntent || []).length > 0 && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🎯 Placement Intent Weighting <InfoTooltip text="Adjusts the value of a conversion based on the placement it came from. Search placements often have higher intent than Audience Network." /></span>} subtitle="Not all placements have equal intent - see intent-adjusted metrics">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🎯 Placement Intent Weighting <InfoTooltip text="This is a marketer heuristic, not a Meta-native metric. It applies intent weights to placements so feed, search-like, or marketplace surfaces can be judged differently from lower-intent placements. The underlying conversions and CPA are real; only the weighting is formulated." /></span>} subtitle="Uses real placement conversions, then applies intent weights to interpret them">
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
                                             <thead>
