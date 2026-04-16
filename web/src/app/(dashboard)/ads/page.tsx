@@ -117,7 +117,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'Purchase Value',
-                value: formatCurrency((purchaseValueMetric?.value || 0) * 100),
+                value: formatCurrency(purchaseValueMetric?.value || 0),
                 icon: CreditCard,
                 color: '#8b5cf6',
                 tooltip: 'Tracked revenue value attributed to ads'
@@ -131,7 +131,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'Cost / Purchase',
-                value: formatCurrency((purchaseCostMetric?.value || 0) * 100),
+                value: formatCurrency(purchaseCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#ef4444',
                 tooltip: 'Average spend required to drive one purchase'
@@ -165,7 +165,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'Cost / Lead',
-                value: formatCurrency((leadCostMetric?.value || 0) * 100),
+                value: formatCurrency(leadCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#f97316',
                 tooltip: 'Average spend required to drive one lead'
@@ -217,7 +217,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'Cost / Link Click',
-                value: formatCurrency((clickMetrics.costPerInlineLinkClick || summary.cpc || 0) * 100),
+                value: formatCurrency(clickMetrics.costPerInlineLinkClick || summary.cpc || 0),
                 icon: DollarSign,
                 color: '#8b5cf6',
                 tooltip: 'Average cost per click to your destination'
@@ -271,7 +271,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'CPM',
-                value: formatCurrency(parseFloat(summary.cpm || 0) * 100),
+                value: formatCurrency(parseFloat(summary.cpm || 0)),
                 icon: DollarSign,
                 color: '#ec4899',
                 tooltip: 'Cost per 1,000 impressions'
@@ -321,7 +321,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'Cost / Engagement',
-                value: formatCurrency((engagementCostMetric?.value || 0) * 100),
+                value: formatCurrency(engagementCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#f97316',
                 tooltip: 'Average spend required to drive one engagement'
@@ -373,7 +373,7 @@ function buildMetaAdsOverviewMetrics({
             },
             {
                 label: 'Cost / Install',
-                value: formatCurrency((appInstallCostMetric?.value || 0) * 100),
+                value: formatCurrency(appInstallCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#f97316',
                 tooltip: 'Average spend required to drive one app install'
@@ -841,6 +841,7 @@ export default function AdsPage() {
     const roas = insightsData?.data?.roas || {};
     const clickMetrics = insightsData?.data?.clickMetrics || {};
     const daily = insightsData?.data?.daily || [];
+    const comparisonDaily = insightsData?.data?.comparisonDaily || [];
     const demographics = demographicsData?.data?.demographics || [];
     const placements = placementsData?.data?.placements || [];
     const devices = insightsData?.data?.devices || [];
@@ -863,6 +864,16 @@ export default function AdsPage() {
         impressions: parseInt(d.impressions || 0),
         clicks: parseInt(d.clicks || 0),
         ctr: parseFloat(d.ctr || 0)
+    }));
+    const comparisonChartData = comparisonDaily.map((d: any) => ({
+        spend: parseFloat(d.spend || 0),
+        impressions: parseInt(d.impressions || 0),
+        clicks: parseInt(d.clicks || 0),
+        ctr: parseFloat(d.ctr || 0)
+    }));
+    const spendChartData = dailyChartData.map((day: any, index: number) => ({
+        ...day,
+        previousSpend: comparisonChartData[index]?.spend || 0
     }));
 
     const deviceChartData = devices.map((d: any) => ({
@@ -893,6 +904,35 @@ export default function AdsPage() {
     const showConversionsSection = accountProfile?.type !== 'awareness';
     const showDiagnosticsSection = accountProfile?.type !== 'app_promotion';
     const showVideoRetentionSection = ['awareness', 'engagement', 'mixed'].includes(accountProfile?.type) || Object.values(videoViews || {}).some((value) => Number(value || 0) > 0);
+    const spendComparisonLabel = datePreset === 'last_7d'
+        ? 'This week vs last week'
+        : datePreset === 'last_30d'
+            ? 'This month vs last month'
+            : datePreset === 'last_14d'
+                ? 'Current 14 days vs previous 14 days'
+                : datePreset === 'last_90d'
+                    ? 'Current 90 days vs previous period'
+                    : datePreset === 'today'
+                        ? 'Today'
+                        : 'Selected period';
+    const videoRetentionCards = [
+        { label: '25% watched', value: Number(videoViews.views_25 || 0), helper: 'Reached the 25% watch milestone' },
+        {
+            label: '50% watched',
+            value: Number(videoViews.views_50 || 0),
+            helper: videoViews.views_25 > 0 ? `${((Number(videoViews.views_50 || 0) / Number(videoViews.views_25 || 1)) * 100).toFixed(1)}% of 25% viewers continued` : 'Reached the 50% watch milestone'
+        },
+        {
+            label: '75% watched',
+            value: Number(videoViews.views_75 || 0),
+            helper: videoViews.views_50 > 0 ? `${((Number(videoViews.views_75 || 0) / Number(videoViews.views_50 || 1)) * 100).toFixed(1)}% of 50% viewers continued` : 'Reached the 75% watch milestone'
+        },
+        {
+            label: '100% watched',
+            value: Number(videoViews.views_100 || 0),
+            helper: videoViews.views_75 > 0 ? `${((Number(videoViews.views_100 || 0) / Number(videoViews.views_75 || 1)) * 100).toFixed(1)}% of 75% viewers completed` : 'Completed the video'
+        }
+    ];
 
     const handlePageExport = async (format: SectionExportFormat) => {
         if (!effectiveAccount) return;
@@ -1186,7 +1226,7 @@ export default function AdsPage() {
                                     <span className="text-muted" style={{ fontSize: 12 }}>Social Spend</span>
                                     <InfoTooltip text="Budget spent on impressions from social actions (likes, shares, comments creating organic reach)" />
                                 </div>
-                                <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCurrency(parseFloat(clickMetrics.socialSpend || 0) * 100)}</div>
+                                <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCurrency(parseFloat(clickMetrics.socialSpend || 0))}</div>
                             </div>
                         </div>
                     </SectionCard>}
@@ -1208,14 +1248,14 @@ export default function AdsPage() {
                                     <span className="text-muted" style={{ fontSize: 12 }}>CPM</span>
                                     <InfoTooltip text="Cost per 1,000 impressions. Lower is better for awareness campaigns" />
                                 </div>
-                                <div style={{ fontSize: 20, fontWeight: 600 }}>{formatCurrency(parseFloat(summary.cpm || 0) * 100)}</div>
+                                <div style={{ fontSize: 20, fontWeight: 600 }}>{formatCurrency(parseFloat(summary.cpm || 0))}</div>
                             </div>
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                     <span className="text-muted" style={{ fontSize: 12 }}>CPC</span>
                                     <InfoTooltip text="Cost per click. Lower is better for traffic campaigns" />
                                 </div>
-                                <div style={{ fontSize: 20, fontWeight: 600 }}>{formatCurrency(parseFloat(summary.cpc || 0) * 100)}</div>
+                                <div style={{ fontSize: 20, fontWeight: 600 }}>{formatCurrency(parseFloat(summary.cpc || 0))}</div>
                             </div>
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -1236,9 +1276,14 @@ export default function AdsPage() {
 
                     {/* Daily Trend Chart */}
                     {dailyChartData.length > 0 && (
-                        <SectionCard title="Daily Spend Trend" subtitle="How your ad spend varied over time">
+                        <SectionCard
+                            title="Daily Spend Trend"
+                            subtitle={comparisonDaily.length > 0
+                                ? `${spendComparisonLabel}. Current period is plotted against the matched previous period.`
+                                : 'How your ad spend varied over time'}
+                        >
                             <ResponsiveContainer width="100%" height={280}>
-                                <AreaChart data={dailyChartData}>
+                                <AreaChart data={spendChartData}>
                                     <defs>
                                         <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -1249,7 +1294,18 @@ export default function AdsPage() {
                                     <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                                     <RechartsTooltip
                                         contentStyle={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 8 }}
+                                        formatter={(value: any, name?: string) => [formatCurrency(value || 0), name === 'previousSpend' ? 'Previous Period Spend' : 'Current Spend']}
                                     />
+                                    {comparisonDaily.length > 0 && (
+                                        <Area
+                                            type="monotone"
+                                            dataKey="previousSpend"
+                                            stroke="#6366f1"
+                                            fillOpacity={0}
+                                            strokeWidth={2}
+                                            strokeDasharray="6 4"
+                                        />
+                                    )}
                                     <Area type="monotone" dataKey="spend" stroke="#10b981" fill="url(#spendGrad)" strokeWidth={2} />
                                 </AreaChart>
                             </ResponsiveContainer>
@@ -1259,17 +1315,13 @@ export default function AdsPage() {
                     {/* Video Retention & Conversions */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                         {showVideoRetentionSection ? (
-                        <SectionCard title="Video Retention" subtitle="How much of your videos people watched">
+                        <SectionCard title="Video Retention" subtitle="Threshold counts from Meta video-view actions. Each milestone shows how many views reached that watch depth.">
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-                                {[
-                                    { label: '25% watched', value: videoViews.views_25 },
-                                    { label: '50% watched', value: videoViews.views_50 },
-                                    { label: '75% watched', value: videoViews.views_75 },
-                                    { label: '100% watched', value: videoViews.views_100 }
-                                ].map((item, i) => (
+                                {videoRetentionCards.map((item, i) => (
                                     <div key={i} style={{ padding: 12, background: 'var(--background)', borderRadius: 8 }}>
                                         <div className="text-muted" style={{ fontSize: 11 }}>{item.label}</div>
                                         <div style={{ fontSize: 18, fontWeight: 600 }}>{formatNumber(item.value)}</div>
+                                        <div className="text-muted" style={{ fontSize: 10, marginTop: 4 }}>{item.helper}</div>
                                     </div>
                                 ))}
                             </div>
@@ -1291,7 +1343,7 @@ export default function AdsPage() {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span className="text-muted" style={{ fontSize: 12 }}>CPM</span>
-                                    <strong>{formatCurrency(parseFloat(summary.cpm || 0) * 100)}</strong>
+                                    <strong>{formatCurrency(parseFloat(summary.cpm || 0))}</strong>
                                 </div>
                             </div>
                         </SectionCard>
@@ -1672,7 +1724,7 @@ export default function AdsPage() {
                                             <InfoTooltip text="Total amount spent during the last 90 days across all campaigns in this ad account." />
                                         </div>
                                         <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
-                                            {formatCurrency(funnelData.data.summary?.totalSpend * 100 || 0)}
+                                            {formatCurrency(funnelData.data.summary?.totalSpend || 0)}
                                         </div>
                                     </div>
                                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
@@ -1699,7 +1751,7 @@ export default function AdsPage() {
                                             <InfoTooltip text="Average cost to acquire one purchase. Total Spend ÷ Total Purchases. Lower is better." />
                                         </div>
                                         <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>
-                                            {formatCurrency(funnelData.data.summary?.costPerPurchase * 100 || 0)}
+                                            {formatCurrency(funnelData.data.summary?.costPerPurchase || 0)}
                                         </div>
                                     </div>
                                 </div>
@@ -1745,7 +1797,7 @@ export default function AdsPage() {
                                                         <div>
                                                             <div style={{ fontWeight: 600, fontSize: 14 }}>{stage.label}</div>
                                                             <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                                                {formatCurrency(stage.costPerAction * 100 || 0)} per action
+                                                                {formatCurrency(stage.costPerAction || 0)} per action
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2037,9 +2089,9 @@ export default function AdsPage() {
                                                                 {p.roas}x
                                                             </span>
                                                         </td>
-                                                        <td>{formatCurrency(p.spend * 100)}</td>
-                                                        <td>{formatCurrency(p.revenue * 100)}</td>
-                                                        <td>{formatCurrency(parseFloat(p.cpc) * 100)}</td>
+                                                        <td>{formatCurrency(p.spend)}</td>
+                                                        <td>{formatCurrency(p.revenue)}</td>
+                                                        <td>{formatCurrency(parseFloat(p.cpc))}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -2078,7 +2130,7 @@ export default function AdsPage() {
                                                 <div style={{ flex: 1 }}>
                                                     <div style={{ fontWeight: 600, marginBottom: 4 }}>{c.name}</div>
                                                     <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--muted)' }}>
-                                                        <span>Spend: {formatCurrency(c.spend * 100)}</span>
+                                                        <span>Spend: {formatCurrency(c.spend)}</span>
                                                         <span>Purchases: {c.purchases}</span>
                                                         <span>ROAS: {c.roas.toFixed(2)}x</span>
                                                     </div>
@@ -2319,7 +2371,7 @@ export default function AdsPage() {
                                                                 <div style={{ fontSize: 10, color: 'var(--muted)' }}>Conv</div>
                                                             </div>
                                                             <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(ad.spend * 100)}</div>
+                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(ad.spend)}</div>
                                                                 <div style={{ fontSize: 10, color: 'var(--muted)' }}>Spend</div>
                                                             </div>
                                                         </div>
@@ -2377,7 +2429,7 @@ export default function AdsPage() {
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ fontWeight: 500, fontSize: 13 }}>{adset.name}</div>
                                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                            {status.label} • {adset.conversions || 0} conversions • {formatCurrency((adset.spend || 0) * 100)} spent
+                                                            {status.label} • {adset.conversions || 0} conversions • {formatCurrency(adset.spend || 0)} spent
                                                         </div>
                                                     </div>
                                                     {status.progress !== undefined && (
@@ -2435,7 +2487,7 @@ export default function AdsPage() {
                                             </div>
                                             <div style={{ fontSize: 11, color: 'var(--muted)' }}>Conv Rate</div>
                                             <div style={{ marginTop: 12, fontSize: 12 }}>
-                                                CPA: {advancedData.data.retargetingLift.cold.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.cold.cpa) * 100) : 'N/A'}
+                                                CPA: {advancedData.data.retargetingLift.cold.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.cold.cpa)) : 'N/A'}
                                             </div>
                                         </div>
 
@@ -2462,7 +2514,7 @@ export default function AdsPage() {
                                             </div>
                                             <div style={{ fontSize: 11, color: 'var(--muted)' }}>Conv Rate</div>
                                             <div style={{ marginTop: 12, fontSize: 12 }}>
-                                                CPA: {advancedData.data.retargetingLift.retarget.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.retarget.cpa) * 100) : 'N/A'}
+                                                CPA: {advancedData.data.retargetingLift.retarget.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.retarget.cpa)) : 'N/A'}
                                             </div>
                                         </div>
                                     </div>
@@ -2521,9 +2573,9 @@ export default function AdsPage() {
                                                         </td>
                                                         <td>{p.conversions}</td>
                                                         <td style={{ fontWeight: 600 }}>{p.weightedConversions.toFixed(1)}</td>
-                                                        <td>{p.effectiveCPA ? formatCurrency(parseFloat(p.effectiveCPA) * 100) : '—'}</td>
+                                                        <td>{p.effectiveCPA ? formatCurrency(parseFloat(p.effectiveCPA)) : '—'}</td>
                                                         <td style={{ color: p.intentColor, fontWeight: 600 }}>
-                                                            {p.intentAdjustedCPA ? formatCurrency(parseFloat(p.intentAdjustedCPA) * 100) : '—'}
+                                                            {p.intentAdjustedCPA ? formatCurrency(parseFloat(p.intentAdjustedCPA)) : '—'}
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -2729,7 +2781,7 @@ export default function AdsPage() {
                                                                 {c.campaignName}
                                                             </div>
                                                             <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-                                                                {formatCurrency(c.spend * 100)} spent
+                                                                {formatCurrency(c.spend)} spent
                                                             </div>
                                                         </td>
                                                         <td>
@@ -2874,7 +2926,7 @@ export default function AdsPage() {
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11 }}>Avg CPA</div>
-                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCurrency(deepInsightsData.data.arbitrageSummary.avgCPA * 100)}</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCurrency(deepInsightsData.data.arbitrageSummary.avgCPA)}</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, textAlign: 'center' }}>
                                             <div style={{ color: '#ef4444', fontSize: 11 }}>Wasteful Placements</div>
@@ -2883,7 +2935,7 @@ export default function AdsPage() {
                                         <div style={{ padding: 16, background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, textAlign: 'center' }}>
                                             <div style={{ color: '#ef4444', fontSize: 11 }}>Wasted Spend</div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>
-                                                {formatCurrency(deepInsightsData.data.arbitrageSummary.wastedSpend * 100)}
+                                                {formatCurrency(deepInsightsData.data.arbitrageSummary.wastedSpend)}
                                             </div>
                                             <div style={{ fontSize: 10, color: '#ef4444' }}>
                                                 ({deepInsightsData.data.arbitrageSummary.wastedPercent}% of budget)
@@ -2941,10 +2993,10 @@ export default function AdsPage() {
                                                                 {p.intent.label}
                                                             </span>
                                                         </td>
-                                                        <td>{formatCurrency(p.metrics.spend * 100)}</td>
-                                                        <td>{p.metrics.cpa > 0 ? formatCurrency(p.metrics.cpa * 100) : '—'}</td>
+                                                        <td>{formatCurrency(p.metrics.spend)}</td>
+                                                        <td>{p.metrics.cpa > 0 ? formatCurrency(p.metrics.cpa) : '—'}</td>
                                                         <td style={{ fontWeight: 600, color: p.intent.color }}>
-                                                            {p.metrics.adjustedCPA > 0 ? formatCurrency(p.metrics.adjustedCPA * 100) : '—'}
+                                                            {p.metrics.adjustedCPA > 0 ? formatCurrency(p.metrics.adjustedCPA) : '—'}
                                                         </td>
                                                         <td>
                                                             <span style={{ fontWeight: 700, color: p.metrics.roas >= 1 ? '#10b981' : p.metrics.roas > 0 ? '#f59e0b' : 'var(--muted)' }}>

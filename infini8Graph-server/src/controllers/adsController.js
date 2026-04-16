@@ -336,16 +336,25 @@ export async function getAdInsights(req, res) {
                         date_preset: comparisonDatePreset
                     }
                 }));
+                requests.push(axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,reach,clicks,ctr',
+                        date_preset: comparisonDatePreset,
+                        time_increment: 1
+                    }
+                }));
             }
 
             const results = await Promise.allSettled(requests);
-            const [relevanceRes, summaryRes, dailyRes, campaignsRes, deviceRes, positionRes, comparisonRes] = results;
+            const [relevanceRes, summaryRes, dailyRes, campaignsRes, deviceRes, positionRes, comparisonRes, comparisonDailyRes] = results;
             const adRelevanceData = relevanceRes.status === 'fulfilled' ? relevanceRes.value.data.data || [] : [];
             const summary = summaryRes.status === 'fulfilled' ? summaryRes.value.data.data?.[0] : null;
             const daily = dailyRes.status === 'fulfilled' ? dailyRes.value.data.data : [];
             const campaigns = campaignsRes.status === 'fulfilled' ? campaignsRes.value.data.data || [] : [];
             const devices = deviceRes.status === 'fulfilled' ? deviceRes.value.data.data : [];
             const positions = positionRes.status === 'fulfilled' ? positionRes.value.data.data : [];
+            const comparisonDaily = comparisonDailyRes?.status === 'fulfilled' ? comparisonDailyRes.value.data.data || [] : [];
 
             let videoViews = { views_3s: 0, views_25: 0, views_50: 0, views_75: 0, views_100: 0 };
             if (summary?.video_p25_watched_actions) {
@@ -483,6 +492,7 @@ export async function getAdInsights(req, res) {
                 conversions,
                 accountProfile,
                 daily,
+                comparisonDaily,
                 devices,
                 positions
             };
