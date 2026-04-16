@@ -2366,9 +2366,14 @@ export default function AdsPage() {
                             {/* Fatigue Early Warning */}
                             <SectionCard
                                 title={<span style={{ display: 'flex', alignItems: 'center' }}>🚨 Fatigue Framework <InfoTooltip text="A blended fatigue read built from real Meta trend signals: CTR decay, CPM pressure, CPC pressure, CPR pressure, frequency, and when available, video hook quality. This is meant to distinguish audience fatigue from creative fatigue more credibly than a single metric." /></span>}
-                                subtitle="Uses marketer-facing pressure signals like hook, CPR, CPM, CTR, and frequency"
+                                subtitle="Account-level fatigue read built from hook, CPR, CPM, CTR, and frequency"
                             >
                                 <div style={{ display: 'grid', gap: 20 }}>
+                                    <div style={{ padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
+                                        <strong>Scope:</strong> {advancedData.data.fatigueAnalysis?.scope || 'Account-level aggregate across all campaigns in the selected ad account'}<br />
+                                        <strong>Compared to:</strong> {advancedData.data.fatigueAnalysis?.comparisonBasis || 'First half of the selected period vs second half of the selected period.'}
+                                    </div>
+
                                     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
                                     {/* Fatigue Score Circle */}
                                     <div style={{ textAlign: 'center' }}>
@@ -2467,6 +2472,7 @@ export default function AdsPage() {
                                                         <div style={{ height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 8 }}>
                                                             <div style={{ width: `${Math.min(item.score || 0, 100)}%`, height: '100%', background: tone.color }} />
                                                         </div>
+                                                        <div style={{ fontSize: 11, color: tone.color, marginBottom: 4 }}>{tone.label}</div>
                                                         <div className="text-muted" style={{ fontSize: 12 }}>{item.value}</div>
                                                     </div>
                                                 );
@@ -2731,6 +2737,9 @@ export default function AdsPage() {
                             {/* Retargeting Lift */}
                             {advancedData.data.retargetingLift && (
                                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔄 Retargeting Lift Analysis <InfoTooltip text="Measures whether retargeting converts better than cold traffic for the selected window. This uses click-to-conversion rate, not reach-to-conversion rate, so the comparison is closer to what performance marketers usually expect." /></span>} subtitle="Compares cold vs retargeting click-to-conversion efficiency and CPA">
+                                    <div style={{ marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
+                                        <strong>How to read this:</strong> click CVR is conversions divided by clicks inside each bucket. Lift compares retargeting click CVR against cold click CVR for the same selected period.
+                                    </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 24, alignItems: 'center' }}>
                                         {/* Cold Traffic */}
                                         <div style={{ textAlign: 'center', padding: 20, background: 'rgba(99, 102, 241, 0.1)', borderRadius: 12 }}>
@@ -2739,7 +2748,10 @@ export default function AdsPage() {
                                             <div style={{ fontSize: 28, fontWeight: 700, color: '#6366f1', marginTop: 8 }}>
                                                 {advancedData.data.retargetingLift.cold.conversionRate}%
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Click CVR</div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>
+                                                Click CVR
+                                                <InfoTooltip text="Cold click CVR = total tracked conversions divided by total clicks across the cold-campaign bucket." />
+                                            </div>
                                             <div style={{ marginTop: 12, fontSize: 12 }}>
                                                 CPA: {advancedData.data.retargetingLift.cold.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.cold.cpa)) : 'N/A'}
                                             </div>
@@ -2758,7 +2770,10 @@ export default function AdsPage() {
                                             }}>
                                                 {parseFloat(advancedData.data.retargetingLift.lift) > 0 ? '+' : ''}{advancedData.data.retargetingLift.lift}%
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Lift</div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>
+                                                Lift
+                                                <InfoTooltip text="Lift = percentage difference between retargeting click CVR and cold click CVR. Positive means retargeting converts better." />
+                                            </div>
                                             <ArrowRight size={24} style={{ marginTop: 8, color: 'var(--muted)' }} />
                                         </div>
 
@@ -2769,7 +2784,10 @@ export default function AdsPage() {
                                             <div style={{ fontSize: 28, fontWeight: 700, color: '#10b981', marginTop: 8 }}>
                                                 {advancedData.data.retargetingLift.retarget.conversionRate}%
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Click CVR</div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>
+                                                Click CVR
+                                                <InfoTooltip text="Retargeting click CVR = total tracked conversions divided by total clicks across the retargeting-campaign bucket." />
+                                            </div>
                                             <div style={{ marginTop: 12, fontSize: 12 }}>
                                                 CPA: {advancedData.data.retargetingLift.retarget.cpa ? formatCurrency(parseFloat(advancedData.data.retargetingLift.retarget.cpa)) : 'N/A'}
                                             </div>

@@ -1244,6 +1244,12 @@ export async function getAdvancedAnalytics(req, res) {
                     if (value >= high) return 100;
                     return ((value - low) / (high - low)) * 100;
                 };
+                const describeChange = (value, badWord, goodWord = 'improvement') => {
+                    if (value === null || value === undefined || Number.isNaN(value)) return 'Not enough data';
+                    if (value > 0) return `${value.toFixed(1)}% ${badWord}`;
+                    if (value < 0) return `${Math.abs(value).toFixed(1)}% ${goodWord}`;
+                    return 'Flat';
+                };
 
                 let fatigueScore = 0;
                 const indicators = [];
@@ -1262,7 +1268,7 @@ export async function getAdvancedAnalytics(req, res) {
                         label: 'CTR',
                         description: 'Falling CTR often means the audience is seeing the same idea too often or the creative is losing stopping power.',
                         score: parseFloat(ctrScore.toFixed(1)),
-                        value: `${ctrDecay.toFixed(1)}% decay`,
+                        value: describeChange(ctrDecay, 'decay'),
                         weight: 22
                     },
                     {
@@ -1270,7 +1276,7 @@ export async function getAdvancedAnalytics(req, res) {
                         label: 'CPM',
                         description: 'Rising CPM can signal auction pressure or audience saturation, especially when creative engagement weakens at the same time.',
                         score: parseFloat(cpmScore.toFixed(1)),
-                        value: `${cpmIncrease.toFixed(1)}% change`,
+                        value: describeChange(cpmIncrease, 'increase', 'decrease'),
                         weight: 18
                     },
                     {
@@ -1278,7 +1284,7 @@ export async function getAdvancedAnalytics(req, res) {
                         label: 'CPC',
                         description: 'CPC pressure captures when clicks are getting more expensive, which often happens before clear conversion deterioration.',
                         score: parseFloat(cpcScore.toFixed(1)),
-                        value: `${cpcIncrease.toFixed(1)}% change`,
+                        value: describeChange(cpcIncrease, 'increase', 'decrease'),
                         weight: 15
                     },
                     {
@@ -1286,7 +1292,7 @@ export async function getAdvancedAnalytics(req, res) {
                         label: 'CPR',
                         description: 'Cost per result is the marketer-facing reality check. When CPR rises while CTR or hook weakens, fatigue is more credible.',
                         score: parseFloat(cprScore.toFixed(1)),
-                        value: cprIncrease === null ? 'Not enough conversion volume' : `${cprIncrease.toFixed(1)}% change`,
+                        value: cprIncrease === null ? 'Not enough conversion volume' : describeChange(cprIncrease, 'increase', 'decrease'),
                         weight: 25
                     },
                     {
@@ -1341,10 +1347,14 @@ export async function getAdvancedAnalytics(req, res) {
                         cpc: parseFloat(d.cpc || 0).toFixed(2),
                         frequency: parseFloat(d.frequency || 0).toFixed(2)
                     })),
+                    scope: 'Account-level aggregate across all campaigns in the selected ad account',
+                    comparisonBasis: 'Trend metrics compare the first half of the selected date range against the second half of the same range.',
                     recommendation: fatigueScore >= 60
                         ? 'Creative or audience fatigue is likely. Refresh top-spend creatives, widen audience pools, and check whether CPM and CPR are still climbing.'
                         : fatigueScore >= 30
                             ? 'Some fatigue signals are emerging. Rotate creatives selectively and watch whether CPM or CPR continue worsening.'
+                            : indicators.length > 0
+                                ? 'One pressure signal is elevated, but the account is not showing broad fatigue yet. Watch whether that pressure spreads into CTR, CPR, or frequency.'
                             : 'No major fatigue pressure right now. Keep monitoring, especially if frequency keeps climbing.'
                 };
             } else {
