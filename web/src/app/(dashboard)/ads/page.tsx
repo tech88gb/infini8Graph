@@ -2555,6 +2555,7 @@ export default function AdsPage() {
                                         {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
                                             const pattern = ad.pattern || { label: 'Mixed Read', color: '#64748b', insight: 'Mixed performance signals.', action: 'Keep monitoring.' };
                                             const performanceScore = parseFloat(ad.performanceScore || 0);
+                                            const shouldContainPreview = ad.previewSource === 'thumbnail';
 
                                             return (
                                                 <div key={ad.id} style={{
@@ -2567,13 +2568,21 @@ export default function AdsPage() {
                                                             ? '1px solid rgba(239, 68, 68, 0.45)'
                                                             : '1px solid var(--border)'
                                                 }}>
-                                                    <div style={{ position: 'relative', height: 172, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(15, 23, 42, 0.95))' }}>
+                                                    <div style={{ position: 'relative', height: 136, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(15, 23, 42, 0.95))' }}>
                                                         {ad.thumbnail ? (
                                                             <img
                                                                 src={ad.thumbnail}
                                                                 alt={ad.name}
                                                                 loading="lazy"
-                                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                                                style={{
+                                                                    width: '100%',
+                                                                    height: '100%',
+                                                                    objectFit: shouldContainPreview ? 'contain' : 'cover',
+                                                                    objectPosition: 'center',
+                                                                    display: 'block',
+                                                                    padding: shouldContainPreview ? 10 : 0,
+                                                                    background: shouldContainPreview ? 'rgba(15, 23, 42, 0.88)' : 'transparent'
+                                                                }}
                                                             />
                                                         ) : (
                                                             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.72)', fontSize: 12 }}>
@@ -2609,7 +2618,7 @@ export default function AdsPage() {
                                                             </span>
                                                         </div>
                                                         <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
-                                                            <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', marginBottom: 6, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
+                                                            <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', marginBottom: 6, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
                                                                 {ad.name}
                                                             </div>
                                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

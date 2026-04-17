@@ -1125,7 +1125,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v2', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v3', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -1326,7 +1326,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,creative{id,name,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
+                    fields: 'id,name,status,creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
                     limit: 100
                 }
             }),
@@ -1607,17 +1607,21 @@ export async function getAdvancedAnalytics(req, res) {
                 const completionRate = hasVideo && v25 > 0 ? (v100 / v25 * 100) : null;
                 const clickToConversionRate = clicks > 0 ? (conversions / clicks * 100) : 0;
 
-                const thumbnail = ad.creative?.thumbnail_url
+                const primaryImage = ad.creative?.image_url
                     || ad.creative?.object_story_spec?.video_data?.image_url
-                    || ad.creative?.object_story_spec?.link_data?.picture
                     || ad.creative?.object_story_spec?.photo_data?.image_url
+                    || ad.creative?.object_story_spec?.link_data?.child_attachments?.find((item) => item?.picture)?.picture
+                    || ad.creative?.object_story_spec?.link_data?.picture
                     || null;
+                const thumbnail = primaryImage || ad.creative?.thumbnail_url || null;
+                const previewSource = primaryImage ? 'creative' : ad.creative?.thumbnail_url ? 'thumbnail' : 'none';
 
                 return {
                     id: ad.id,
                     name: ad.name,
                     status: ad.status,
                     thumbnail,
+                    previewSource,
                     impressions,
                     clicks,
                     ctr,
