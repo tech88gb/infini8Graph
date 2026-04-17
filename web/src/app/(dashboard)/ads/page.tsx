@@ -759,10 +759,6 @@ const TAB_META: Record<string, { label: string; tooltip: string }> = {
         label: 'Demographics',
         tooltip: 'Audience performance by age and gender.'
     },
-    placements: {
-        label: 'Placements',
-        tooltip: 'Breakdown by platform and placement position.'
-    },
     geo: {
         label: 'Geography',
         tooltip: 'Performance by country and region.'
@@ -773,7 +769,7 @@ const TAB_META: Record<string, { label: string; tooltip: string }> = {
 
 export default function AdsPage() {
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'placements' | 'geo'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'geo'>('overview');
     const [datePreset, setDatePreset] = useState<'today' | 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d' | 'maximum'>('today');
 
     // Fetch accounts
@@ -809,17 +805,6 @@ export default function AdsPage() {
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'demographics',
-        refetchOnWindowFocus: false
-    });
-
-    const { data: placementsData, isLoading: placementsLoading } = useQuery({
-        queryKey: ['ad-placements', effectiveAccount, datePreset],
-        queryFn: async () => {
-            if (!effectiveAccount) return null;
-            const res = await adsApi.getPlacements(effectiveAccount, datePreset);
-            return res.data;
-        },
-        enabled: !!effectiveAccount && activeTab === 'placements',
         refetchOnWindowFocus: false
     });
 
@@ -909,11 +894,8 @@ export default function AdsPage() {
     const daily = insightsData?.data?.daily || [];
     const comparisonDaily = insightsData?.data?.comparisonDaily || [];
     const demographics = demographicsData?.data?.demographics || [];
-    const placements = placementsData?.data?.placements || [];
     const devices = insightsData?.data?.devices || [];
-    const positions = activeTab === 'placements'
-        ? (placementsData?.data?.positions || [])
-        : (insightsData?.data?.positions || []);
+    const positions = insightsData?.data?.positions || [];
     const countries = geographyData?.data?.countries || [];
     const regions = geographyData?.data?.regions || [];
     const videoViews = insightsData?.data?.videoViews || {};
@@ -1019,7 +1001,7 @@ export default function AdsPage() {
         ] = await Promise.all([
             adsApi.getAdInsights(effectiveAccount, datePreset).then((res) => res.data).catch(() => insightsData),
             adsApi.getDemographics(effectiveAccount, datePreset).then((res) => res.data).catch(() => demographicsData),
-            adsApi.getPlacements(effectiveAccount, datePreset).then((res) => res.data).catch(() => placementsData),
+            adsApi.getPlacements(effectiveAccount, datePreset).then((res) => res.data).catch(() => null),
             adsApi.getGeography(effectiveAccount, datePreset).then((res) => res.data).catch(() => geographyData),
             adsApi.getCampaigns(effectiveAccount).then((res) => res.data).catch(() => campaignsData),
             adsApi.getConversionFunnel(effectiveAccount, datePreset).then((res) => res.data).catch(() => funnelData),
@@ -1196,9 +1178,6 @@ export default function AdsPage() {
                 </TabButton>
                 <TabButton active={activeTab === 'demographics'} onClick={() => setActiveTab('demographics')}>
                     <Users size={14} /> {TAB_META.demographics.label} <InfoTooltip text={TAB_META.demographics.tooltip} />
-                </TabButton>
-                <TabButton active={activeTab === 'placements'} onClick={() => setActiveTab('placements')}>
-                    <Layers size={14} /> {TAB_META.placements.label} <InfoTooltip text={TAB_META.placements.tooltip} />
                 </TabButton>
                 <TabButton active={activeTab === 'geo'} onClick={() => setActiveTab('geo')}>
                     <Globe size={14} /> {TAB_META.geo.label} <InfoTooltip text={TAB_META.geo.tooltip} />
@@ -1595,87 +1574,6 @@ export default function AdsPage() {
                         <p className="text-muted">No demographic data available</p>
                     )}
                 </SectionCard>
-            )}
-
-            {/* ==================== PLACEMENTS TAB ==================== */}
-            {activeTab === 'placements' && (
-                <div style={{ display: 'grid', gap: 20 }}>
-                    {placementsLoading ? (
-                        <div style={{ textAlign: 'center', padding: 40 }}>
-                            <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
-                            <p className="text-muted">Loading placements...</p>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Platform Breakdown */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Platform Breakdown <InfoTooltip text="Compares ad performance on Facebook vs Instagram networks." /></span>} subtitle="Performance on Facebook vs Instagram">
-                                {placements.length > 0 ? (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-                                        {placements.map((p: any, i: number) => (
-                                            <div key={i} style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
-                                                <div style={{ fontWeight: 600, textTransform: 'capitalize', marginBottom: 8 }}>{p.publisher_platform}</div>
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
-                                                    <div>
-                                                        <div className="text-muted" style={{ fontSize: 11 }}>Spend</div>
-                                                        <div style={{ fontWeight: 500 }}>{formatCurrency(p.spend)}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-muted" style={{ fontSize: 11 }}>Impressions</div>
-                                                        <div style={{ fontWeight: 500 }}>{formatNumber(p.impressions)}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-muted" style={{ fontSize: 11 }}>Clicks</div>
-                                                        <div style={{ fontWeight: 500 }}>{formatNumber(p.clicks)}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-muted" style={{ fontSize: 11 }}>CTR</div>
-                                                        <div style={{ fontWeight: 500 }}>{formatPercent(p.ctr)}</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-muted">No platform data available</p>
-                                )}
-                            </SectionCard>
-
-                            {/* Position Breakdown */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Position Breakdown <InfoTooltip text="Breaks down where your ads appear (Feed, Stories, Reels, etc.) allowing you to see which placement drives the most efficiency." /></span>} subtitle="Performance by placement (Feed, Stories, Reels, etc.)">
-                                {positions.length > 0 ? (
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table className="table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Position</th>
-                                                    <th>Spend</th>
-                                                    <th>Impressions</th>
-                                                    <th>Clicks</th>
-                                                    <th>CTR</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {positions.slice(0, 10).map((p: any, i: number) => (
-                                                    <tr key={i}>
-                                                        <td style={{ fontWeight: 500, textTransform: 'capitalize' }}>
-                                                            {`${p.publisher_platform || ''} ${p.platform_position || ''}`.replace(/_/g, ' ')}
-                                                        </td>
-                                                        <td>{formatCurrency(p.spend)}</td>
-                                                        <td>{formatNumber(p.impressions)}</td>
-                                                        <td>{formatNumber(p.clicks)}</td>
-                                                        <td>{formatPercent(p.ctr)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted">No position data available</p>
-                                )}
-                            </SectionCard>
-                        </>
-                    )}
-                </div>
             )}
 
             {/* ==================== GEOGRAPHY TAB ==================== */}
