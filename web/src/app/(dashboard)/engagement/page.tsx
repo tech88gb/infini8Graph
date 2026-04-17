@@ -17,8 +17,37 @@ const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9'];
 
 // ==================== TIME PERIOD BADGE ====================
 
-function TimePeriodBadge({ posts }: { posts: any[] }) {
+function TimePeriodBadge({ posts, selectedRange, totalPosts }: { posts: any[]; selectedRange: { startDate: string; endDate: string }; totalPosts?: number }) {
     const dateRange = useMemo(() => {
+        const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const selectedStart = new Date(`${selectedRange.startDate}T00:00:00Z`);
+        const selectedEnd = new Date(`${selectedRange.endDate}T00:00:00Z`);
+        if (!Number.isNaN(selectedStart.getTime()) && !Number.isNaN(selectedEnd.getTime())) {
+            const orderedStart = selectedStart <= selectedEnd ? selectedStart : selectedEnd;
+            const orderedEnd = selectedStart <= selectedEnd ? selectedEnd : selectedStart;
+            const diffMs = Math.abs(orderedEnd.getTime() - orderedStart.getTime());
+            const daysDiff = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+            const isCustom = daysDiff > 31;
+
+            let label = '';
+            if (daysDiff === 1) label = '1 Day';
+            else if (daysDiff <= 7) label = `Last ${daysDiff} Days`;
+            else if (daysDiff <= 31) label = 'Last 30 Days';
+            else if (daysDiff <= 92) label = 'Last 90 Days';
+            else label = `${daysDiff} Day Range`;
+
+            if (isCustom) {
+                label = `${daysDiff} Day Custom View`;
+            }
+
+            return {
+                from: formatDate(selectedRange.startDate),
+                to: formatDate(selectedRange.endDate),
+                days: daysDiff,
+                label
+            };
+        }
+
         if (!posts || posts.length === 0) return null;
 
         const dates = posts.map(p => new Date(p.timestamp)).filter(d => !isNaN(d.getTime()));
@@ -26,32 +55,16 @@ function TimePeriodBadge({ posts }: { posts: any[] }) {
 
         const oldest = new Date(Math.min(...dates.map(d => d.getTime())));
         const newest = new Date(Math.max(...dates.map(d => d.getTime())));
-
-        const formatDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const diffMs = Math.abs(newest.getTime() - oldest.getTime());
         const daysDiff = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
-        
-        const today = new Date();
-        const isRecent = (today.getTime() - newest.getTime()) < (2 * 24 * 60 * 60 * 1000);
-
-        let label = '';
-        if (isRecent) {
-            if (daysDiff === 1) label = 'Last 24 Hours';
-            else if (daysDiff <= 7) label = `Last ${daysDiff} Days`;
-            else if (daysDiff <= 31) label = 'Last 30 Days';
-            else if (daysDiff <= 92) label = 'Last 3 Months';
-            else label = 'All-Time';
-        } else {
-            label = daysDiff === 1 ? '24h Historical Analysis' : `${daysDiff} Day Custom View`;
-        }
 
         return {
-            from: formatDate(oldest),
-            to: formatDate(newest),
+            from: oldest.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            to: newest.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             days: daysDiff,
-            label
+            label: `${daysDiff} Day View`
         };
-    }, [posts]);
+    }, [posts, selectedRange.endDate, selectedRange.startDate]);
 
     if (!dateRange) return null;
 
@@ -78,7 +91,7 @@ function TimePeriodBadge({ posts }: { posts: any[] }) {
                 fontWeight: 700,
                 boxShadow: '0 4px 10px rgba(99, 102, 241, 0.3)'
             }}>
-                {posts.length} {posts.length === 1 ? 'post' : 'posts'}
+                {totalPosts ?? posts.length} {(totalPosts ?? posts.length) === 1 ? 'post' : 'posts'}
             </span>
         </div>
     );
@@ -381,7 +394,7 @@ export default function EngagementPage() {
 
             {/* Time Period Badge */}
             <div style={{ marginBottom: 24 }}>
-                <TimePeriodBadge posts={posts} />
+                <TimePeriodBadge posts={posts} selectedRange={dateRange} totalPosts={summary.totalPosts} />
             </div>
 
             {/* Summary Metrics with Context */}

@@ -1582,7 +1582,7 @@ class AnalyticsService {
         const analysisLimit = Number.isFinite(Number(options.analysisLimit))
             ? Math.min(Math.max(Number(options.analysisLimit), 18), 40)
             : ((startDate || endDate) ? MEDIA_FETCH_LIMITS.postsAnalysis.ranged : MEDIA_FETCH_LIMITS.postsAnalysis.default);
-        const dateKey = `v5_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${requestedLimit}_${analysisLimit}`;
+        const dateKey = `v6_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${requestedLimit}_${analysisLimit}`;
         const cached = await this.checkCache('posts', dateKey);
         if (cached) return cached;
 
@@ -1591,11 +1591,36 @@ class AnalyticsService {
 
         const [analysisResult, storiesResult] = await runWithConcurrency([
             async () => {
-                const fetchedMedia = await this.instagram.getAllMediaWithInsights(analysisLimit, {
-                    includeDetailedVideoInsights: false,
-                    fetchShares: false
-                });
-                return this.filterMediaByDate(fetchedMedia, startDate, endDate);
+                const collectedMedia = [];
+                const { startStr } = this.clampDateWindow(startDate, endDate);
+                const batchSize = Math.min(Math.max(analysisLimit, 18), 24);
+                const maxAnalysisPages = (startDate || endDate) ? 18 : 8;
+                let cursor = null;
+                let scanned = 0;
+
+                while (scanned < maxAnalysisPages && collectedMedia.length < analysisLimit) {
+                    const response = await this.instagram.getMediaPageWithInsights(batchSize, cursor, {
+                        includeDetailedVideoInsights: false,
+                        fetchShares: false
+                    });
+                    const rawBatch = response?.data || [];
+                    if (rawBatch.length === 0) break;
+
+                    const filteredBatch = this.filterMediaByDate(rawBatch, startDate, endDate);
+                    if (filteredBatch.length > 0) {
+                        collectedMedia.push(...filteredBatch);
+                    }
+
+                    scanned += 1;
+                    cursor = response?.paging?.cursors?.after || null;
+                    const oldestBatchDate = (rawBatch[rawBatch.length - 1]?.timestamp || '').split('T')[0];
+                    if (!cursor) break;
+                    if (startDate && oldestBatchDate && oldestBatchDate < startStr && filteredBatch.length === 0) {
+                        break;
+                    }
+                }
+
+                return collectedMedia.slice(0, analysisLimit);
             },
             async () => this.getStoryAnalytics()
         ], 2);
