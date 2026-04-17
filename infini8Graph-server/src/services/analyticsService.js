@@ -1579,10 +1579,16 @@ class AnalyticsService {
             ? Math.min(Math.max(Number(limit), 6), 20)
             : 12;
         const after = options.after || null;
-        const analysisLimit = Number.isFinite(Number(options.analysisLimit))
-            ? Math.min(Math.max(Number(options.analysisLimit), 18), 40)
-            : ((startDate || endDate) ? MEDIA_FETCH_LIMITS.postsAnalysis.ranged : MEDIA_FETCH_LIMITS.postsAnalysis.default);
-        const dateKey = `v6_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${requestedLimit}_${analysisLimit}`;
+        const rangeDays = this.getDateRangeDays(startDate, endDate);
+        const computedAnalysisLimit = Number.isFinite(Number(options.analysisLimit))
+            ? Math.min(Math.max(Number(options.analysisLimit), 18), 180)
+            : (() => {
+                if ((rangeDays || 0) >= 75) return 150;
+                if ((rangeDays || 0) >= 45) return 90;
+                if (startDate || endDate) return MEDIA_FETCH_LIMITS.postsAnalysis.ranged;
+                return MEDIA_FETCH_LIMITS.postsAnalysis.default;
+            })();
+        const dateKey = `v7_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${requestedLimit}_${computedAnalysisLimit}`;
         const cached = await this.checkCache('posts', dateKey);
         if (cached) return cached;
 
@@ -1593,12 +1599,12 @@ class AnalyticsService {
             async () => {
                 const collectedMedia = [];
                 const { startStr } = this.clampDateWindow(startDate, endDate);
-                const batchSize = Math.min(Math.max(analysisLimit, 18), 24);
-                const maxAnalysisPages = (startDate || endDate) ? 18 : 8;
+                const batchSize = 24;
+                const maxAnalysisPages = (rangeDays || 0) >= 75 ? 30 : (startDate || endDate) ? 18 : 8;
                 let cursor = null;
                 let scanned = 0;
 
-                while (scanned < maxAnalysisPages && collectedMedia.length < analysisLimit) {
+                while (scanned < maxAnalysisPages && collectedMedia.length < computedAnalysisLimit) {
                     const response = await this.instagram.getMediaPageWithInsights(batchSize, cursor, {
                         includeDetailedVideoInsights: false,
                         fetchShares: false
@@ -1620,7 +1626,7 @@ class AnalyticsService {
                     }
                 }
 
-                return collectedMedia.slice(0, analysisLimit);
+                return collectedMedia.slice(0, computedAnalysisLimit);
             },
             async () => this.getStoryAnalytics()
         ], 2);
