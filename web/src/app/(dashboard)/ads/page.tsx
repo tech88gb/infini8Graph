@@ -2702,6 +2702,32 @@ export default function AdsPage() {
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>📚 Delivery Readiness <InfoTooltip text="Meta learning and learning-limited are ad set delivery states. For event-optimized goals, a practical benchmark is about 50 optimization events per week. For reach or impression goals, this section switches to delivery-stability mode instead of pretending there should be 50 conversions." /></span>}
                                     subtitle="Objective-aware read on learning, limited delivery, and scale readiness"
                                 >
+                                    {(() => {
+                                        const learningPhase = advancedData.data.learningPhase || [];
+                                        const learningLimitedCount = learningPhase.filter((item: any) => item.learningStatus?.status === 'limited').length;
+                                        const learningCount = learningPhase.filter((item: any) => item.learningStatus?.status === 'learning').length;
+                                        const stableCount = learningPhase.filter((item: any) => item.learningStatus?.status === 'active' || item.learningStatus?.status === 'delivery_active').length;
+
+                                        return (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+                                                {learningLimitedCount > 0 && (
+                                                    <div style={{ padding: '8px 12px', borderRadius: 999, background: 'rgba(239, 68, 68, 0.14)', border: '1px solid rgba(239, 68, 68, 0.28)', color: '#fca5a5', fontSize: 12, fontWeight: 600 }}>
+                                                        {learningLimitedCount} ad set{learningLimitedCount === 1 ? '' : 's'} are Learning Limited
+                                                    </div>
+                                                )}
+                                                {learningCount > 0 && (
+                                                    <div style={{ padding: '8px 12px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.28)', color: '#fcd34d', fontSize: 12, fontWeight: 600 }}>
+                                                        {learningCount} still in Learning
+                                                    </div>
+                                                )}
+                                                {stableCount > 0 && (
+                                                    <div style={{ padding: '8px 12px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.14)', border: '1px solid rgba(16, 185, 129, 0.28)', color: '#86efac', fontSize: 12, fontWeight: 600 }}>
+                                                        {stableCount} with stable delivery
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                     <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
                                         This section is based on each ad set&apos;s <strong>objective</strong> and <strong>optimization goal</strong>. Conversion-style ad sets are judged on optimization-event pace. Awareness-style ad sets are judged on delivery stability, not a fake 50-conversion target.
                                     </div>
@@ -2747,6 +2773,28 @@ export default function AdsPage() {
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                                                             <div style={{ fontWeight: 600, fontSize: 13 }}>{adset.name}</div>
+                                                            <span style={{
+                                                                padding: '3px 8px',
+                                                                borderRadius: 999,
+                                                                background: status.status === 'limited'
+                                                                    ? 'rgba(239, 68, 68, 0.14)'
+                                                                    : status.status === 'learning'
+                                                                        ? 'rgba(245, 158, 11, 0.14)'
+                                                                        : 'rgba(148, 163, 184, 0.14)',
+                                                                color: status.status === 'limited'
+                                                                    ? '#fca5a5'
+                                                                    : status.status === 'learning'
+                                                                        ? '#fcd34d'
+                                                                        : '#cbd5e1',
+                                                                fontSize: 10,
+                                                                fontWeight: 700
+                                                            }}>
+                                                                {status.status === 'limited'
+                                                                    ? 'Learning Limited'
+                                                                    : status.status === 'learning'
+                                                                        ? 'Learning'
+                                                                        : status.label}
+                                                            </span>
                                                             <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#c7d2fe', fontSize: 10 }}>
                                                                 {toTitleCase(adset.objectiveType || 'Unknown')}
                                                             </span>
