@@ -141,6 +141,85 @@ class AnalyticsService {
         return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     }
 
+    getRangeAwareMediaTarget(section, startDate = null, endDate = null) {
+        const rangeDays = this.getDateRangeDays(startDate, endDate);
+        if (!(startDate || endDate)) {
+            return MEDIA_FETCH_LIMITS[section]?.default || 24;
+        }
+
+        switch (section) {
+            case 'growth':
+                if ((rangeDays || 0) >= 75) return 160;
+                if ((rangeDays || 0) >= 45) return 96;
+                return 60;
+            case 'bestTime':
+                if ((rangeDays || 0) >= 75) return 150;
+                if ((rangeDays || 0) >= 45) return 96;
+                return 60;
+            case 'hashtags':
+                if ((rangeDays || 0) >= 75) return 180;
+                if ((rangeDays || 0) >= 45) return 120;
+                return 84;
+            case 'contentIntel':
+                if ((rangeDays || 0) >= 75) return 150;
+                if ((rangeDays || 0) >= 45) return 96;
+                return 60;
+            default:
+                return MEDIA_FETCH_LIMITS[section]?.ranged || 36;
+        }
+    }
+
+    async collectMediaForDateWindow(section, startDate = null, endDate = null, options = {}) {
+        const {
+            includeDetailedVideoInsights = false,
+            fetchShares = false,
+            detailedInsightConcurrency = 4
+        } = options;
+        const targetCount = this.getRangeAwareMediaTarget(section, startDate, endDate);
+
+        if (!(startDate || endDate)) {
+            return this.instagram.getAllMediaWithInsights(targetCount, {
+                includeDetailedVideoInsights,
+                fetchShares,
+                detailedInsightConcurrency
+            });
+        }
+
+        const rangeDays = this.getDateRangeDays(startDate, endDate);
+        const { startStr } = this.clampDateWindow(startDate, endDate);
+        const batchSize = 24;
+        const maxPages = (rangeDays || 0) >= 75 ? 30 : (rangeDays || 0) >= 45 ? 18 : 10;
+        const collected = [];
+        let cursor = null;
+        let scanned = 0;
+
+        while (scanned < maxPages && collected.length < targetCount) {
+            const response = await this.instagram.getMediaPageWithInsights(batchSize, cursor, {
+                includeDetailedVideoInsights,
+                fetchShares,
+                detailedInsightConcurrency
+            });
+            const rawBatch = response?.data || [];
+            if (rawBatch.length === 0) break;
+
+            const filteredBatch = this.filterMediaByDate(rawBatch, startDate, endDate);
+            if (filteredBatch.length > 0) {
+                collected.push(...filteredBatch);
+            }
+
+            scanned += 1;
+            cursor = response?.paging?.cursors?.after || null;
+            const oldestBatchDate = (rawBatch[rawBatch.length - 1]?.timestamp || '').split('T')[0];
+
+            if (!cursor) break;
+            if (startDate && oldestBatchDate && oldestBatchDate < startStr && filteredBatch.length === 0) {
+                break;
+            }
+        }
+
+        return collected.slice(0, targetCount);
+    }
+
     parseInsightMetricValue(value) {
         if (typeof value === 'number') return value;
         if (typeof value === 'string') {
@@ -573,14 +652,11 @@ class AnalyticsService {
      * Get growth analytics
      */
     async getGrowth(startDate = null, endDate = null) {
-        const dateKey = `v4_${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v5_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('growth', dateKey);
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const fetchLimit = (startDate || endDate)
-            ? MEDIA_FETCH_LIMITS.growth.ranged
-            : MEDIA_FETCH_LIMITS.growth.default;
         let media = [];
         let accountMetrics = [];
         let accountAggregates = {
@@ -592,11 +668,11 @@ class AnalyticsService {
         };
         const growthTasks = [
             async () => {
-                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+                const fetchedMedia = await this.collectMediaForDateWindow('growth', startDate, endDate, {
                     includeDetailedVideoInsights: false,
                     fetchShares: false
                 });
-                return this.filterMediaByDate(fetchedMedia, startDate, endDate);
+                return fetchedMedia;
             },
             async () => this.getDailyAccountMetrics(startDate, endDate),
             async () => this.getAccountAggregateMetrics(startDate, endDate)
@@ -792,18 +868,13 @@ class AnalyticsService {
      * Get best time to post analysis
      */
     async getBestTimeToPost(startDate = null, endDate = null) {
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v2_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('best_time', dateKey);
         if (cached) return cached;
 
-        // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate)
-            ? MEDIA_FETCH_LIMITS.bestTime.ranged
-            : MEDIA_FETCH_LIMITS.bestTime.default;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+        const media = await this.collectMediaForDateWindow('bestTime', startDate, endDate, {
             fetchShares: true
         });
-        media = this.filterMediaByDate(media, startDate, endDate);
 
         const hourlyStats = {};
         const dailyStats = {};
@@ -904,18 +975,13 @@ class AnalyticsService {
      * Get hashtag performance analysis
      */
     async getHashtagAnalysis(startDate = null, endDate = null) {
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v2_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('hashtags', dateKey);
         if (cached) return cached;
 
-        // Fetch more to ensure we have enough after filtering
-        const fetchLimit = (startDate || endDate)
-            ? MEDIA_FETCH_LIMITS.hashtags.ranged
-            : MEDIA_FETCH_LIMITS.hashtags.default;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+        const media = await this.collectMediaForDateWindow('hashtags', startDate, endDate, {
             fetchShares: false
         });
-        media = this.filterMediaByDate(media, startDate, endDate);
 
         // Extract hashtags from captions
         const hashtagStats = {};
@@ -1041,19 +1107,15 @@ class AnalyticsService {
      * Includes: format battle, caption analysis, viral coefficient, save-to-like ratio
      */
     async getContentIntelligence(startDate = null, endDate = null) {
-        const dateKey = `${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v2_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('content_intelligence', dateKey);
         if (cached) return cached;
 
         const profile = await this.instagram.getProfile();
-        const fetchLimit = (startDate || endDate)
-            ? MEDIA_FETCH_LIMITS.contentIntel.ranged
-            : MEDIA_FETCH_LIMITS.contentIntel.default;
-        let media = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+        const media = await this.collectMediaForDateWindow('contentIntel', startDate, endDate, {
             includeDetailedVideoInsights: false,
             fetchShares: true
         });
-        media = this.filterMediaByDate(media, startDate, endDate);
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const enrichedPosts = media.map((post) => {

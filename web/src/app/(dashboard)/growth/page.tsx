@@ -334,7 +334,7 @@ export default function GrowthPage() {
             {growthData.some((day: any) => (day.followerCount || 0) > 0) && (
                 <SectionCard title="Follower Gains Trend" subtitle="Daily followers gained returned by Meta account insights">
                     <ResponsiveContainer width="100%" height={280}>
-                        <LineChart data={growthData.slice(-30)}>
+                        <LineChart data={growthData}>
                             <XAxis
                                 dataKey="date"
                                 stroke="#9ca3af"
@@ -377,7 +377,7 @@ export default function GrowthPage() {
             {accountMetrics.length > 0 && (
                 <SectionCard title="Account Reach Trend" subtitle="Daily reach is time-series. Views and profile visits are aggregate totals for the selected range.">
                     <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={accountMetrics.slice(-30)}>
+                        <LineChart data={accountMetrics}>
                             <XAxis
                                 dataKey="date"
                                 stroke="#9ca3af"
@@ -399,7 +399,7 @@ export default function GrowthPage() {
             {/* Engagement Over Time Chart */}
             <SectionCard title="Engagement Over Time" subtitle={`Engagement trend: ${dateRange.startDate} → ${dateRange.endDate}`}>
                 <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={growthData.slice(-30)}>
+                    <AreaChart data={growthData}>
                         <defs>
                             <linearGradient id="growthGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -433,7 +433,7 @@ export default function GrowthPage() {
             {/* Likes vs Comments Trend */}
             <SectionCard title="Likes vs Comments Trend" subtitle="How your engagement metrics compare">
                 <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={growthData.slice(-30)}>
+                    <LineChart data={growthData}>
                         <XAxis
                             dataKey="date"
                             stroke="#9ca3af"
@@ -465,7 +465,7 @@ export default function GrowthPage() {
             {growthData.length > 0 && (
                 <SectionCard title="Posting Activity" subtitle="Number of posts per day">
                     <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={growthData.slice(-14)}>
+                        <BarChart data={growthData}>
                             <XAxis
                                 dataKey="date"
                                 stroke="#9ca3af"
