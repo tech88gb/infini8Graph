@@ -3289,77 +3289,142 @@ export default function AdsPage() {
                                     {/* Summary Stats */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>Videos Analyzed</div>
+                                            <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Videos Analyzed
+                                                <InfoTooltip text="How many ads had enough Meta video-play or watch-depth data to be evaluated in this section." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700 }}>{deepInsightsData.data.videoSummary.totalVideos}</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>Avg Hook Rate (25%)</div>
+                                            <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Avg Hook Rate (25%)
+                                                <InfoTooltip text="Average share of video plays that reached the 25% watch milestone. This is a practical read on whether the opening earned attention." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>{deepInsightsData.data.videoSummary.avgHookRate}%</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>Avg Completion</div>
+                                            <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Avg Completion
+                                                <InfoTooltip text="Average share of plays that reached 100% watched. This is usually much lower than hook rate and should be read as a depth metric, not a goal on its own." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepInsightsData.data.videoSummary.avgCompletionRate}%</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>Needs Improvement</div>
+                                            <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Needs Improvement
+                                                <InfoTooltip text="Count of video ads whose hook or hold pattern suggests creative work is needed before scaling harder." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{deepInsightsData.data.videoSummary.needsWork}</div>
                                         </div>
                                     </div>
 
                                     {/* Video Cards */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
                                         {(deepInsightsData.data.videoHookAnalysis || []).slice(0, 8).map((v: any) => (
                                             <div key={v.adId} style={{
-                                                background: 'var(--background)',
-                                                borderRadius: 12,
+                                                background: 'linear-gradient(180deg, rgba(15,23,42,0.78), rgba(15,23,42,0.96))',
+                                                borderRadius: 14,
                                                 overflow: 'hidden',
-                                                border: v.pattern.includes('Winner') ? '2px solid #10b981' :
-                                                    v.pattern.includes('Weak Hook') ? '2px solid #ef4444' : '1px solid var(--border)'
+                                                border: `1px solid ${v.patternColor}55`,
+                                                boxShadow: '0 14px 30px rgba(0,0,0,0.16)'
                                             }}>
-                                                {/* Pattern Header */}
-                                                <div style={{
-                                                    padding: '10px 16px',
-                                                    background: v.patternColor,
-                                                    color: 'white',
-                                                    fontWeight: 600,
-                                                    fontSize: 13
-                                                }}>
-                                                    {v.pattern}
+                                                <div style={{ position: 'relative', height: 118, background: 'rgba(15, 23, 42, 0.82)' }}>
+                                                    {v.thumbnail ? (
+                                                        <img
+                                                            src={v.thumbnail}
+                                                            alt={v.adName}
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '100%',
+                                                                objectFit: v.previewSource === 'thumbnail' ? 'contain' : 'cover',
+                                                                background: v.previewSource === 'thumbnail' ? 'rgba(15, 23, 42, 0.94)' : undefined,
+                                                                padding: v.previewSource === 'thumbnail' ? 10 : 0,
+                                                                filter: v.previewSource === 'thumbnail' ? 'saturate(0.95) contrast(1.03)' : 'none'
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(226,232,240,0.7)', fontSize: 12 }}>
+                                                            Preview unavailable
+                                                        </div>
+                                                    )}
+                                                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(2,6,23,0.12), rgba(2,6,23,0.82))' }} />
+                                                    <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            padding: '5px 9px',
+                                                            borderRadius: 999,
+                                                            background: `${v.patternColor}e6`,
+                                                            color: '#fff',
+                                                            fontWeight: 700,
+                                                            fontSize: 10
+                                                        }}>
+                                                            {v.pattern.replace(/^.\s*/, '')}
+                                                        </span>
+                                                        {v.previewSource === 'thumbnail' && (
+                                                            <span style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                padding: '5px 8px',
+                                                                borderRadius: 999,
+                                                                background: 'rgba(15,23,42,0.78)',
+                                                                color: '#cbd5e1',
+                                                                fontSize: 10
+                                                            }}>
+                                                                Preview
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+                                                        <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', marginBottom: 4, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
+                                                            {v.adName}
+                                                        </div>
+                                                        <div style={{ fontSize: 10, color: '#cbd5e1' }}>
+                                                            {[v.campaignName, v.adsetName].filter(Boolean).join(' • ') || 'Ad-level read'}
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                <div style={{ padding: 16 }}>
-                                                    <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>{v.adName}</div>
-                                                    <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>{v.insight}</p>
+                                                <div style={{ padding: 14 }}>
+                                                    <p style={{ fontSize: 12, color: '#dbe4f0', marginBottom: 12, lineHeight: 1.45 }}>{v.insight}</p>
 
-                                                    {/* Retention Curve */}
-                                                    <div style={{ display: 'flex', alignItems: 'end', gap: 4, height: 60, marginBottom: 12 }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 12 }}>
                                                         {(v.retentionCurve || []).map((point: any, i: number) => (
-                                                            <div key={i} style={{ flex: 1, textAlign: 'center' }}>
-                                                                <div style={{
-                                                                    height: `${Math.max(point.value, 5)}%`,
-                                                                    background: `linear-gradient(to top, ${v.patternColor}, ${v.patternColor}88)`,
-                                                                    borderRadius: '4px 4px 0 0',
-                                                                    minHeight: 4
-                                                                }}></div>
-                                                                <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{point.stage}</div>
+                                                            <div key={i} style={{ textAlign: 'center' }}>
+                                                                <div style={{ height: 6, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 6 }}>
+                                                                    <div style={{
+                                                                        width: `${Math.max(Math.min(point.value, 100), 3)}%`,
+                                                                        height: '100%',
+                                                                        borderRadius: 999,
+                                                                        background: v.patternColor
+                                                                    }} />
+                                                                </div>
+                                                                <div style={{ fontSize: 9, color: 'var(--muted)' }}>{point.stage}</div>
                                                             </div>
                                                         ))}
                                                     </div>
 
-                                                    {/* Metrics */}
                                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
-                                                        <div>
-                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{v.retention.hookRate}%</div>
-                                                            <div style={{ fontSize: 9, color: 'var(--muted)' }}>Hook Rate</div>
+                                                        <div style={{ padding: '10px 8px', borderRadius: 10, background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(148,163,184,0.12)' }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 700 }}>{v.retention.hookRate}%</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hook Rate</div>
                                                         </div>
-                                                        <div>
-                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{v.retention.holdRate}%</div>
-                                                            <div style={{ fontSize: 9, color: 'var(--muted)' }}>Hold Rate</div>
+                                                        <div style={{ padding: '10px 8px', borderRadius: 10, background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(148,163,184,0.12)' }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 700 }}>{v.retention.holdRate}%</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hold Rate</div>
                                                         </div>
-                                                        <div>
-                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{v.conversions}</div>
-                                                            <div style={{ fontSize: 9, color: 'var(--muted)' }}>Conv</div>
+                                                        <div style={{ padding: '10px 8px', borderRadius: 10, background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(148,163,184,0.12)' }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 700 }}>{formatNumber(v.conversions)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Results</div>
                                                         </div>
+                                                    </div>
+
+                                                    <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11, color: 'var(--muted)' }}>
+                                                        <span>Spend {formatCurrency(v.spend)}</span>
+                                                        <span>•</span>
+                                                        <span>Completion {v.retention.completionRate}%</span>
+                                                        <span>•</span>
+                                                        <span>{v.previewSource === 'creative' ? 'Creative preview' : v.previewSource === 'thumbnail' ? 'Thumbnail preview' : 'No preview source'}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -3404,11 +3469,14 @@ export default function AdsPage() {
                                     {/* Summary Cards */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>Total Placements</div>
+                                            <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Total Placements
+                                                <InfoTooltip text="How many placement combinations returned spend in the selected period." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700 }}>{deepPlacementSummary.totalPlacements}</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>
+                                            <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 {deepProfileType === 'sales' || deepProfileType === 'mixed'
                                                     ? 'Blended ROAS'
                                                     : deepProfileType === 'leads'
@@ -3416,6 +3484,15 @@ export default function AdsPage() {
                                                         : deepProfileType === 'traffic'
                                                             ? 'Blended CPC'
                                                             : 'Total Spend'}
+                                                <InfoTooltip text={
+                                                    deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                        ? 'Account-level placement ROAS benchmark: total purchase value divided by total spend across placements.'
+                                                        : deepProfileType === 'leads'
+                                                            ? 'Account-level placement CPL benchmark: total spend divided by total leads across placements.'
+                                                            : deepProfileType === 'traffic'
+                                                                ? 'Account-level placement CPC benchmark: total spend divided by total clicks across placements.'
+                                                                : 'Total spend recorded across all placement rows.'
+                                                } />
                                             </div>
                                             <div style={{ fontSize: 24, fontWeight: 700 }}>
                                                 {deepProfileType === 'sales' || deepProfileType === 'mixed'
@@ -3428,11 +3505,17 @@ export default function AdsPage() {
                                             </div>
                                         </div>
                                         <div style={{ padding: 16, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div style={{ color: '#10b981', fontSize: 11 }}>Scale</div>
+                                            <div style={{ color: '#10b981', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Scale
+                                                <InfoTooltip text="Placements already beating the relevant benchmark for this account focus with enough evidence to justify more budget." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepPlacementSummary.scaleCount}</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'rgba(245, 158, 11, 0.1)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div style={{ color: '#f59e0b', fontSize: 11 }}>Review</div>
+                                            <div style={{ color: '#f59e0b', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                Review
+                                                <InfoTooltip text="Placements that have spent enough to judge, but are not proving efficient enough for this account focus." />
+                                            </div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{deepPlacementSummary.reviewCount}</div>
                                             <div style={{ fontSize: 10, color: '#f59e0b' }}>
                                                 {deepPlacementSummary.holdCount} hold / efficient
@@ -3482,7 +3565,7 @@ export default function AdsPage() {
                                                     <th>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? 'Purchases' : deepProfileType === 'leads' ? 'Leads' : deepProfileType === 'traffic' ? 'LPVs' : 'Reach'}</th>
                                                     <th>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? 'CPA' : deepProfileType === 'leads' ? 'CPL' : deepProfileType === 'traffic' ? 'CPC' : 'CPM'}</th>
                                                     <th>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? 'ROAS' : deepProfileType === 'leads' ? 'CTR' : deepProfileType === 'traffic' ? 'LPV Rate' : 'CTR'}</th>
-                                                    <th>Decision</th>
+                                                    <th><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Decision <InfoTooltip text="Practical action label derived from the real placement metrics shown in this row and the account-level benchmark for this account focus." /></span></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
