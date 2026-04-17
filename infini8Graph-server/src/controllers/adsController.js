@@ -97,6 +97,33 @@ function findActionMetric(entries = [], candidates = []) {
     }) || null;
 }
 
+function mapGeoPerformanceRow(row, keyName) {
+    const actions = row?.actions || [];
+    const actionValues = row?.action_values || [];
+    const costPerAction = row?.cost_per_action_type || [];
+    const purchaseMetric = findActionMetric(actions, ACTION_CANDIDATES.purchases);
+    const purchaseValueMetric = findActionMetric(actionValues, ACTION_CANDIDATES.purchases);
+    const purchaseCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.purchases);
+    const purchaseRoas = Array.isArray(row?.purchase_roas)
+        ? parseMetricNumber(row.purchase_roas[0]?.value)
+        : parseMetricNumber(row?.purchase_roas);
+
+    return {
+        [keyName]: row?.[keyName] || 'Unknown',
+        spend: parseMetricNumber(row?.spend),
+        impressions: parseMetricNumber(row?.impressions),
+        clicks: parseMetricNumber(row?.clicks),
+        reach: parseMetricNumber(row?.reach),
+        ctr: parseMetricNumber(row?.ctr),
+        cpc: parseMetricNumber(row?.cpc),
+        cpm: parseMetricNumber(row?.cpm),
+        purchases: parseMetricNumber(purchaseMetric?.value),
+        purchaseValue: parseMetricNumber(purchaseValueMetric?.value),
+        purchaseRoas,
+        costPerPurchase: parseMetricNumber(purchaseCostMetric?.value)
+    };
+}
+
 function getCampaignTypeLabel(objective = '') {
     const group = mapObjectiveGroup(objective);
     switch (group) {
@@ -666,11 +693,14 @@ export async function getGeography(req, res) {
         const cacheKey = buildMetaCacheKey('meta-geography', [req.user.userId, accountId, datePreset]);
         const [countries, regions] = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
             const [countryData, regionData] = await Promise.all([
-                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'country', 'spend,impressions,clicks,reach,ctr'),
-                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'region', 'spend,impressions,clicks,reach')
+                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'country', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas'),
+                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'region', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas')
             ]);
 
-            return [countryData, regionData];
+            return [
+                countryData.map((row) => mapGeoPerformanceRow(row, 'country')).sort((a, b) => b.spend - a.spend),
+                regionData.map((row) => mapGeoPerformanceRow(row, 'region')).sort((a, b) => b.spend - a.spend)
+            ];
         });
 
         res.json({ success: true, data: { countries, regions } });

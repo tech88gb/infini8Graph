@@ -835,7 +835,7 @@ export default function AdsPage() {
             const res = await adsApi.getGeography(effectiveAccount, datePreset);
             return res.data;
         },
-        enabled: !!effectiveAccount && activeTab === 'geo',
+        enabled: !!effectiveAccount && (activeTab === 'geo' || activeTab === 'demographics'),
         refetchOnWindowFocus: false
     });
 
@@ -906,6 +906,16 @@ export default function AdsPage() {
     const positions = insightsData?.data?.positions || [];
     const countries = geographyData?.data?.countries || [];
     const regions = geographyData?.data?.regions || [];
+    const regionPerformanceRows = [...regions]
+        .filter((region: any) => Number(region?.spend || 0) > 0)
+        .sort((a: any, b: any) => {
+            const roasDiff = Number(b?.purchaseRoas || 0) - Number(a?.purchaseRoas || 0);
+            if (roasDiff !== 0) return roasDiff;
+            return Number(b?.purchaseValue || 0) - Number(a?.purchaseValue || 0);
+        });
+    const topRegionByRoas = regionPerformanceRows.find((region: any) => Number(region?.purchaseRoas || 0) > 0) || null;
+    const topRegionByRevenue = [...regionPerformanceRows].sort((a: any, b: any) => Number(b?.purchaseValue || 0) - Number(a?.purchaseValue || 0))[0] || null;
+    const regionRoasCoverage = regionPerformanceRows.filter((region: any) => Number(region?.purchaseRoas || 0) > 0).length;
     const videoViews = insightsData?.data?.videoViews || {};
     const conversions = insightsData?.data?.conversions || [];
     const actionValues = insightsData?.data?.actionValues || [];
@@ -1794,43 +1804,116 @@ export default function AdsPage() {
 
             {/* ==================== DEMOGRAPHICS TAB ==================== */}
             {activeTab === 'demographics' && (
-                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Demographics <InfoTooltip text="Age and gender breakdown of who is interacting with your ads." /></span>} subtitle="Breakdown by age and gender">
-                    {demographicsLoading ? (
-                        <div style={{ textAlign: 'center', padding: 40 }}>
-                            <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
-                            <p className="text-muted">Loading demographics...</p>
-                        </div>
-                    ) : demographics.length > 0 ? (
-                        <div style={{ overflowX: 'auto' }}>
-                            <table className="table">
-                                <thead>
-                                    <tr>
-                                        <th>Age / Gender</th>
-                                        <th>Spend</th>
-                                        <th>Impressions</th>
-                                        <th>Reach</th>
-                                        <th>Clicks</th>
-                                        <th>CTR</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {demographics.slice(0, 15).map((d: any, i: number) => (
-                                        <tr key={i}>
-                                            <td style={{ fontWeight: 500 }}>{d.age} {d.gender}</td>
-                                            <td>{formatCurrency(d.spend)}</td>
-                                            <td>{formatNumber(d.impressions)}</td>
-                                            <td>{formatNumber(d.reach)}</td>
-                                            <td>{formatNumber(d.clicks)}</td>
-                                            <td>{formatPercent(d.ctr)}</td>
+                <div style={{ display: 'grid', gap: 20 }}>
+                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Demographics <InfoTooltip text="Age and gender breakdown of who is interacting with your ads." /></span>} subtitle="Breakdown by age and gender">
+                        {demographicsLoading ? (
+                            <div style={{ textAlign: 'center', padding: 40 }}>
+                                <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                                <p className="text-muted">Loading demographics...</p>
+                            </div>
+                        ) : demographics.length > 0 ? (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Age / Gender</th>
+                                            <th>Spend</th>
+                                            <th>Impressions</th>
+                                            <th>Reach</th>
+                                            <th>Clicks</th>
+                                            <th>CTR</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <p className="text-muted">No demographic data available</p>
-                    )}
-                </SectionCard>
+                                    </thead>
+                                    <tbody>
+                                        {demographics.slice(0, 15).map((d: any, i: number) => (
+                                            <tr key={i}>
+                                                <td style={{ fontWeight: 500 }}>{d.age} {d.gender}</td>
+                                                <td>{formatCurrency(d.spend)}</td>
+                                                <td>{formatNumber(d.impressions)}</td>
+                                                <td>{formatNumber(d.reach)}</td>
+                                                <td>{formatNumber(d.clicks)}</td>
+                                                <td>{formatPercent(d.ctr)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-muted">No demographic data available</p>
+                        )}
+                    </SectionCard>
+
+                    <SectionCard
+                        title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="Region-level performance from Meta's geo breakdown. This view highlights which regions are generating purchase value and ROAS, not just spend and clicks." /></span>}
+                        subtitle="Detailed region performance with spend, purchases, purchase value, and ROAS"
+                    >
+                        {geographyLoading && regionPerformanceRows.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: 40 }}>
+                                <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                                <p className="text-muted">Loading region performance...</p>
+                            </div>
+                        ) : regionPerformanceRows.length > 0 ? (
+                            <div style={{ display: 'grid', gap: 16 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                                    <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)' }}>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Regions With ROAS</div>
+                                        <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(regionRoasCoverage)}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Regions where Meta returned purchase value and spend</div>
+                                    </div>
+                                    <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top ROAS Region</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topRegionByRoas?.region || 'No ROAS yet'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                                            {topRegionByRoas ? `${formatRoas(topRegionByRoas.purchaseRoas)} on ${formatCurrency(topRegionByRoas.spend)}` : 'No region-level purchase value available'}
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)' }}>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top Revenue Region</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topRegionByRevenue?.region || 'No revenue yet'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                                            {topRegionByRevenue ? `${formatCurrency(topRegionByRevenue.purchaseValue)} from ${formatNumber(topRegionByRevenue.purchases)} purchases` : 'No purchase-value data available'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table className="table">
+                                        <thead>
+                                            <tr>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Region <InfoTooltip text="Region returned by Meta’s geo breakdown for the selected date range." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend <InfoTooltip text="Spend attributed to this region in the selected window." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Purchase Value <InfoTooltip text="Purchase value Meta attributed to this region." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Purchases <InfoTooltip text="Purchase count Meta attributed to this region." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>ROAS <InfoTooltip text="Purchase value divided by spend for that region." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Cost / Purchase <InfoTooltip text="Spend divided by purchases for this region when Meta returns purchase actions." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CTR <InfoTooltip text="Regional click-through rate for this region." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPC <InfoTooltip text="Regional cost per click." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPM <InfoTooltip text="Regional cost per thousand impressions." /></span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {regionPerformanceRows.slice(0, 20).map((region: any, index: number) => (
+                                                <tr key={`${region.region}-${index}`}>
+                                                    <td style={{ fontWeight: 600 }}>{region.region}</td>
+                                                    <td>{formatCurrency(region.spend)}</td>
+                                                    <td>{region.purchaseValue ? formatCurrency(region.purchaseValue) : '—'}</td>
+                                                    <td>{formatNumber(region.purchases || 0)}</td>
+                                                    <td>{region.purchaseRoas ? formatRoas(region.purchaseRoas) : '—'}</td>
+                                                    <td>{region.costPerPurchase ? formatCurrency(region.costPerPurchase) : '—'}</td>
+                                                    <td>{formatPercent(region.ctr || 0)}</td>
+                                                    <td>{region.cpc ? formatCurrency(region.cpc) : '—'}</td>
+                                                    <td>{region.cpm ? formatCurrency(region.cpm) : '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-muted">No region-level performance data available for this date range.</p>
+                        )}
+                    </SectionCard>
+                </div>
             )}
 
             {/* ==================== GEOGRAPHY TAB ==================== */}
