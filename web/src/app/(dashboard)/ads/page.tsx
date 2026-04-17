@@ -932,7 +932,8 @@ export default function AdsPage() {
         });
     const topCountryByRoas = countryPerformanceRows.find((country: any) => Number(country?.purchaseRoas || 0) > 0) || null;
     const countryRoasCoverage = countryPerformanceRows.filter((country: any) => Number(country?.purchaseRoas || 0) > 0).length;
-    const showGeoPurchaseColumns = regionRoasCoverage > 0 || countryRoasCoverage > 0;
+    const showRegionPurchaseColumns = regionRoasCoverage > 0;
+    const showCountryPurchaseColumns = countryRoasCoverage > 0;
     const topRegionByCtr = [...regionPerformanceRows].sort((a: any, b: any) => Number(b?.ctr || 0) - Number(a?.ctr || 0))[0] || null;
     const topRegionBySpend = [...regionPerformanceRows].sort((a: any, b: any) => Number(b?.spend || 0) - Number(a?.spend || 0))[0] || null;
     const videoViews = insightsData?.data?.videoViews || {};
@@ -1911,50 +1912,50 @@ export default function AdsPage() {
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                                 <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)' }}>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
-                                        {showGeoPurchaseColumns ? 'Regions With ROAS' : 'Tracked Regions'}
+                                        {showRegionPurchaseColumns ? 'Regions With ROAS' : 'Tracked Regions'}
                                     </div>
                                     <div style={{ fontSize: 22, fontWeight: 700 }}>
-                                        {formatNumber(showGeoPurchaseColumns ? regionRoasCoverage : regionPerformanceRows.length)}
+                                        {formatNumber(showRegionPurchaseColumns ? regionRoasCoverage : regionPerformanceRows.length)}
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                                        {showGeoPurchaseColumns ? 'Regions where Meta returned purchase value and spend' : 'Regions with delivery data in this window'}
+                                        {showRegionPurchaseColumns ? 'Regions where Meta returned purchase value and spend' : 'Regions with delivery data in this window'}
                                     </div>
                                 </div>
                                 <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
-                                        {showGeoPurchaseColumns ? 'Top ROAS Region' : 'Top CTR Region'}
+                                        {showRegionPurchaseColumns ? 'Top ROAS Region' : 'Top CTR Region'}
                                     </div>
                                     <div style={{ fontSize: 18, fontWeight: 700 }}>
-                                        {showGeoPurchaseColumns ? (topRegionByRoas?.region || 'No ROAS yet') : (topRegionByCtr?.region || 'No CTR leader yet')}
+                                        {showRegionPurchaseColumns ? (topRegionByRoas?.region || 'No ROAS yet') : (topRegionByCtr?.region || 'No CTR leader yet')}
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                                        {showGeoPurchaseColumns
+                                        {showRegionPurchaseColumns
                                             ? (topRegionByRoas ? `${formatRoas(topRegionByRoas.purchaseRoas)} on ${formatCurrency(topRegionByRoas.spend)}` : 'Meta did not return region-level purchase value')
                                             : (topRegionByCtr ? `${formatPercent(topRegionByCtr.ctr || 0)} CTR on ${formatCurrency(topRegionByCtr.spend)}` : 'Meta returned only limited geo delivery data')}
                                     </div>
                                 </div>
                                 <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)' }}>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
-                                        {showGeoPurchaseColumns ? 'Top Revenue Region' : 'Highest Spend Region'}
+                                        {showRegionPurchaseColumns ? 'Top Revenue Region' : 'Highest Spend Region'}
                                     </div>
                                     <div style={{ fontSize: 18, fontWeight: 700 }}>
-                                        {showGeoPurchaseColumns ? (topRegionByRevenue?.region || 'No revenue yet') : (topRegionBySpend?.region || 'No spend yet')}
+                                        {showRegionPurchaseColumns ? (topRegionByRevenue?.region || 'No revenue yet') : (topRegionBySpend?.region || 'No spend yet')}
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                                        {showGeoPurchaseColumns
+                                        {showRegionPurchaseColumns
                                             ? (topRegionByRevenue ? `${formatCurrency(topRegionByRevenue.purchaseValue)} from ${formatNumber(topRegionByRevenue.purchases)} purchases` : 'No region-level purchase value available')
                                             : (topRegionBySpend ? `${formatCurrency(topRegionBySpend.spend)} spent` : 'No geo spend available')}
                                     </div>
                                 </div>
                                 <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.18)' }}>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
-                                        {showGeoPurchaseColumns ? 'Top ROAS Country' : 'Geo Revenue Signal'}
+                                        {showCountryPurchaseColumns ? 'Top ROAS Country' : 'Geo Revenue Signal'}
                                     </div>
                                     <div style={{ fontSize: 18, fontWeight: 700 }}>
-                                        {showGeoPurchaseColumns ? (topCountryByRoas?.country || 'No ROAS yet') : 'Purchase data unavailable'}
+                                        {showCountryPurchaseColumns ? (topCountryByRoas?.country || 'No ROAS yet') : 'Purchase data unavailable'}
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                                        {showGeoPurchaseColumns
+                                        {showCountryPurchaseColumns
                                             ? (topCountryByRoas ? `${formatRoas(topCountryByRoas.purchaseRoas)} on ${formatCurrency(topCountryByRoas.spend)}` : 'No country-level purchase value available')
                                             : 'Meta is returning delivery-only geo breakdowns for this view'}
                                     </div>
@@ -1962,7 +1963,7 @@ export default function AdsPage() {
                             </div>
 
                             {/* Country Breakdown */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text={showGeoPurchaseColumns ? "Country-level performance with spend, purchase value, ROAS, click efficiency, and purchase outcomes." : "Country-level delivery performance. Purchase-value fields are hidden here because Meta did not return usable geo purchase data for this breakdown."} /></span>} subtitle={showGeoPurchaseColumns ? "How countries perform on both delivery and revenue efficiency" : "How countries perform on delivery efficiency for this breakdown"}>
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text={showCountryPurchaseColumns ? "Country-level performance with spend, purchase value, ROAS, click efficiency, and purchase outcomes." : "Country-level delivery performance. Purchase-value fields are hidden here because Meta did not return usable country purchase data for this breakdown."} /></span>} subtitle={showCountryPurchaseColumns ? "How countries perform on both delivery and revenue efficiency" : "How countries perform on delivery efficiency for this breakdown"}>
                                 {countryPerformanceRows.length > 0 ? (
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
@@ -1970,10 +1971,10 @@ export default function AdsPage() {
                                                 <tr>
                                                     <th>Country</th>
                                                     <th>Spend</th>
-                                                    {showGeoPurchaseColumns && <th>Purchase Value</th>}
-                                                    {showGeoPurchaseColumns && <th>Purchases</th>}
-                                                    {showGeoPurchaseColumns && <th>ROAS</th>}
-                                                    {showGeoPurchaseColumns && <th>Cost / Purchase</th>}
+                                                    {showCountryPurchaseColumns && <th>Purchase Value</th>}
+                                                    {showCountryPurchaseColumns && <th>Purchases</th>}
+                                                    {showCountryPurchaseColumns && <th>ROAS</th>}
+                                                    {showCountryPurchaseColumns && <th>Cost / Purchase</th>}
                                                     <th>CTR</th>
                                                     <th>CPC</th>
                                                     <th>CPM</th>
@@ -1989,10 +1990,10 @@ export default function AdsPage() {
                                                             </div>
                                                         </td>
                                                         <td>{formatCurrency(c.spend)}</td>
-                                                        {showGeoPurchaseColumns && <td>{c.purchaseValue ? formatCurrency(c.purchaseValue) : '—'}</td>}
-                                                        {showGeoPurchaseColumns && <td>{formatNumber(c.purchases || 0)}</td>}
-                                                        {showGeoPurchaseColumns && <td>{c.purchaseRoas ? formatRoas(c.purchaseRoas) : '—'}</td>}
-                                                        {showGeoPurchaseColumns && <td>{c.costPerPurchase ? formatCurrency(c.costPerPurchase) : '—'}</td>}
+                                                        {showCountryPurchaseColumns && <td>{c.purchaseValue ? formatCurrency(c.purchaseValue) : '—'}</td>}
+                                                        {showCountryPurchaseColumns && <td>{formatNumber(c.purchases || 0)}</td>}
+                                                        {showCountryPurchaseColumns && <td>{c.purchaseRoas ? formatRoas(c.purchaseRoas) : '—'}</td>}
+                                                        {showCountryPurchaseColumns && <td>{c.costPerPurchase ? formatCurrency(c.costPerPurchase) : '—'}</td>}
                                                         <td>{formatPercent(c.ctr)}</td>
                                                         <td>{c.cpc ? formatCurrency(c.cpc) : '—'}</td>
                                                         <td>{c.cpm ? formatCurrency(c.cpm) : '—'}</td>
@@ -2007,7 +2008,7 @@ export default function AdsPage() {
                             </SectionCard>
 
                             {/* Region Breakdown */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text={showGeoPurchaseColumns ? "Region or state breakdown with revenue efficiency and purchase metrics where Meta exposes them." : "Region or state breakdown focused on delivery and click efficiency. Purchase-value columns are hidden when Meta does not return usable geo conversion data."} /></span>} subtitle={showGeoPurchaseColumns ? "Performance by state/region with ROAS and purchase efficiency" : "Performance by state/region with delivery efficiency"}>
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text={showRegionPurchaseColumns ? "Region or state breakdown with revenue efficiency and purchase metrics where Meta exposes them." : "Region or state breakdown focused on delivery and click efficiency. Purchase-value columns are hidden when Meta does not return usable region conversion data."} /></span>} subtitle={showRegionPurchaseColumns ? "Performance by state/region with ROAS and purchase efficiency" : "Performance by state/region with delivery efficiency"}>
                                 {regionPerformanceRows.length > 0 ? (
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
@@ -2015,10 +2016,10 @@ export default function AdsPage() {
                                                 <tr>
                                                     <th>Region</th>
                                                     <th>Spend</th>
-                                                    {showGeoPurchaseColumns && <th>Purchase Value</th>}
-                                                    {showGeoPurchaseColumns && <th>Purchases</th>}
-                                                    {showGeoPurchaseColumns && <th>ROAS</th>}
-                                                    {showGeoPurchaseColumns && <th>Cost / Purchase</th>}
+                                                    {showRegionPurchaseColumns && <th>Purchase Value</th>}
+                                                    {showRegionPurchaseColumns && <th>Purchases</th>}
+                                                    {showRegionPurchaseColumns && <th>ROAS</th>}
+                                                    {showRegionPurchaseColumns && <th>Cost / Purchase</th>}
                                                     <th>CTR</th>
                                                     <th>CPC</th>
                                                     <th>CPM</th>
@@ -2034,10 +2035,10 @@ export default function AdsPage() {
                                                             </div>
                                                         </td>
                                                         <td>{formatCurrency(r.spend)}</td>
-                                                        {showGeoPurchaseColumns && <td>{r.purchaseValue ? formatCurrency(r.purchaseValue) : '—'}</td>}
-                                                        {showGeoPurchaseColumns && <td>{formatNumber(r.purchases || 0)}</td>}
-                                                        {showGeoPurchaseColumns && <td>{r.purchaseRoas ? formatRoas(r.purchaseRoas) : '—'}</td>}
-                                                        {showGeoPurchaseColumns && <td>{r.costPerPurchase ? formatCurrency(r.costPerPurchase) : '—'}</td>}
+                                                        {showRegionPurchaseColumns && <td>{r.purchaseValue ? formatCurrency(r.purchaseValue) : '—'}</td>}
+                                                        {showRegionPurchaseColumns && <td>{formatNumber(r.purchases || 0)}</td>}
+                                                        {showRegionPurchaseColumns && <td>{r.purchaseRoas ? formatRoas(r.purchaseRoas) : '—'}</td>}
+                                                        {showRegionPurchaseColumns && <td>{r.costPerPurchase ? formatCurrency(r.costPerPurchase) : '—'}</td>}
                                                         <td>{formatPercent(r.ctr || 0)}</td>
                                                         <td>{r.cpc ? formatCurrency(r.cpc) : '—'}</td>
                                                         <td>{r.cpm ? formatCurrency(r.cpm) : '—'}</td>
@@ -2046,7 +2047,7 @@ export default function AdsPage() {
                                             </tbody>
                                         </table>
                                         <div style={{ marginTop: 12, padding: '10px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
-                                            {showGeoPurchaseColumns
+                                            {showRegionPurchaseColumns
                                                 ? `Showing top 20 regions sorted by ROAS first, then purchase value and spend. Total ${regions.length} regions tracked.`
                                                 : `Showing top 20 regions sorted by delivery strength and spend. Purchase-value columns are hidden because Meta did not return usable geo purchase data for this breakdown. Total ${regions.length} regions tracked.`}
                                         </div>
