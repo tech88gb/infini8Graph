@@ -187,11 +187,11 @@ export default function ReelsPage() {
             {/* Summary Metrics */}
             <div className="grid-metrics" style={{ marginBottom: 24, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
                 <MetricCard
-                    label="Reels In Page"
+                    label="Reels In Range"
                     value={summary.totalReels || 0}
                     icon={Film}
                     color="#6366f1"
-                    tooltip="Number of reels returned in this server-fetched page"
+                    tooltip="Total reels found in the selected date range after scanning your media library"
                 />
                 <MetricCard
                     label="Total Reach"
@@ -233,7 +233,7 @@ export default function ReelsPage() {
             {/* Comparison Banner */}
             <SectionCard
                 title="Reels vs Posts Performance"
-                subtitle="Comparison using the current analyzed page instead of your full library"
+                subtitle="Comparison using content found across the selected date range"
             >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
@@ -263,7 +263,7 @@ export default function ReelsPage() {
             </SectionCard>
 
             {/* Calculated Insights */}
-            <SectionCard title="Rate Diagnostics" subtitle="Real rates calculated directly from fetched reel reach and interactions">
+            <SectionCard title="Rate Diagnostics" subtitle="Real rates calculated directly from the full scanned reel set in the selected date range">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -414,7 +414,7 @@ export default function ReelsPage() {
 
             <SectionCard
                 title="Real Reel Diagnostics"
-                subtitle={`Top reels from page ${currentPage}, ranked by actual reach, plays, saves, and engagement efficiency`}
+                subtitle={`Top reels from page ${currentPage}, ranked by actual reach, plays, saves, and engagement efficiency. Summary metrics above use the full scanned date-range set.`}
             >
                 {diagnosticReels.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -482,7 +482,7 @@ export default function ReelsPage() {
             {/* Reels Grid */}
             <SectionCard
                 title="Your Reels"
-                subtitle={`${reels.length} video${reels.length !== 1 ? 's' : ''} returned on page ${currentPage}${pagination.pagesScanned ? ` after scanning ${pagination.pagesScanned} media batch${pagination.pagesScanned !== 1 ? 'es' : ''}` : ''}`}
+                subtitle={`${reels.length} video${reels.length !== 1 ? 's' : ''} returned on page ${currentPage}${pagination.pagesScanned ? ` after scanning ${pagination.pagesScanned} media batch${pagination.pagesScanned !== 1 ? 'es' : ''}` : ''}${pagination.summaryPagesScanned ? ` • summary scanned ${pagination.summaryPagesScanned} batch${pagination.summaryPagesScanned !== 1 ? 'es' : ''} for the full date range` : ''}`}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
                     {reels.map((reel: any, idx: number) => (

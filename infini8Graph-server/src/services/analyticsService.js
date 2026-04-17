@@ -1294,7 +1294,7 @@ class AnalyticsService {
             ? Math.min(Math.max(requestedLimit, 6), 24)
             : 12;
         const after = options.after || null;
-        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}`;
+        const dateKey = `v4_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}`;
         const cached = await this.checkCache('reels', dateKey);
         if (cached) return cached;
 
@@ -1330,6 +1330,44 @@ class AnalyticsService {
             }
         }
 
+        const { startStr } = this.clampDateWindow(startDate, endDate);
+        const summaryBatchSize = (startDate || endDate) ? 30 : 18;
+        const maxSummaryPagesToScan = (startDate || endDate) ? 24 : 8;
+        const summaryReels = [];
+        const summaryNonReels = [];
+        let summaryCursor = null;
+        let summaryPagesScanned = 0;
+
+        while (summaryPagesScanned < maxSummaryPagesToScan) {
+            const response = await this.instagram.getMediaPageWithInsights(summaryBatchSize, summaryCursor, {
+                includeDetailedVideoInsights: true,
+                detailedInsightConcurrency: 2
+            });
+            const rawBatch = response?.data || [];
+            if (rawBatch.length === 0) break;
+
+            const filteredBatch = this.filterMediaByDate(rawBatch, startDate, endDate);
+            filteredBatch.forEach((item) => {
+                if (item.mediaType === 'REEL' || item.mediaType === 'VIDEO') {
+                    summaryReels.push(item);
+                } else {
+                    summaryNonReels.push(item);
+                }
+            });
+
+            summaryPagesScanned += 1;
+            summaryCursor = response?.paging?.cursors?.after || null;
+            const oldestBatchDate = (rawBatch[rawBatch.length - 1]?.timestamp || '').split('T')[0];
+
+            if (!summaryCursor) break;
+            if (startDate && oldestBatchDate && oldestBatchDate < startStr) {
+                break;
+            }
+        }
+
+        const aggregateReels = summaryReels.length > 0 ? summaryReels : reels;
+        const aggregateNonReels = summaryNonReels.length > 0 ? summaryNonReels : nonReels;
+
         // Fetch virality breakdown (follow_type) for top reels — capped to avoid rate overload
         const TOP_REELS_VIRALITY = 6;
         const viralityMap = {};
@@ -1343,28 +1381,28 @@ class AnalyticsService {
         );
 
         // Average play rate used to detect algorithm boost window candidates
-        const avgPlayRate = reels.length > 0
-            ? reels.reduce((sum, r) => sum + (r.plays > 0 && r.reach > 0 ? r.plays / r.reach : 0), 0) / reels.length
+        const avgPlayRate = aggregateReels.length > 0
+            ? aggregateReels.reduce((sum, r) => sum + (r.plays > 0 && r.reach > 0 ? r.plays / r.reach : 0), 0) / aggregateReels.length
             : 0;
 
         // Calculate reel-specific aggregate stats
         const reelStats = {
-            totalReels: reels.length,
-            totalEngagement: reels.reduce((sum, r) => sum + r.engagement, 0),
-            totalLikes: reels.reduce((sum, r) => sum + r.likeCount, 0),
-            totalComments: reels.reduce((sum, r) => sum + r.commentsCount, 0),
-            totalImpressions: reels.reduce((sum, r) => sum + r.impressions, 0),
-            totalReach: reels.reduce((sum, r) => sum + r.reach, 0),
-            totalPlays: reels.reduce((sum, r) => sum + (r.plays || 0), 0),
-            totalSaved: reels.reduce((sum, r) => sum + (r.saved || 0), 0),
-            totalShares: reels.reduce((sum, r) => sum + (r.shares || 0), 0),
-            totalInteractions: reels.reduce((sum, r) => sum + (r.totalInteractions || r.engagement), 0)
+            totalReels: aggregateReels.length,
+            totalEngagement: aggregateReels.reduce((sum, r) => sum + r.engagement, 0),
+            totalLikes: aggregateReels.reduce((sum, r) => sum + r.likeCount, 0),
+            totalComments: aggregateReels.reduce((sum, r) => sum + r.commentsCount, 0),
+            totalImpressions: aggregateReels.reduce((sum, r) => sum + r.impressions, 0),
+            totalReach: aggregateReels.reduce((sum, r) => sum + r.reach, 0),
+            totalPlays: aggregateReels.reduce((sum, r) => sum + (r.plays || 0), 0),
+            totalSaved: aggregateReels.reduce((sum, r) => sum + (r.saved || 0), 0),
+            totalShares: aggregateReels.reduce((sum, r) => sum + (r.shares || 0), 0),
+            totalInteractions: aggregateReels.reduce((sum, r) => sum + (r.totalInteractions || r.engagement), 0)
         };
 
         const nonReelStats = {
-            totalPosts: nonReels.length,
-            avgEngagement: nonReels.length > 0
-                ? Math.round(nonReels.reduce((sum, p) => sum + p.engagement, 0) / nonReels.length)
+            totalPosts: aggregateNonReels.length,
+            avgEngagement: aggregateNonReels.length > 0
+                ? Math.round(aggregateNonReels.reduce((sum, p) => sum + p.engagement, 0) / aggregateNonReels.length)
                 : 0
         };
 
@@ -1422,32 +1460,32 @@ class AnalyticsService {
             reels: enrichedReels,
             summary: {
                 ...reelStats,
-                avgEngagement: reels.length > 0
-                    ? Math.round(reelStats.totalEngagement / reels.length)
+                avgEngagement: aggregateReels.length > 0
+                    ? Math.round(reelStats.totalEngagement / aggregateReels.length)
                     : 0,
-                avgLikes: reels.length > 0
-                    ? Math.round(reelStats.totalLikes / reels.length)
+                avgLikes: aggregateReels.length > 0
+                    ? Math.round(reelStats.totalLikes / aggregateReels.length)
                     : 0,
-                avgComments: reels.length > 0
-                    ? Math.round(reelStats.totalComments / reels.length)
+                avgComments: aggregateReels.length > 0
+                    ? Math.round(reelStats.totalComments / aggregateReels.length)
                     : 0,
-                avgPlays: reels.length > 0
-                    ? Math.round(reelStats.totalPlays / reels.length)
+                avgPlays: aggregateReels.length > 0
+                    ? Math.round(reelStats.totalPlays / aggregateReels.length)
                     : 0,
-                avgEngagementRate: reels.length > 0
-                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? (r.engagement / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                avgEngagementRate: aggregateReels.length > 0
+                    ? Number((aggregateReels.reduce((sum, r) => sum + (r.reach > 0 ? (r.engagement / r.reach) * 100 : 0), 0) / aggregateReels.length).toFixed(2))
                     : 0,
-                avgSaveRate: reels.length > 0
-                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.saved || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                avgSaveRate: aggregateReels.length > 0
+                    ? Number((aggregateReels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.saved || 0) / r.reach) * 100 : 0), 0) / aggregateReels.length).toFixed(2))
                     : 0,
-                avgShareRate: reels.length > 0
-                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.shares || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                avgShareRate: aggregateReels.length > 0
+                    ? Number((aggregateReels.reduce((sum, r) => sum + (r.reach > 0 ? ((r.shares || 0) / r.reach) * 100 : 0), 0) / aggregateReels.length).toFixed(2))
                     : 0,
-                avgCommentRate: reels.length > 0
-                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 ? (r.commentsCount / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                avgCommentRate: aggregateReels.length > 0
+                    ? Number((aggregateReels.reduce((sum, r) => sum + (r.reach > 0 ? (r.commentsCount / r.reach) * 100 : 0), 0) / aggregateReels.length).toFixed(2))
                     : 0,
-                avgPlayRate: reels.length > 0
-                    ? Number((reels.reduce((sum, r) => sum + (r.reach > 0 && (r.plays || 0) > 0 ? ((r.plays || 0) / r.reach) * 100 : 0), 0) / reels.length).toFixed(2))
+                avgPlayRate: aggregateReels.length > 0
+                    ? Number((aggregateReels.reduce((sum, r) => sum + (r.reach > 0 && (r.plays || 0) > 0 ? ((r.plays || 0) / r.reach) * 100 : 0), 0) / aggregateReels.length).toFixed(2))
                     : 0,
                 // Watch-Through Rate (avg)
                 avgWatchThroughRate: enrichedReels.length > 0
@@ -1472,11 +1510,11 @@ class AnalyticsService {
             },
             comparison: {
                 reelAvgEngagement: reels.length > 0
-                    ? Math.round(reelStats.totalEngagement / reels.length)
+                    ? Math.round(reelStats.totalEngagement / Math.max(aggregateReels.length, 1))
                     : 0,
                 postAvgEngagement: nonReelStats.avgEngagement,
                 reelMultiplier: nonReelStats.avgEngagement > 0
-                    ? ((reelStats.totalEngagement / Math.max(reels.length, 1)) / nonReelStats.avgEngagement).toFixed(2)
+                    ? ((reelStats.totalEngagement / Math.max(aggregateReels.length, 1)) / nonReelStats.avgEngagement).toFixed(2)
                     : 0
             },
             diagnostics: {
@@ -1504,6 +1542,7 @@ class AnalyticsService {
                 returned: reels.length,
                 target: targetReels,
                 pagesScanned,
+                summaryPagesScanned,
                 nextCursor,
                 hasNextPage: Boolean(nextCursor)
             },
