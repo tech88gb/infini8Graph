@@ -2734,10 +2734,20 @@ export default function AdsPage() {
                                     <div style={{ display: 'grid', gap: 8 }}>
                                         {(advancedData.data.learningPhase || []).slice(0, 10).map((adset: any) => {
                                             const status = adset.learningStatus || { icon: '❓', label: 'Unknown', color: '#94a3b8' };
-                                            const ringValue = adset.benchmarkProgress ?? Math.min(((adset.daysActive || 1) / 14) * 100, 100);
+                                            const progressRing = status.status === 'learning' || status.status === 'limited' || status.status === 'delivery_learning';
+                                            const ringValue = progressRing
+                                                ? (adset.benchmarkProgress ?? Math.min(((adset.daysActive || 1) / 14) * 100, 100))
+                                                : null;
                                             const radius = 24;
                                             const circumference = 2 * Math.PI * radius;
-                                            const offset = circumference - (ringValue / 100) * circumference;
+                                            const offset = ringValue !== null ? circumference - (ringValue / 100) * circumference : circumference;
+                                            const displayStatusLabel = status.status === 'limited'
+                                                ? 'Learning Limited'
+                                                : status.status === 'learning'
+                                                    ? 'Learning'
+                                                    : status.status === 'unknown' && adset.effectiveStatus
+                                                        ? toTitleCase(String(adset.effectiveStatus).toLowerCase())
+                                                        : status.label;
 
                                             return (
                                                 <div key={adset.id} style={{
@@ -2752,18 +2762,32 @@ export default function AdsPage() {
                                                     <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
                                                         <svg width="56" height="56" viewBox="0 0 56 56">
                                                             <circle cx="28" cy="28" r={radius} fill="none" stroke="rgba(148, 163, 184, 0.18)" strokeWidth="5" />
-                                                            <circle
-                                                                cx="28"
-                                                                cy="28"
-                                                                r={radius}
-                                                                fill="none"
-                                                                stroke={status.color || '#94a3b8'}
-                                                                strokeWidth="5"
-                                                                strokeLinecap="round"
-                                                                strokeDasharray={circumference}
-                                                                strokeDashoffset={offset}
-                                                                transform="rotate(-90 28 28)"
-                                                            />
+                                                            {progressRing ? (
+                                                                <circle
+                                                                    cx="28"
+                                                                    cy="28"
+                                                                    r={radius}
+                                                                    fill="none"
+                                                                    stroke={status.color || '#94a3b8'}
+                                                                    strokeWidth="5"
+                                                                    strokeLinecap="round"
+                                                                    strokeDasharray={circumference}
+                                                                    strokeDashoffset={offset}
+                                                                    transform="rotate(-90 28 28)"
+                                                                />
+                                                            ) : (
+                                                                <circle
+                                                                    cx="28"
+                                                                    cy="28"
+                                                                    r={radius}
+                                                                    fill="none"
+                                                                    stroke={status.color || '#94a3b8'}
+                                                                    strokeOpacity="0.65"
+                                                                    strokeWidth="4"
+                                                                    strokeDasharray="4 5"
+                                                                    transform="rotate(-90 28 28)"
+                                                                />
+                                                            )}
                                                         </svg>
                                                         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
                                                             <div style={{ fontSize: 14 }}>{status.icon}</div>
@@ -2789,11 +2813,7 @@ export default function AdsPage() {
                                                                 fontSize: 10,
                                                                 fontWeight: 700
                                                             }}>
-                                                                {status.status === 'limited'
-                                                                    ? 'Learning Limited'
-                                                                    : status.status === 'learning'
-                                                                        ? 'Learning'
-                                                                        : status.label}
+                                                                {displayStatusLabel}
                                                             </span>
                                                             <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#c7d2fe', fontSize: 10 }}>
                                                                 {toTitleCase(adset.objectiveType || 'Unknown')}
@@ -2805,6 +2825,11 @@ export default function AdsPage() {
                                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                                                             {status.label} • {formatCurrency(adset.spend || 0)} spent • {adset.daysActive} days live
                                                         </div>
+                                                        {status.status === 'unknown' && adset.effectiveStatus && (
+                                                            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                                                Raw Meta status: <strong style={{ color: '#e5e7eb' }}>{adset.effectiveStatus}</strong>
+                                                            </div>
+                                                        )}
                                                         <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
                                                             <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.55)' }}>
                                                                 <div style={{ fontSize: 10, color: 'var(--muted)' }}>
