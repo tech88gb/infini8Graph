@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { adsApi } from '@/lib/api';
@@ -67,6 +67,21 @@ function formatCompactPercent(value: string | number, digits = 1) {
     const num = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(num)) return '0%';
     return `${num.toFixed(digits)}%`;
+}
+
+function formatShortDate(value?: string | null) {
+    if (!value) return '—';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '—';
+    return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+function getDaysLive(startTime?: string | null) {
+    if (!startTime) return null;
+    const start = new Date(startTime).getTime();
+    if (Number.isNaN(start)) return null;
+    const diffMs = Date.now() - start;
+    return diffMs > 0 ? Math.floor(diffMs / (1000 * 60 * 60 * 24)) : 0;
 }
 
 function getScoreTone(value: number) {
@@ -771,6 +786,11 @@ export default function AdsPage() {
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'geo'>('overview');
     const [datePreset, setDatePreset] = useState<'today' | 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d' | 'maximum'>('today');
+    const [campaignSearch, setCampaignSearch] = useState('');
+    const [campaignTypeFilter, setCampaignTypeFilter] = useState('all');
+    const [campaignStatusFilter, setCampaignStatusFilter] = useState('all');
+    const [campaignSort, setCampaignSort] = useState('spend_desc');
+    const [campaignPage, setCampaignPage] = useState(1);
 
     // Fetch accounts
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -821,10 +841,10 @@ export default function AdsPage() {
 
     // Fetch campaigns
     const { data: campaignsData } = useQuery({
-        queryKey: ['campaigns', effectiveAccount],
+        queryKey: ['campaigns', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getCampaigns(effectiveAccount);
+            const res = await adsApi.getCampaigns(effectiveAccount, datePreset);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'campaigns'
@@ -903,6 +923,7 @@ export default function AdsPage() {
     const actionValues = insightsData?.data?.actionValues || [];
     const costPerAction = insightsData?.data?.costPerAction || [];
     const campaigns = campaignsData?.data?.campaigns || [];
+    const campaignSummary = campaignsData?.data?.summary || {};
     const accountProfile = insightsData?.data?.accountProfile || null;
 
     // Chart data
@@ -962,7 +983,83 @@ export default function AdsPage() {
                     ? 'Current 90 days vs previous period'
                     : datePreset === 'today'
                         ? 'Today'
-                        : 'Selected period';
+                    : 'Selected period';
+    const campaignTypeOptions = useMemo(() => {
+        const options = new Map<string, string>();
+        campaigns.forEach((campaign: any) => {
+            if (campaign?.type) options.set(campaign.type, campaign.typeLabel || toTitleCase(campaign.type));
+        });
+        return [{ value: 'all', label: 'All types' }, ...Array.from(options.entries()).map(([value, label]) => ({ value, label }))];
+    }, [campaigns]);
+    const campaignStatusOptions = useMemo(() => {
+        const options = new Set<string>();
+        campaigns.forEach((campaign: any) => {
+            if (campaign?.effectiveStatus) options.add(campaign.effectiveStatus);
+        });
+        return ['all', ...Array.from(options)];
+    }, [campaigns]);
+    const filteredCampaigns = useMemo(() => {
+        const search = campaignSearch.trim().toLowerCase();
+        const filtered = campaigns.filter((campaign: any) => {
+            const matchesSearch = !search || String(campaign?.name || '').toLowerCase().includes(search);
+            const matchesType = campaignTypeFilter === 'all' || campaign?.type === campaignTypeFilter;
+            const matchesStatus = campaignStatusFilter === 'all' || campaign?.effectiveStatus === campaignStatusFilter;
+            return matchesSearch && matchesType && matchesStatus;
+        });
+
+        const sortValue = (campaign: any) => {
+            switch (campaignSort) {
+                case 'spend_desc':
+                    return campaign?.metrics?.spend || 0;
+                case 'results_desc':
+                    return campaign?.primaryMetric?.value || 0;
+                case 'roas_desc':
+                    return campaign?.metrics?.purchaseRoas || 0;
+                case 'ctr_desc':
+                    return campaign?.metrics?.ctr || 0;
+                case 'clicks_desc':
+                    return campaign?.metrics?.linkClicks || 0;
+                case 'cost_asc':
+                    return campaign?.primaryMetric?.costValue || Number.MAX_SAFE_INTEGER;
+                case 'cpm_asc':
+                    return campaign?.metrics?.cpm || Number.MAX_SAFE_INTEGER;
+                case 'updated_desc':
+                    return new Date(campaign?.updated_time || campaign?.created_time || 0).getTime();
+                case 'name_asc':
+                    return String(campaign?.name || '').toLowerCase();
+                default:
+                    return campaign?.metrics?.spend || 0;
+            }
+        };
+
+        return [...filtered].sort((a: any, b: any) => {
+            if (campaignSort === 'name_asc') {
+                return String(sortValue(a)).localeCompare(String(sortValue(b)));
+            }
+            if (campaignSort === 'cost_asc' || campaignSort === 'cpm_asc') {
+                return Number(sortValue(a)) - Number(sortValue(b));
+            }
+            return Number(sortValue(b)) - Number(sortValue(a));
+        });
+    }, [campaigns, campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort]);
+    const campaignPageSize = 50;
+    const campaignTotalPages = Math.max(1, Math.ceil(filteredCampaigns.length / campaignPageSize));
+    const campaignPageStart = (campaignPage - 1) * campaignPageSize;
+    const paginatedCampaigns = filteredCampaigns.slice(campaignPageStart, campaignPageStart + campaignPageSize);
+    const campaignStatusHeadline = campaignStatusFilter === 'all' ? `${campaignSummary.active || 0} active now` : `${filteredCampaigns.length} matching ${campaignStatusFilter.toLowerCase()}`;
+    const campaignRangeLabel = filteredCampaigns.length > 0
+        ? `${campaignPageStart + 1}-${Math.min(campaignPageStart + campaignPageSize, filteredCampaigns.length)}`
+        : '0-0';
+    useEffect(() => {
+        setCampaignPage(1);
+    }, [campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        if (campaignPage > campaignTotalPages) {
+            setCampaignPage(campaignTotalPages);
+        }
+    }, [campaignPage, campaignTotalPages]);
+
     const videoRetentionCards = [
         { label: '25% watched', value: Number(videoViews.views_25 || 0), helper: 'Reached the 25% watch milestone' },
         {
@@ -1003,7 +1100,7 @@ export default function AdsPage() {
             adsApi.getDemographics(effectiveAccount, datePreset).then((res) => res.data).catch(() => demographicsData),
             adsApi.getPlacements(effectiveAccount, datePreset).then((res) => res.data).catch(() => null),
             adsApi.getGeography(effectiveAccount, datePreset).then((res) => res.data).catch(() => geographyData),
-            adsApi.getCampaigns(effectiveAccount).then((res) => res.data).catch(() => campaignsData),
+            adsApi.getCampaigns(effectiveAccount, datePreset).then((res) => res.data).catch(() => campaignsData),
             adsApi.getConversionFunnel(effectiveAccount, datePreset).then((res) => res.data).catch(() => funnelData),
             adsApi.getCampaignIntelligence(effectiveAccount, datePreset).then((res) => res.data).catch(() => intelligenceData),
             adsApi.getAdvancedAnalytics(effectiveAccount, datePreset).then((res) => res.data).catch(() => advancedData),
@@ -1492,37 +1589,198 @@ export default function AdsPage() {
 
             {/* ==================== CAMPAIGNS TAB ==================== */}
             {activeTab === 'campaigns' && (
-                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>{`Campaigns (${campaigns.length})`} <InfoTooltip text="List of all campaigns and their core performance metrics. Metrics like CTR (Click-Through Rate) show ad engagement." /></span>} subtitle="All campaigns in this ad account">
+                <SectionCard
+                    title={<span style={{ display: 'flex', alignItems: 'center' }}>{`Campaigns (${filteredCampaigns.length})`} <InfoTooltip text="Campaign workbench for the selected date range. Filter by campaign type or delivery status, then sort by spend, results, ROAS, CTR, click volume, CPM, or cost per result like you would in Ads Manager." /></span>}
+                    subtitle={`Showing ${campaignRangeLabel} of ${filteredCampaigns.length} campaigns • ${campaignStatusHeadline}`}
+                >
                     {campaigns.length > 0 ? (
-                        <div style={{ overflowX: 'auto' }}>
-                            <table className="table">
-                                <thead>
-                                    <tr>
-                                        <th>Campaign</th>
-                                        <th>Status</th>
-                                        <th>Spend</th>
-                                        <th>Impressions</th>
-                                        <th>Clicks</th>
-                                        <th>CTR</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {campaigns.map((c: any) => (
-                                        <tr key={c.id}>
-                                            <td style={{ fontWeight: 500, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</td>
-                                            <td>
-                                                <span className={`badge ${c.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}`}>
-                                                    {c.status}
-                                                </span>
-                                            </td>
-                                            <td>{formatCurrency(c.insights?.data?.[0]?.spend || 0)}</td>
-                                            <td>{formatNumber(c.insights?.data?.[0]?.impressions || 0)}</td>
-                                            <td>{formatNumber(c.insights?.data?.[0]?.clicks || 0)}</td>
-                                            <td>{formatPercent(c.insights?.data?.[0]?.ctr || 0)}</td>
-                                        </tr>
+                        <div style={{ display: 'grid', gap: 18 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Account Focus</div>
+                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{accountProfile?.displayLabel || 'Mixed'}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{objectiveMixLabel || 'Objective mix unavailable'}</div>
+                                </div>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Active Campaigns</div>
+                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(campaignSummary.active || 0)}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Running in this account right now</div>
+                                </div>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Filtered Campaigns</div>
+                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(filteredCampaigns.length)}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Sorted for the selected date window</div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.2fr) repeat(3, minmax(160px, 0.8fr))', gap: 12 }}>
+                                <input
+                                    value={campaignSearch}
+                                    onChange={(event) => setCampaignSearch(event.target.value)}
+                                    placeholder="Search campaigns"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 10,
+                                        border: '1px solid var(--border)',
+                                        background: 'var(--background)',
+                                        color: 'var(--foreground)'
+                                    }}
+                                />
+                                <select
+                                    value={campaignTypeFilter}
+                                    onChange={(event) => setCampaignTypeFilter(event.target.value)}
+                                    style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                                >
+                                    {campaignTypeOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
-                                </tbody>
-                            </table>
+                                </select>
+                                <select
+                                    value={campaignStatusFilter}
+                                    onChange={(event) => setCampaignStatusFilter(event.target.value)}
+                                    style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                                >
+                                    {campaignStatusOptions.map((option) => (
+                                        <option key={option} value={option}>
+                                            {option === 'all' ? 'All delivery states' : option.replace(/_/g, ' ')}
+                                        </option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={campaignSort}
+                                    onChange={(event) => setCampaignSort(event.target.value)}
+                                    style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                                >
+                                    <option value="spend_desc">Sort: Highest spend</option>
+                                    <option value="results_desc">Sort: Most results</option>
+                                    <option value="roas_desc">Sort: Highest ROAS</option>
+                                    <option value="ctr_desc">Sort: Highest CTR</option>
+                                    <option value="clicks_desc">Sort: Most link clicks</option>
+                                    <option value="cost_asc">Sort: Lowest cost / result</option>
+                                    <option value="cpm_asc">Sort: Lowest CPM</option>
+                                    <option value="updated_desc">Sort: Recently updated</option>
+                                    <option value="name_asc">Sort: Name A-Z</option>
+                                </select>
+                            </div>
+
+                            <div style={{ overflowX: 'auto' }}>
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Campaign <InfoTooltip text="Campaign name plus type, budget mode, days live, and raw delivery state so you can scan structure and maturity quickly." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Type <InfoTooltip text="Objective family derived from the campaign objective, such as Sales, Traffic, Awareness, or Engagement." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Delivery <InfoTooltip text="Effective delivery state returned by Meta. This is what Ads Manager uses to show whether a campaign is active, paused, limited, or otherwise constrained." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend <InfoTooltip text={`Spend for the selected ${toTitleCase(datePreset)} window.`} /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Primary Result <InfoTooltip text="The main result metric adapts to campaign type: purchases for sales, leads for lead gen, link clicks for traffic, reach for awareness, and engagements for engagement campaigns." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Cost / Result <InfoTooltip text="The matching efficiency metric for the primary result. For example, cost per purchase for sales campaigns or cost per lead for lead-gen campaigns." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Purchase ROAS <InfoTooltip text="Purchase value divided by spend for campaigns where Meta returns purchase value. If the campaign objective is not sales, this may stay at zero." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CTR <InfoTooltip text="Click-through rate from Meta insights for the selected date window." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Link Clicks <InfoTooltip text="Outbound or inline link clicks, whichever Meta exposes for that campaign in this window." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPM / Freq <InfoTooltip text="CPM shows cost per thousand impressions. Frequency shows the average number of times people saw the ads in this campaign." /></span></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paginatedCampaigns.map((campaign: any) => {
+                                            const daysLive = getDaysLive(campaign.start_time || campaign.created_time);
+                                            const deliveryTone = campaign.effectiveStatus === 'ACTIVE'
+                                                ? { bg: 'rgba(16,185,129,0.14)', color: '#86efac', border: 'rgba(16,185,129,0.22)' }
+                                                : campaign.effectiveStatus?.includes('PAUSED')
+                                                    ? { bg: 'rgba(148,163,184,0.16)', color: '#cbd5e1', border: 'rgba(148,163,184,0.22)' }
+                                                    : { bg: 'rgba(245,158,11,0.14)', color: '#fcd34d', border: 'rgba(245,158,11,0.24)' };
+
+                                            return (
+                                                <tr key={campaign.id}>
+                                                    <td style={{ minWidth: 260 }}>
+                                                        <div style={{ fontWeight: 600, marginBottom: 6 }}>{campaign.name}</div>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.14)', color: '#c4b5fd', fontSize: 11, fontWeight: 600 }}>
+                                                                {campaign.objectiveLabel}
+                                                            </span>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(14,165,233,0.14)', color: '#7dd3fc', fontSize: 11, fontWeight: 600 }}>
+                                                                {campaign.budgetMode}{campaign.budgetAmount ? ` • ${formatCurrency(campaign.budgetAmount)}` : ''}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                                            {daysLive !== null ? `${daysLive}d live` : 'Start unknown'} • Updated {formatShortDate(campaign.updated_time)}
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 600 }}>{campaign.typeLabel || 'General'}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{campaign.buying_type || 'Auction'}</div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ display: 'inline-flex', padding: '5px 10px', borderRadius: 999, background: deliveryTone.bg, color: deliveryTone.color, border: `1px solid ${deliveryTone.border}`, fontSize: 11, fontWeight: 700 }}>
+                                                            {campaign.effectiveStatus?.replace(/_/g, ' ') || 'UNKNOWN'}
+                                                        </div>
+                                                        {campaign.configuredStatus && campaign.configuredStatus !== campaign.effectiveStatus && (
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                                                                Configured: {campaign.configuredStatus.replace(/_/g, ' ')}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>{formatCurrency(campaign.metrics?.spend || 0)}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{formatNumber(campaign.metrics?.impressions || 0)} imp</div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>{formatNumber(campaign.primaryMetric?.value || 0)}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{campaign.primaryMetric?.label || 'Results'}</div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>
+                                                            {campaign.primaryMetric?.costValue ? formatCurrency(campaign.primaryMetric.costValue) : '—'}
+                                                        </div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{campaign.primaryMetric?.costLabel || 'Cost / Result'}</div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>{formatRoas(campaign.metrics?.purchaseRoas || 0)}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                                            {campaign.metrics?.purchaseValue ? formatCurrency(campaign.metrics.purchaseValue) : 'No purchase value'}
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>{formatPercent(campaign.metrics?.ctr || 0)}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{formatNumber(campaign.metrics?.reach || 0)} reach</div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>{formatNumber(campaign.metrics?.linkClicks || 0)}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{campaign.metrics?.cpc ? formatCurrency(campaign.metrics.cpc) : '—'} CPC</div>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 700 }}>{campaign.metrics?.cpm ? formatCurrency(campaign.metrics.cpm) : '—'}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{Number(campaign.metrics?.frequency || 0).toFixed(2)}x freq</div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <div className="text-muted" style={{ fontSize: 13 }}>
+                                    Page {campaignPage} of {campaignTotalPages} • 50 campaigns per page
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => setCampaignPage((page) => Math.max(1, page - 1))}
+                                        disabled={campaignPage === 1}
+                                    >
+                                        Previous 50
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => setCampaignPage((page) => Math.min(campaignTotalPages, page + 1))}
+                                        disabled={campaignPage === campaignTotalPages}
+                                    >
+                                        Next 50
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div style={{ textAlign: 'center', padding: '24px 0' }}>

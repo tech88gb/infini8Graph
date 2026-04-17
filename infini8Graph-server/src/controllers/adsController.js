@@ -97,6 +97,102 @@ function findActionMetric(entries = [], candidates = []) {
     }) || null;
 }
 
+function getCampaignTypeLabel(objective = '') {
+    const group = mapObjectiveGroup(objective);
+    switch (group) {
+        case 'sales':
+            return 'Sales';
+        case 'leads':
+            return 'Lead Gen';
+        case 'traffic':
+            return 'Traffic';
+        case 'awareness':
+            return 'Awareness';
+        case 'engagement':
+            return 'Engagement';
+        case 'app_promotion':
+            return 'App Promotion';
+        default:
+            return objective ? toTitleFromSnake(objective) : 'General';
+    }
+}
+
+function toTitleFromSnake(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function pickPrimaryCampaignMetric(group, insights = {}) {
+    const actions = insights.actions || [];
+    const costPerAction = insights.cost_per_action_type || [];
+    const purchaseMetric = findActionMetric(actions, ACTION_CANDIDATES.purchases);
+    const purchaseCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.purchases);
+    const leadMetric = findActionMetric(actions, ACTION_CANDIDATES.leads);
+    const leadCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.leads);
+    const engagementMetric = findActionMetric(actions, ACTION_CANDIDATES.engagement);
+    const engagementCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.engagement);
+    const inlineLinkClicks = parseMetricNumber(insights.inline_link_clicks);
+    const outboundClicks = parseMetricNumber(insights.outbound_clicks);
+    const clicks = outboundClicks || inlineLinkClicks || parseMetricNumber(insights.clicks);
+    const cpc = parseMetricNumber(insights.cpc);
+    const reach = parseMetricNumber(insights.reach);
+    const impressions = parseMetricNumber(insights.impressions);
+
+    switch (group) {
+        case 'sales':
+            return {
+                label: 'Purchases',
+                value: parseMetricNumber(purchaseMetric?.value),
+                costLabel: 'Cost / Purchase',
+                costValue: parseMetricNumber(purchaseCostMetric?.value)
+            };
+        case 'leads':
+            return {
+                label: 'Leads',
+                value: parseMetricNumber(leadMetric?.value),
+                costLabel: 'Cost / Lead',
+                costValue: parseMetricNumber(leadCostMetric?.value)
+            };
+        case 'traffic':
+            return {
+                label: 'Link Clicks',
+                value: clicks,
+                costLabel: 'Cost / Link Click',
+                costValue: cpc
+            };
+        case 'awareness':
+            return {
+                label: 'Reach',
+                value: reach,
+                costLabel: 'CPM',
+                costValue: parseMetricNumber(insights.cpm)
+            };
+        case 'engagement':
+            return {
+                label: 'Engagements',
+                value: parseMetricNumber(engagementMetric?.value),
+                costLabel: 'Cost / Engagement',
+                costValue: parseMetricNumber(engagementCostMetric?.value)
+            };
+        case 'app_promotion':
+            return {
+                label: 'Clicks',
+                value: clicks,
+                costLabel: 'CPC',
+                costValue: cpc
+            };
+        default:
+            return {
+                label: 'Impressions',
+                value: impressions,
+                costLabel: 'CPC',
+                costValue: cpc
+            };
+    }
+}
+
 function buildRecommendedMetrics(profileGroup) {
     switch (profileGroup) {
         case 'sales':
@@ -590,6 +686,7 @@ export async function getGeography(req, res) {
 export async function getCampaigns(req, res) {
     try {
         const { adAccountId } = req.params;
+        const { datePreset = 'last_30d' } = req.query;
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -597,25 +694,99 @@ export async function getCampaigns(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const campaigns = await withMetaCache(
-            buildMetaCacheKey('meta-campaigns', [req.user.userId, accountId]),
+        const campaignsPayload = await withMetaCache(
+            buildMetaCacheKey('meta-campaigns-v2', [req.user.userId, accountId, datePreset]),
             META_CACHE_TTL.campaigns,
             async () => {
                 const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'id,name,status,objective,created_time,updated_time,daily_budget,lifetime_budget,insights{spend,impressions,reach,clicks,cpc,cpm,ctr}',
+                        fields: 'id,name,status,effective_status,configured_status,objective,buying_type,smart_promotion_type,special_ad_categories,bid_strategy,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas}',
                         limit: 500
                     }
                 });
 
-                return response.data.data || [];
+                const campaigns = (response.data.data || []).map((campaign) => {
+                    const insights = campaign?.insights?.data?.[0] || {};
+                    const profileGroup = mapObjectiveGroup(campaign?.objective);
+                    const actions = insights.actions || [];
+                    const actionValues = insights.action_values || [];
+                    const costPerAction = insights.cost_per_action_type || [];
+                    const purchaseMetric = findActionMetric(actions, ACTION_CANDIDATES.purchases);
+                    const purchaseValueMetric = findActionMetric(actionValues, ACTION_CANDIDATES.purchases);
+                    const purchaseCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.purchases);
+                    const leadMetric = findActionMetric(actions, ACTION_CANDIDATES.leads);
+                    const leadCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.leads);
+                    const inlineLinkClicks = parseMetricNumber(insights.inline_link_clicks);
+                    const outboundClicks = parseMetricNumber(insights.outbound_clicks);
+                    const clickCount = outboundClicks || inlineLinkClicks || parseMetricNumber(insights.clicks);
+                    const purchaseRoas = Array.isArray(insights.purchase_roas)
+                        ? parseMetricNumber(insights.purchase_roas[0]?.value)
+                        : parseMetricNumber(insights.purchase_roas);
+                    const primaryMetric = pickPrimaryCampaignMetric(profileGroup, insights);
+                    const effectiveStatus = String(campaign?.effective_status || campaign?.status || '').toUpperCase();
+                    const configuredStatus = String(campaign?.configured_status || campaign?.status || '').toUpperCase();
+                    const budgetMode = parseMetricNumber(campaign?.daily_budget) > 0
+                        ? 'Daily'
+                        : parseMetricNumber(campaign?.lifetime_budget) > 0
+                            ? 'Lifetime'
+                            : 'No budget';
+
+                    return {
+                        ...campaign,
+                        type: profileGroup,
+                        typeLabel: getCampaignTypeLabel(campaign?.objective),
+                        objectiveLabel: campaign?.objective ? toTitleFromSnake(campaign.objective) : 'General',
+                        effectiveStatus,
+                        configuredStatus,
+                        budgetMode,
+                        budgetAmount: parseMetricNumber(campaign?.daily_budget) || parseMetricNumber(campaign?.lifetime_budget),
+                        metrics: {
+                            spend: parseMetricNumber(insights.spend),
+                            impressions: parseMetricNumber(insights.impressions),
+                            reach: parseMetricNumber(insights.reach),
+                            clicks: parseMetricNumber(insights.clicks),
+                            linkClicks: clickCount,
+                            ctr: parseMetricNumber(insights.ctr),
+                            cpc: parseMetricNumber(insights.cpc),
+                            cpm: parseMetricNumber(insights.cpm),
+                            frequency: parseMetricNumber(insights.frequency),
+                            purchases: parseMetricNumber(purchaseMetric?.value),
+                            purchaseValue: parseMetricNumber(purchaseValueMetric?.value),
+                            purchaseRoas,
+                            costPerPurchase: parseMetricNumber(purchaseCostMetric?.value),
+                            leads: parseMetricNumber(leadMetric?.value),
+                            costPerLead: parseMetricNumber(leadCostMetric?.value)
+                        },
+                        primaryMetric
+                    };
+                });
+
+                const byType = campaigns.reduce((acc, campaign) => {
+                    acc[campaign.type] = (acc[campaign.type] || 0) + 1;
+                    return acc;
+                }, {});
+                const byStatus = campaigns.reduce((acc, campaign) => {
+                    acc[campaign.effectiveStatus] = (acc[campaign.effectiveStatus] || 0) + 1;
+                    return acc;
+                }, {});
+
+                return {
+                    campaigns,
+                    summary: {
+                        total: campaigns.length,
+                        active: campaigns.filter((campaign) => campaign.effectiveStatus === 'ACTIVE').length,
+                        byType,
+                        byStatus,
+                        datePreset
+                    }
+                };
             }
         );
 
         res.json({
             success: true,
-            data: { campaigns }
+            data: campaignsPayload
         });
     } catch (error) {
         console.error('Campaigns error:', error.response?.data || error.message);
