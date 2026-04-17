@@ -164,6 +164,7 @@ export default function GrowthPage() {
     const accountSummary = growth.accountSummary || {};
     const accountMetrics = growth.accountMetrics || [];
     const comparisonSummary = growth.comparisonSummary || {};
+    const estimatedFollowerLift = growth.estimatedFollowerLift || {};
 
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -477,6 +478,125 @@ export default function GrowthPage() {
                     </ResponsiveContainer>
                 </SectionCard>
             )}
+
+            <SectionCard
+                title="Estimated Follower Lift by Post"
+                subtitle="Modelled attribution from daily follower gains in the 1-3 days after publish"
+                timePeriod={estimatedFollowerLift.available ? `Est. ${estimatedFollowerLift.totalEstimatedLift || 0} followers attributed` : 'Estimated model'}
+            >
+                <div style={{
+                    padding: '12px 14px',
+                    background: 'var(--background)',
+                    borderRadius: 8,
+                    marginBottom: 16,
+                    fontSize: 12,
+                    color: 'var(--muted)',
+                    lineHeight: 1.6
+                }}>
+                    {estimatedFollowerLift.methodology || 'This section estimates follower lift by combining positive daily follower gains with post-level profile activity, reach, engagement, and save signals inside a 3-day attribution window.'}
+                </div>
+
+                {estimatedFollowerLift.available ? (
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Post</th>
+                                    <th>Est. Lift</th>
+                                    <th>Confidence</th>
+                                    <th>Window</th>
+                                    <th>Profile Activity</th>
+                                    <th>Reach</th>
+                                    <th>Engagement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(estimatedFollowerLift.posts || []).map((post: any) => (
+                                    <tr key={post.id}>
+                                        <td>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <div style={{
+                                                    width: 44,
+                                                    height: 44,
+                                                    borderRadius: 8,
+                                                    overflow: 'hidden',
+                                                    background: 'var(--background)',
+                                                    border: '1px solid var(--border)',
+                                                    flexShrink: 0
+                                                }}>
+                                                    {post.thumbnailUrl ? (
+                                                        <img src={post.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    ) : null}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: 13, fontWeight: 600 }}>{post.mediaType || 'POST'}</div>
+                                                    <div className="text-muted" style={{ fontSize: 12, maxWidth: 260 }}>
+                                                        {(post.caption || 'No caption').slice(0, 70)}{(post.caption || '').length > 70 ? '...' : ''}
+                                                    </div>
+                                                    {!post.fullyObserved && (
+                                                        <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
+                                                            Partial window: {post.daysObserved} of 3 days observed
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td style={{ fontWeight: 700, color: '#10b981' }}>
+                                            +{post.estimatedFollowerLift}
+                                        </td>
+                                        <td>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    width: 'fit-content',
+                                                    padding: '4px 10px',
+                                                    borderRadius: 999,
+                                                    fontSize: 11,
+                                                    fontWeight: 600,
+                                                    background: post.confidence === 'High'
+                                                        ? 'rgba(16,185,129,0.14)'
+                                                        : post.confidence === 'Medium'
+                                                            ? 'rgba(245,158,11,0.14)'
+                                                            : 'rgba(239,68,68,0.14)',
+                                                    color: post.confidence === 'High'
+                                                        ? '#10b981'
+                                                        : post.confidence === 'Medium'
+                                                            ? '#f59e0b'
+                                                            : '#ef4444'
+                                                }}>
+                                                    {post.confidence}
+                                                </span>
+                                                <span className="text-muted" style={{ fontSize: 11 }}>{post.confidenceReason}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div style={{ fontSize: 12 }}>{post.attributionWindow}</div>
+                                            <div className="text-muted" style={{ fontSize: 11 }}>
+                                                {post.competingPosts > 0 ? `${post.competingPosts} competing posts` : 'No overlap'}
+                                            </div>
+                                        </td>
+                                        <td>{(post.profileActivity || 0).toLocaleString()}</td>
+                                        <td>{(post.reach || 0).toLocaleString()}</td>
+                                        <td>{(post.engagement || 0).toLocaleString()}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div style={{
+                        padding: 18,
+                        borderRadius: 10,
+                        background: 'var(--background)',
+                        color: 'var(--muted)',
+                        fontSize: 13,
+                        lineHeight: 1.6
+                    }}>
+                        {estimatedFollowerLift.reason || 'Estimated post-level follower lift is unavailable for this account and date range.'}
+                    </div>
+                )}
+            </SectionCard>
 
             {/* === Advanced Growth Metrics === */}
             <SectionCard title="Advanced Growth Metrics" subtitle="Deeper signals from follower and engagement data">

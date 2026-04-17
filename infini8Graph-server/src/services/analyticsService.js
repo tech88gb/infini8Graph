@@ -296,14 +296,9 @@ class AnalyticsService {
     }
 
     buildFollowerTrendFromDailyMetrics(dailyMetrics = [], fallbackAggregates = {}, currentFollowerCount = 0) {
-        const snapshots = (dailyMetrics || [])
-            .filter((day) => typeof day?.follower_count === 'number' && Number.isFinite(day.follower_count))
-            .sort((a, b) => a.date.localeCompare(b.date));
-
-        const maxSnapshotValue = snapshots.reduce((max, day) => Math.max(max, Number(day.follower_count || 0)), 0);
-        const looksLikeAbsoluteFollowerBase = currentFollowerCount <= 0
-            ? maxSnapshotValue > 0
-            : maxSnapshotValue >= currentFollowerCount * 0.5;
+        const snapshotAssessment = this.assessFollowerSnapshotSeries(dailyMetrics, currentFollowerCount);
+        const snapshots = snapshotAssessment.snapshots;
+        const looksLikeAbsoluteFollowerBase = snapshotAssessment.looksLikeAbsoluteFollowerBase;
 
         if (snapshots.length >= 2 && looksLikeAbsoluteFollowerBase) {
             const first = snapshots[0];
@@ -335,6 +330,174 @@ class AnalyticsService {
             follows: fallbackAggregates.follows || 0,
             unfollows: fallbackAggregates.unfollows || 0,
             source: 'aggregates_fallback'
+        };
+    }
+
+    assessFollowerSnapshotSeries(dailyMetrics = [], currentFollowerCount = 0) {
+        const snapshots = (dailyMetrics || [])
+            .filter((day) => typeof day?.follower_count === 'number' && Number.isFinite(day.follower_count))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        const maxSnapshotValue = snapshots.reduce((max, day) => Math.max(max, Number(day.follower_count || 0)), 0);
+        const looksLikeAbsoluteFollowerBase = currentFollowerCount <= 0
+            ? maxSnapshotValue > 0
+            : maxSnapshotValue >= currentFollowerCount * 0.5;
+
+        return {
+            snapshots,
+            looksLikeAbsoluteFollowerBase
+        };
+    }
+
+    estimateFollowerLiftByPost(media = [], dailyMetrics = [], currentFollowerCount = 0, startDate = null, endDate = null) {
+        const { snapshots, looksLikeAbsoluteFollowerBase } = this.assessFollowerSnapshotSeries(dailyMetrics, currentFollowerCount);
+        if (!looksLikeAbsoluteFollowerBase || snapshots.length < 2 || media.length === 0) {
+            return {
+                available: false,
+                reason: 'Follower snapshots are not reliable enough for post-level estimation.',
+                methodology: 'Estimated follower lift needs believable daily follower-count snapshots from Meta. This account currently does not expose a stable enough follower_count series for post-level attribution.'
+            };
+        }
+
+        const { endStr } = this.clampDateWindow(startDate, endDate);
+        const dailyGainRows = [];
+        for (let index = 1; index < snapshots.length; index += 1) {
+            const previous = Number(snapshots[index - 1]?.follower_count || 0);
+            const current = Number(snapshots[index]?.follower_count || 0);
+            const gain = current - previous;
+            dailyGainRows.push({
+                date: snapshots[index].date,
+                gain: gain > 0 ? gain : 0,
+                rawDelta: gain
+            });
+        }
+
+        const posts = media
+            .map((post) => {
+                const publishDate = (post.timestamp || '').split('T')[0];
+                const publishDateObj = new Date(`${publishDate}T00:00:00Z`);
+                const attributionEnd = new Date(publishDateObj);
+                attributionEnd.setUTCDate(attributionEnd.getUTCDate() + 2);
+                const attributionEndStr = attributionEnd.toISOString().split('T')[0];
+                const fullyObserved = attributionEndStr <= endStr;
+                const daysObserved = Math.max(
+                    1,
+                    Math.min(
+                        3,
+                        Math.floor((new Date(`${endStr}T00:00:00Z`) - publishDateObj) / (1000 * 60 * 60 * 24)) + 1
+                    )
+                );
+
+                return {
+                    id: post.id,
+                    caption: post.caption || '',
+                    mediaType: post.mediaType,
+                    timestamp: post.timestamp,
+                    publishDate,
+                    publishDateObj,
+                    thumbnailUrl: post.thumbnailUrl || post.mediaUrl,
+                    permalink: post.permalink,
+                    reach: Number(post.reach || 0),
+                    engagement: Number(post.engagement || 0),
+                    saved: Number(post.saved || 0),
+                    comments: Number(post.commentsCount || 0),
+                    likes: Number(post.likeCount || 0),
+                    profileActivity: Number(post.profileActivity || 0),
+                    attributionEndStr,
+                    fullyObserved,
+                    daysObserved,
+                    estimatedFollowers: 0,
+                    attributedDays: new Set(),
+                    overlapCounts: []
+                };
+            })
+            .sort((a, b) => b.publishDate.localeCompare(a.publishDate));
+
+        const maxProfileActivity = Math.max(...posts.map((post) => post.profileActivity), 0);
+        const maxReach = Math.max(...posts.map((post) => post.reach), 0);
+        const maxEngagement = Math.max(...posts.map((post) => post.engagement), 0);
+        const maxSaveRate = Math.max(
+            ...posts.map((post) => (post.reach > 0 ? post.saved / post.reach : 0)),
+            0
+        );
+
+        const postWeights = Object.fromEntries(posts.map((post) => {
+            const profileIntentNorm = maxProfileActivity > 0 ? post.profileActivity / maxProfileActivity : 0;
+            const reachNorm = maxReach > 0 ? post.reach / maxReach : 0;
+            const engagementNorm = maxEngagement > 0 ? post.engagement / maxEngagement : 0;
+            const saveRateNorm = maxSaveRate > 0 ? ((post.reach > 0 ? post.saved / post.reach : 0) / maxSaveRate) : 0;
+            const baseWeight = (profileIntentNorm * 0.45) + (reachNorm * 0.25) + (engagementNorm * 0.2) + (saveRateNorm * 0.1);
+            return [post.id, Math.max(baseWeight, 0.05)];
+        }));
+
+        dailyGainRows.forEach((day) => {
+            if (day.gain <= 0) return;
+
+            const gainDate = new Date(`${day.date}T00:00:00Z`);
+            const candidatePosts = posts.filter((post) => {
+                const dayOffset = Math.floor((gainDate - post.publishDateObj) / (1000 * 60 * 60 * 24));
+                return dayOffset >= 0 && dayOffset <= 2;
+            });
+
+            if (candidatePosts.length === 0) return;
+
+            const totalWeight = candidatePosts.reduce((sum, post) => sum + (postWeights[post.id] || 0), 0);
+            if (totalWeight <= 0) return;
+
+            candidatePosts.forEach((post) => {
+                const allocatedGain = day.gain * ((postWeights[post.id] || 0) / totalWeight);
+                post.estimatedFollowers += allocatedGain;
+                post.attributedDays.add(day.date);
+                post.overlapCounts.push(candidatePosts.length);
+            });
+        });
+
+        const estimatedPosts = posts
+            .map((post) => {
+                const maxOverlap = post.overlapCounts.length > 0 ? Math.max(...post.overlapCounts) : 0;
+                const confidence = maxOverlap <= 1 && post.fullyObserved
+                    ? 'High'
+                    : maxOverlap <= 2 && post.daysObserved >= 2
+                        ? 'Medium'
+                        : 'Low';
+                const confidenceReason = maxOverlap <= 1
+                    ? 'No competing posts in the 3-day attribution window'
+                    : maxOverlap === 2
+                        ? 'One competing post overlapped this attribution window'
+                        : 'Multiple posts overlapped this attribution window';
+
+                return {
+                    id: post.id,
+                    caption: post.caption,
+                    mediaType: post.mediaType,
+                    timestamp: post.timestamp,
+                    publishDate: post.publishDate,
+                    thumbnailUrl: post.thumbnailUrl,
+                    permalink: post.permalink,
+                    estimatedFollowerLift: Number(post.estimatedFollowers.toFixed(1)),
+                    confidence,
+                    confidenceReason,
+                    fullyObserved: post.fullyObserved,
+                    attributionWindow: `${post.publishDate} → ${post.attributionEndStr}`,
+                    daysObserved: post.daysObserved,
+                    competingPosts: maxOverlap > 0 ? maxOverlap - 1 : 0,
+                    profileActivity: post.profileActivity,
+                    reach: post.reach,
+                    engagement: post.engagement,
+                    saved: post.saved,
+                    weightScore: Number(((postWeights[post.id] || 0) * 100).toFixed(1))
+                };
+            })
+            .filter((post) => post.estimatedFollowerLift > 0)
+            .sort((a, b) => b.estimatedFollowerLift - a.estimatedFollowerLift);
+
+        const totalEstimatedLift = estimatedPosts.reduce((sum, post) => sum + post.estimatedFollowerLift, 0);
+
+        return {
+            available: estimatedPosts.length > 0,
+            methodology: 'Estimated from positive day-over-day follower-count gains in the 1-3 days after publish. Each gain day is allocated across eligible posts using profile activity, reach, engagement, and save-rate weighting.',
+            totalEstimatedLift: Number(totalEstimatedLift.toFixed(1)),
+            posts: estimatedPosts.slice(0, 12)
         };
     }
 
@@ -769,6 +932,13 @@ class AnalyticsService {
         const totalReach = accountMetrics.reduce((sum, day) => sum + Number(day.reach || 0), 0);
         const totalImpressions = accountAggregates.totalViews || 0;
         const totalProfileViews = accountAggregates.totalProfileViews || 0;
+        const estimatedFollowerLift = this.estimateFollowerLiftByPost(
+            media,
+            accountMetrics,
+            profile.followers_count || 0,
+            startDate,
+            endDate
+        );
 
         const growth = {
             currentFollowers: profile.followers_count,
@@ -819,6 +989,7 @@ class AnalyticsService {
                 profileViewRateFromReach: this.toPercent(totalProfileViews, totalReach),
                 impressionsPerReach: totalReach > 0 ? Number((totalImpressions / totalReach).toFixed(2)) : 0
             },
+            estimatedFollowerLift,
             weeklyStats: {
                 postsThisWeek: thisWeekPosts.length,
                 engagementThisWeek: thisWeekEngagement,
