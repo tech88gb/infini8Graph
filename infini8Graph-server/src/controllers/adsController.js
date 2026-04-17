@@ -640,9 +640,28 @@ export async function getDemographics(req, res) {
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
         const cacheKey = buildMetaCacheKey('meta-demographics', [req.user.userId, accountId, datePreset]);
-        const demographics = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () =>
-            fetchInsightsBreakdown(accountId, accessToken, datePreset, 'age,gender', 'spend,impressions,clicks,reach,ctr')
-        );
+        const demographics = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
+            const rows = await fetchInsightsBreakdown(accountId, accessToken, datePreset, 'age,gender', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas');
+            return rows
+                .map((row) => ({
+                    age: row?.age || 'Unknown',
+                    gender: row?.gender || 'unknown',
+                    spend: parseMetricNumber(row?.spend),
+                    impressions: parseMetricNumber(row?.impressions),
+                    clicks: parseMetricNumber(row?.clicks),
+                    reach: parseMetricNumber(row?.reach),
+                    ctr: parseMetricNumber(row?.ctr),
+                    cpc: parseMetricNumber(row?.cpc),
+                    cpm: parseMetricNumber(row?.cpm),
+                    purchases: parseMetricNumber(findActionMetric(row?.actions || [], ACTION_CANDIDATES.purchases)?.value),
+                    purchaseValue: parseMetricNumber(findActionMetric(row?.action_values || [], ACTION_CANDIDATES.purchases)?.value),
+                    purchaseRoas: Array.isArray(row?.purchase_roas)
+                        ? parseMetricNumber(row.purchase_roas[0]?.value)
+                        : parseMetricNumber(row?.purchase_roas),
+                    costPerPurchase: parseMetricNumber(findActionMetric(row?.cost_per_action_type || [], ACTION_CANDIDATES.purchases)?.value)
+                }))
+                .sort((a, b) => b.spend - a.spend);
+        });
 
         res.json({ success: true, data: { demographics } });
     } catch (error) {

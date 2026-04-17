@@ -906,6 +906,13 @@ export default function AdsPage() {
     const positions = insightsData?.data?.positions || [];
     const countries = geographyData?.data?.countries || [];
     const regions = geographyData?.data?.regions || [];
+    const totalDemographicSpend = demographics.reduce((sum: number, row: any) => sum + Number(row?.spend || 0), 0);
+    const demographicRows = [...demographics].sort((a: any, b: any) => {
+        const spendDiff = Number(b?.spend || 0) - Number(a?.spend || 0);
+        if (spendDiff !== 0) return spendDiff;
+        return Number(b?.purchaseRoas || 0) - Number(a?.purchaseRoas || 0);
+    });
+    const topDemographicRow = demographicRows[0] || null;
     const regionPerformanceRows = [...regions]
         .filter((region: any) => Number(region?.spend || 0) > 0)
         .sort((a: any, b: any) => {
@@ -916,6 +923,14 @@ export default function AdsPage() {
     const topRegionByRoas = regionPerformanceRows.find((region: any) => Number(region?.purchaseRoas || 0) > 0) || null;
     const topRegionByRevenue = [...regionPerformanceRows].sort((a: any, b: any) => Number(b?.purchaseValue || 0) - Number(a?.purchaseValue || 0))[0] || null;
     const regionRoasCoverage = regionPerformanceRows.filter((region: any) => Number(region?.purchaseRoas || 0) > 0).length;
+    const countryPerformanceRows = [...countries]
+        .filter((country: any) => Number(country?.spend || 0) > 0)
+        .sort((a: any, b: any) => {
+            const roasDiff = Number(b?.purchaseRoas || 0) - Number(a?.purchaseRoas || 0);
+            if (roasDiff !== 0) return roasDiff;
+            return Number(b?.purchaseValue || 0) - Number(a?.purchaseValue || 0);
+        });
+    const topCountryByRoas = countryPerformanceRows.find((country: any) => Number(country?.purchaseRoas || 0) > 0) || null;
     const videoViews = insightsData?.data?.videoViews || {};
     const conversions = insightsData?.data?.conversions || [];
     const actionValues = insightsData?.data?.actionValues || [];
@@ -1805,74 +1820,37 @@ export default function AdsPage() {
             {/* ==================== DEMOGRAPHICS TAB ==================== */}
             {activeTab === 'demographics' && (
                 <div style={{ display: 'grid', gap: 20 }}>
-                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Demographics <InfoTooltip text="Age and gender breakdown of who is interacting with your ads." /></span>} subtitle="Breakdown by age and gender">
+                    <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Demographics <InfoTooltip text="Audience performance by age and gender. Useful for spotting where spend, click efficiency, and sales outcomes are concentrated." /></span>} subtitle="Audience performance by age and gender">
                         {demographicsLoading ? (
                             <div style={{ textAlign: 'center', padding: 40 }}>
                                 <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
                                 <p className="text-muted">Loading demographics...</p>
                             </div>
-                        ) : demographics.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table className="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Age / Gender</th>
-                                            <th>Spend</th>
-                                            <th>Impressions</th>
-                                            <th>Reach</th>
-                                            <th>Clicks</th>
-                                            <th>CTR</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {demographics.slice(0, 15).map((d: any, i: number) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 500 }}>{d.age} {d.gender}</td>
-                                                <td>{formatCurrency(d.spend)}</td>
-                                                <td>{formatNumber(d.impressions)}</td>
-                                                <td>{formatNumber(d.reach)}</td>
-                                                <td>{formatNumber(d.clicks)}</td>
-                                                <td>{formatPercent(d.ctr)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <p className="text-muted">No demographic data available</p>
-                        )}
-                    </SectionCard>
-
-                    <SectionCard
-                        title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="Region-level performance from Meta's geo breakdown. This view highlights which regions are generating purchase value and ROAS, not just spend and clicks." /></span>}
-                        subtitle="Detailed region performance with spend, purchases, purchase value, and ROAS"
-                    >
-                        {geographyLoading && regionPerformanceRows.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: 40 }}>
-                                <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
-                                <p className="text-muted">Loading region performance...</p>
-                            </div>
-                        ) : regionPerformanceRows.length > 0 ? (
+                        ) : demographicRows.length > 0 ? (
                             <div style={{ display: 'grid', gap: 16 }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                                     <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)' }}>
-                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Regions With ROAS</div>
-                                        <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(regionRoasCoverage)}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Regions where Meta returned purchase value and spend</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Highest Spend Audience</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topDemographicRow ? `${topDemographicRow.age} ${topDemographicRow.gender}` : 'No data'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{topDemographicRow ? `${formatCurrency(topDemographicRow.spend)} spent` : 'No demographic spend yet'}</div>
                                     </div>
                                     <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
-                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top ROAS Region</div>
-                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topRegionByRoas?.region || 'No ROAS yet'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Best Demographic ROAS</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>
+                                            {demographicRows.find((row: any) => Number(row?.purchaseRoas || 0) > 0)?.age
+                                                ? `${demographicRows.find((row: any) => Number(row?.purchaseRoas || 0) > 0)?.age} ${demographicRows.find((row: any) => Number(row?.purchaseRoas || 0) > 0)?.gender}`
+                                                : 'No ROAS yet'}
+                                        </div>
                                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                                            {topRegionByRoas ? `${formatRoas(topRegionByRoas.purchaseRoas)} on ${formatCurrency(topRegionByRoas.spend)}` : 'No region-level purchase value available'}
+                                            {demographicRows.find((row: any) => Number(row?.purchaseRoas || 0) > 0)
+                                                ? formatRoas(demographicRows.find((row: any) => Number(row?.purchaseRoas || 0) > 0)?.purchaseRoas || 0)
+                                                : 'Meta did not return purchase value by demographic'}
                                         </div>
                                     </div>
                                     <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)' }}>
-                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top Revenue Region</div>
-                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topRegionByRevenue?.region || 'No revenue yet'}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                                            {topRegionByRevenue ? `${formatCurrency(topRegionByRevenue.purchaseValue)} from ${formatNumber(topRegionByRevenue.purchases)} purchases` : 'No purchase-value data available'}
-                                        </div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Audience Segments</div>
+                                        <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(demographicRows.length)}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Age/gender groups with spend in this window</div>
                                     </div>
                                 </div>
 
@@ -1880,29 +1858,29 @@ export default function AdsPage() {
                                     <table className="table">
                                         <thead>
                                             <tr>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Region <InfoTooltip text="Region returned by Meta’s geo breakdown for the selected date range." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend <InfoTooltip text="Spend attributed to this region in the selected window." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Purchase Value <InfoTooltip text="Purchase value Meta attributed to this region." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Purchases <InfoTooltip text="Purchase count Meta attributed to this region." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>ROAS <InfoTooltip text="Purchase value divided by spend for that region." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Cost / Purchase <InfoTooltip text="Spend divided by purchases for this region when Meta returns purchase actions." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CTR <InfoTooltip text="Regional click-through rate for this region." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPC <InfoTooltip text="Regional cost per click." /></span></th>
-                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPM <InfoTooltip text="Regional cost per thousand impressions." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Audience <InfoTooltip text="Meta age and gender audience bucket." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend <InfoTooltip text="Spend for this audience segment in the selected window." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend Share <InfoTooltip text="How much of total demographic spend this audience consumed." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Reach <InfoTooltip text="Unique people reached in this audience segment." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Clicks <InfoTooltip text="Clicks attributed to this audience segment." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CTR <InfoTooltip text="Click-through rate for this audience segment." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPC <InfoTooltip text="Cost per click for this audience segment." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>CPM <InfoTooltip text="Cost per thousand impressions for this audience segment." /></span></th>
+                                                <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>ROAS <InfoTooltip text="Purchase ROAS if Meta returned purchase value at demographic level." /></span></th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {regionPerformanceRows.slice(0, 20).map((region: any, index: number) => (
-                                                <tr key={`${region.region}-${index}`}>
-                                                    <td style={{ fontWeight: 600 }}>{region.region}</td>
-                                                    <td>{formatCurrency(region.spend)}</td>
-                                                    <td>{region.purchaseValue ? formatCurrency(region.purchaseValue) : '—'}</td>
-                                                    <td>{formatNumber(region.purchases || 0)}</td>
-                                                    <td>{region.purchaseRoas ? formatRoas(region.purchaseRoas) : '—'}</td>
-                                                    <td>{region.costPerPurchase ? formatCurrency(region.costPerPurchase) : '—'}</td>
-                                                    <td>{formatPercent(region.ctr || 0)}</td>
-                                                    <td>{region.cpc ? formatCurrency(region.cpc) : '—'}</td>
-                                                    <td>{region.cpm ? formatCurrency(region.cpm) : '—'}</td>
+                                            {demographicRows.slice(0, 15).map((d: any, i: number) => (
+                                                <tr key={i}>
+                                                    <td style={{ fontWeight: 600 }}>{d.age} {d.gender}</td>
+                                                    <td>{formatCurrency(d.spend)}</td>
+                                                    <td>{totalDemographicSpend > 0 ? `${((Number(d.spend || 0) / totalDemographicSpend) * 100).toFixed(1)}%` : '0%'}</td>
+                                                    <td>{formatNumber(d.reach)}</td>
+                                                    <td>{formatNumber(d.clicks)}</td>
+                                                    <td>{formatPercent(d.ctr)}</td>
+                                                    <td>{d.cpc ? formatCurrency(d.cpc) : '—'}</td>
+                                                    <td>{d.cpm ? formatCurrency(d.cpm) : '—'}</td>
+                                                    <td>{d.purchaseRoas ? formatRoas(d.purchaseRoas) : '—'}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1910,7 +1888,7 @@ export default function AdsPage() {
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-muted">No region-level performance data available for this date range.</p>
+                            <p className="text-muted">No demographic data available</p>
                         )}
                     </SectionCard>
                 </div>
@@ -1926,23 +1904,55 @@ export default function AdsPage() {
                         </div>
                     ) : (
                         <>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Regions With ROAS</div>
+                                    <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(regionRoasCoverage)}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Regions where Meta returned purchase value and spend</div>
+                                </div>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top ROAS Region</div>
+                                    <div style={{ fontSize: 18, fontWeight: 700 }}>{topRegionByRoas?.region || 'No ROAS yet'}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                                        {topRegionByRoas ? `${formatRoas(topRegionByRoas.purchaseRoas)} on ${formatCurrency(topRegionByRoas.spend)}` : 'Meta did not return region-level purchase value'}
+                                    </div>
+                                </div>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top Revenue Region</div>
+                                    <div style={{ fontSize: 18, fontWeight: 700 }}>{topRegionByRevenue?.region || 'No revenue yet'}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                                        {topRegionByRevenue ? `${formatCurrency(topRegionByRevenue.purchaseValue)} from ${formatNumber(topRegionByRevenue.purchases)} purchases` : 'No region-level purchase value available'}
+                                    </div>
+                                </div>
+                                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.18)' }}>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Top ROAS Country</div>
+                                    <div style={{ fontSize: 18, fontWeight: 700 }}>{topCountryByRoas?.country || 'No ROAS yet'}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                                        {topCountryByRoas ? `${formatRoas(topCountryByRoas.purchaseRoas)} on ${formatCurrency(topCountryByRoas.spend)}` : 'No country-level purchase value available'}
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Country Breakdown */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text="Geographical breakdown of your ad reach and performance at the country level." /></span>} subtitle="How your ads perform in different countries">
-                                {countries.length > 0 ? (
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Country Performance <InfoTooltip text="Country-level performance with spend, purchase value, ROAS, click efficiency, and purchase outcomes." /></span>} subtitle="How countries perform on both delivery and revenue efficiency">
+                                {countryPerformanceRows.length > 0 ? (
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
                                             <thead>
                                                 <tr>
                                                     <th>Country</th>
                                                     <th>Spend</th>
-                                                    <th>Impressions</th>
-                                                    <th>Reach</th>
-                                                    <th>Clicks</th>
+                                                    <th>Purchase Value</th>
+                                                    <th>Purchases</th>
+                                                    <th>ROAS</th>
+                                                    <th>Cost / Purchase</th>
                                                     <th>CTR</th>
+                                                    <th>CPC</th>
+                                                    <th>CPM</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {countries.slice(0, 15).map((c: any, i: number) => (
+                                                {countryPerformanceRows.slice(0, 15).map((c: any, i: number) => (
                                                     <tr key={i}>
                                                         <td style={{ fontWeight: 500 }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1951,10 +1961,13 @@ export default function AdsPage() {
                                                             </div>
                                                         </td>
                                                         <td>{formatCurrency(c.spend)}</td>
-                                                        <td>{formatNumber(c.impressions)}</td>
-                                                        <td>{formatNumber(c.reach)}</td>
-                                                        <td>{formatNumber(c.clicks)}</td>
+                                                        <td>{c.purchaseValue ? formatCurrency(c.purchaseValue) : '—'}</td>
+                                                        <td>{formatNumber(c.purchases || 0)}</td>
+                                                        <td>{c.purchaseRoas ? formatRoas(c.purchaseRoas) : '—'}</td>
+                                                        <td>{c.costPerPurchase ? formatCurrency(c.costPerPurchase) : '—'}</td>
                                                         <td>{formatPercent(c.ctr)}</td>
+                                                        <td>{c.cpc ? formatCurrency(c.cpc) : '—'}</td>
+                                                        <td>{c.cpm ? formatCurrency(c.cpm) : '—'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -1966,21 +1979,25 @@ export default function AdsPage() {
                             </SectionCard>
 
                             {/* Region Breakdown */}
-                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="More granular geographical breakdown showing states or regions." /></span>} subtitle="Performance by state/region">
-                                {regions.length > 0 ? (
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>Region Performance <InfoTooltip text="Region or state breakdown with revenue efficiency and purchase metrics where Meta exposes them." /></span>} subtitle="Performance by state/region with ROAS and purchase efficiency">
+                                {regionPerformanceRows.length > 0 ? (
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="table">
                                             <thead>
                                                 <tr>
                                                     <th>Region</th>
                                                     <th>Spend</th>
-                                                    <th>Impressions</th>
-                                                    <th>Reach</th>
-                                                    <th>Clicks</th>
+                                                    <th>Purchase Value</th>
+                                                    <th>Purchases</th>
+                                                    <th>ROAS</th>
+                                                    <th>Cost / Purchase</th>
+                                                    <th>CTR</th>
+                                                    <th>CPC</th>
+                                                    <th>CPM</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {regions.slice(0, 15).map((r: any, i: number) => (
+                                                {regionPerformanceRows.slice(0, 20).map((r: any, i: number) => (
                                                     <tr key={i}>
                                                         <td style={{ fontWeight: 500 }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1989,15 +2006,19 @@ export default function AdsPage() {
                                                             </div>
                                                         </td>
                                                         <td>{formatCurrency(r.spend)}</td>
-                                                        <td>{formatNumber(r.impressions)}</td>
-                                                        <td>{formatNumber(r.reach)}</td>
-                                                        <td>{formatNumber(r.clicks)}</td>
+                                                        <td>{r.purchaseValue ? formatCurrency(r.purchaseValue) : '—'}</td>
+                                                        <td>{formatNumber(r.purchases || 0)}</td>
+                                                        <td>{r.purchaseRoas ? formatRoas(r.purchaseRoas) : '—'}</td>
+                                                        <td>{r.costPerPurchase ? formatCurrency(r.costPerPurchase) : '—'}</td>
+                                                        <td>{formatPercent(r.ctr || 0)}</td>
+                                                        <td>{r.cpc ? formatCurrency(r.cpc) : '—'}</td>
+                                                        <td>{r.cpm ? formatCurrency(r.cpm) : '—'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                         <div style={{ marginTop: 12, padding: '10px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
-                                            Showing top 15 regions sorted by highest spend. Total {regions.length} regions tracked.
+                                            Showing top 20 regions sorted by ROAS first, then purchase value and spend. Total {regions.length} regions tracked.
                                         </div>
                                     </div>
                                 ) : (
