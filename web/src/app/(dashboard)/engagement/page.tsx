@@ -97,6 +97,10 @@ function TimePeriodBadge({ posts, selectedRange, totalPosts }: { posts: any[]; s
     );
 }
 
+function formatMediaTypeLabel(value: string) {
+    return value.replace(/_/g, ' ');
+}
+
 // ==================== TOOLTIP COMPONENT ====================
 
 function InfoTooltip({ text }: { text: string }) {
@@ -322,16 +326,19 @@ export default function EngagementPage() {
     const pagination = data?.pagination || {};
 
     // Content type breakdown
-    const contentTypes = posts.reduce((acc: any, post: any) => {
-        const type = post.type || 'Unknown';
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-    }, {});
-
-    const contentTypeData = Object.entries(contentTypes).map(([name, value]) => ({
-        name: name.replace('_', ' '),
-        value
-    }));
+    const contentTypeData = formatEfficiency.length > 0
+        ? formatEfficiency.map((entry: any) => ({
+            name: formatMediaTypeLabel(entry.type),
+            value: entry.count
+        }))
+        : Object.entries(posts.reduce((acc: any, post: any) => {
+            const type = post.type || 'Unknown';
+            acc[type] = (acc[type] || 0) + 1;
+            return acc;
+        }, {})).map(([name, value]) => ({
+            name: formatMediaTypeLabel(name),
+            value
+        }));
 
     // Engagement by content type
     const engagementByType = posts.reduce((acc: any, post: any) => {
@@ -346,7 +353,7 @@ export default function EngagementPage() {
 
     const engagementTypeData = formatEfficiency.length > 0
         ? formatEfficiency.map((entry: any) => ({
-            name: entry.type.replace('_', ' '),
+            name: formatMediaTypeLabel(entry.type),
             avgEngagement: entry.avgEngagement,
             avgEngagementRate: entry.avgEngagementRate,
             avgSaveRate: entry.avgSaveRate,
@@ -367,9 +374,8 @@ export default function EngagementPage() {
         ? ((summary.totalEngagement / summary.totalReach) * 100)
         : 0;
 
-    const saveRate = posts.reduce((sum: number, p: any) => sum + (p.saved || 0), 0);
-    const totalLikes = posts.reduce((sum: number, p: any) => sum + (p.likes || 0), 0);
-    const saveToLikeRatio = totalLikes > 0 ? ((saveRate / totalLikes) * 100) : 0;
+    const totalPostsInRange = summary.totalPosts || posts.length;
+    const totalSavesInRange = summary.totalSaved || posts.reduce((sum: number, p: any) => sum + (p.saved || 0), 0);
 
     // Engagement rate (industry standard: engagement / followers)
     const engagementRate = summary.avgEngagement && summary.totalReach
@@ -437,7 +443,7 @@ export default function EngagementPage() {
             <SectionCard
                 title="Rate Diagnostics"
                 subtitle="Real rates calculated from your fetched post reach and interactions"
-                timePeriod={posts.length > 0 ? `Based on ${posts.length} posts` : undefined}
+                timePeriod={totalPostsInRange > 0 ? `Based on ${totalPostsInRange} posts` : undefined}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
@@ -466,7 +472,7 @@ export default function EngagementPage() {
                             <span className="text-muted" style={{ fontSize: 12 }}>Total Saves</span>
                             <InfoTooltip text="Total saves across the analyzed posts." />
                         </div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>{(summary.totalSaved || saveRate).toLocaleString()}</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#ec4899' }}>{totalSavesInRange.toLocaleString()}</div>
                     </div>
                 </div>
             </SectionCard>
@@ -476,7 +482,7 @@ export default function EngagementPage() {
                 <SectionCard
                     title="Content Type Breakdown"
                     subtitle="Distribution of your content formats"
-                    timePeriod={`${posts.length} posts analyzed`}
+                    timePeriod={`${totalPostsInRange} posts analyzed`}
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                         <ResponsiveContainer width="50%" height={180}>
@@ -490,7 +496,7 @@ export default function EngagementPage() {
                                     outerRadius={70}
                                     label={({ name, percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
                                 >
-                                    {contentTypeData.map((_, i) => (
+                                    {contentTypeData.map((_: any, i: number) => (
                                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
                                     ))}
                                 </Pie>
@@ -498,7 +504,7 @@ export default function EngagementPage() {
                             </PieChart>
                         </ResponsiveContainer>
                         <div style={{ flex: 1 }}>
-                            {contentTypeData.map((type, i) => (
+                            {contentTypeData.map((type: any, i: number) => (
                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                                     <div style={{ width: 12, height: 12, borderRadius: 2, background: COLORS[i % COLORS.length] }} />
                                     <span style={{ flex: 1, fontSize: 13, textTransform: 'capitalize' }}>{type.name}</span>
