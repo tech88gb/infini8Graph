@@ -999,6 +999,9 @@ export default function AdsPage() {
             helper: videoViews.views_75 > 0 ? `${((Number(videoViews.views_100 || 0) / Number(videoViews.views_75 || 1)) * 100).toFixed(1)}% of 75% viewers completed` : 'Completed the video'
         }
     ];
+    const deepProfileType = deepInsightsData?.data?.accountProfile?.type || 'general';
+    const deepPlacementSummary = deepInsightsData?.data?.placementSummary || null;
+    const deepPlacementRows = deepInsightsData?.data?.placementDiagnostics || [];
 
     const handlePageExport = async (format: SectionExportFormat) => {
         if (!effectiveAccount) return;
@@ -3055,8 +3058,8 @@ export default function AdsPage() {
                             {/* Bounce Gap Analysis - Overall */}
                             {deepInsightsData.data.bounceGapAnalysis && (
                                 <SectionCard
-                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Bounce Gap Analysis <InfoTooltip text="Compares Link Clicks to actual Landing Page Views. A high gap indicates slow page speed or accidental clicks." /></span>}
-                                    subtitle="The gap between Link Clicks and Landing Page Views reveals traffic quality"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Click-to-Landing Gap <InfoTooltip text="Uses Meta's real outbound clicks and landing-page-view events. This is the handoff loss between a paid click and the page actually loading enough for the landing-page-view event to fire." /></span>}
+                                    subtitle="A sales account should watch how much paid click traffic is lost before the landing page actually loads"
                                 >
                                     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
                                         {/* Bounce Gap Score Circle */}
@@ -3083,7 +3086,7 @@ export default function AdsPage() {
                                                     {deepInsightsData.data.bounceGapAnalysis.bounceGap}%
                                                 </div>
                                                 <div style={{ fontSize: 11, color: 'white', opacity: 0.9 }}>
-                                                    Bounce Gap
+                                                    Click Loss
                                                 </div>
                                             </div>
                                             <div style={{ marginTop: 12, fontWeight: 600, textTransform: 'capitalize' }}>
@@ -3138,8 +3141,8 @@ export default function AdsPage() {
                             {/* Per-Campaign Funnel Comparison */}
                             {(deepInsightsData.data.campaignFunnels || []).length > 0 && (
                                 <SectionCard
-                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Per-Campaign Conversion Velocity <InfoTooltip text="Measures the speed and efficiency at which traffic moves through your funnel, campaign by campaign." /></span>}
-                                    subtitle="Compare funnel performance across campaigns to see why some convert better"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Campaign Funnel Benchmarking <InfoTooltip text="Compares campaigns using real Meta funnel events. If a campaign has no landing-page-view event, the table will show a dash instead of estimating that step." /></span>}
+                                    subtitle="Compare real funnel handoff and purchase efficiency across campaigns to see which ones turn traffic into revenue"
                                 >
                                     {/* Comparison Header if we have best/worst */}
                                     {deepInsightsData.data.compareFunnels && (
@@ -3180,7 +3183,7 @@ export default function AdsPage() {
                                                 {deepInsightsData.data.compareFunnels.comparison && (
                                                     <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 8 }}>
                                                         +{deepInsightsData.data.compareFunnels.comparison.roasDiff}x ROAS<br />
-                                                        +{deepInsightsData.data.compareFunnels.comparison.atcRateDiff}% conv
+                                                        +{deepInsightsData.data.compareFunnels.comparison.atcRateDiff}% ATC to buy
                                                     </div>
                                                 )}
                                             </div>
@@ -3215,7 +3218,7 @@ export default function AdsPage() {
                                             <thead>
                                                 <tr>
                                                     <th>Campaign</th>
-                                                    <th>Bounce Gap</th>
+                                                    <th>Click Loss</th>
                                                     <th>Link→LPV</th>
                                                     <th>LPV→ATC</th>
                                                     <th>ATC→Buy</th>
@@ -3234,26 +3237,30 @@ export default function AdsPage() {
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <span style={{
-                                                                padding: '4px 10px',
-                                                                borderRadius: 20,
-                                                                fontSize: 11,
-                                                                fontWeight: 600,
-                                                                background: c.dropoffs.bounceQuality === 'critical' ? '#fee2e2' :
-                                                                    c.dropoffs.bounceQuality === 'warning' ? '#fef3c7' :
-                                                                        c.dropoffs.bounceQuality === 'acceptable' ? '#e0f2fe' : '#dcfce7',
-                                                                color: c.dropoffs.bounceQuality === 'critical' ? '#991b1b' :
-                                                                    c.dropoffs.bounceQuality === 'warning' ? '#92400e' :
-                                                                        c.dropoffs.bounceQuality === 'acceptable' ? '#0369a1' : '#166534'
-                                                            }}>
-                                                                {c.dropoffs.bounceGap}%
-                                                            </span>
+                                                            {c.dropoffs.bounceGap === null ? (
+                                                                <span style={{ color: 'var(--muted)', fontSize: 12 }}>No LPV data</span>
+                                                            ) : (
+                                                                <span style={{
+                                                                    padding: '4px 10px',
+                                                                    borderRadius: 20,
+                                                                    fontSize: 11,
+                                                                    fontWeight: 600,
+                                                                    background: c.dropoffs.bounceQuality === 'critical' ? '#fee2e2' :
+                                                                        c.dropoffs.bounceQuality === 'warning' ? '#fef3c7' :
+                                                                            c.dropoffs.bounceQuality === 'acceptable' ? '#e0f2fe' : '#dcfce7',
+                                                                    color: c.dropoffs.bounceQuality === 'critical' ? '#991b1b' :
+                                                                        c.dropoffs.bounceQuality === 'warning' ? '#92400e' :
+                                                                            c.dropoffs.bounceQuality === 'acceptable' ? '#0369a1' : '#166534'
+                                                                }}>
+                                                                    {c.dropoffs.bounceGap}%
+                                                                </span>
+                                                            )}
                                                         </td>
                                                         <td style={{ fontSize: 13 }}>
-                                                            {c.funnel.linkClicks} → {c.funnel.landingPageViews}
+                                                            {c.funnel.linkClicks} → {c.funnel.landingPageViews > 0 ? c.funnel.landingPageViews : '—'}
                                                         </td>
                                                         <td style={{ fontSize: 13 }}>
-                                                            {c.funnel.landingPageViews} → {c.funnel.addToCart}
+                                                            {c.funnel.landingPageViews > 0 ? c.funnel.landingPageViews : '—'} → {c.funnel.addToCart}
                                                         </td>
                                                         <td>
                                                             <span style={{ fontWeight: 600, color: c.conversions.atcToPurchaseRate >= 50 ? '#10b981' : '#f59e0b' }}>
@@ -3276,8 +3283,8 @@ export default function AdsPage() {
                             {/* Video Hook Analysis */}
                             {deepInsightsData.data.videoSummary && (
                                 <SectionCard
-                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Analyzes user attention span on your video ads. A drop-off before 3s implies a weak hook, while later drop-offs imply content fatigue." /></span>}
-                                    subtitle="Understand where viewers drop off to optimize your video ads"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
+                                    subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
                                 >
                                     {/* Summary Stats */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
@@ -3361,52 +3368,108 @@ export default function AdsPage() {
                                 </SectionCard>
                             )}
 
-                            {/* Placement Arbitrage */}
-                            {deepInsightsData.data.arbitrageSummary && (
+                            {/* Placement Diagnostics */}
+                            {deepPlacementSummary && (
                                 <SectionCard
-                                    title="💰 Placement Arbitrage Detection"
-                                    subtitle="Find where your budget is being wasted on low-intent placements"
+                                    title={
+                                        <span style={{ display: 'flex', alignItems: 'center' }}>
+                                            💰 {deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                ? 'Placement Conversion Efficiency'
+                                                : deepProfileType === 'leads'
+                                                    ? 'Placement Lead Efficiency'
+                                                    : deepProfileType === 'traffic'
+                                                        ? 'Placement Traffic Efficiency'
+                                                        : 'Placement Delivery Efficiency'}
+                                            <InfoTooltip text={
+                                                deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                    ? 'Ranks placements using real purchase count, ROAS, CPA, and spend share. Recommendations are practical reads built on those real values.'
+                                                    : deepProfileType === 'leads'
+                                                        ? 'Ranks placements using real lead count, CPL, CTR, and spend share from Meta.'
+                                                        : deepProfileType === 'traffic'
+                                                            ? 'Ranks placements using real landing-page-view volume, LPV rate, CPC, and spend share from Meta.'
+                                                            : 'Ranks placements using the delivery metrics that matter most for the selected account focus.'
+                                            } />
+                                        </span>
+                                    }
+                                    subtitle={
+                                        deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                            ? 'For this sales-focused account, placements are judged by whether they are actually turning spend into purchases at acceptable efficiency'
+                                            : deepProfileType === 'leads'
+                                                ? 'For this lead-gen account, placements are judged by lead volume and cost efficiency'
+                                                : deepProfileType === 'traffic'
+                                                    ? 'For this traffic-focused account, placements are judged by whether clicks become landing-page views efficiently'
+                                                    : 'Placements are ranked by the metrics that best match this account focus'
+                                    }
                                 >
                                     {/* Summary Cards */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11 }}>Total Placements</div>
-                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{deepInsightsData.data.arbitrageSummary.totalPlacements}</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{deepPlacementSummary.totalPlacements}</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div className="text-muted" style={{ fontSize: 11 }}>Avg CPA</div>
-                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCurrency(deepInsightsData.data.arbitrageSummary.avgCPA)}</div>
-                                        </div>
-                                        <div style={{ padding: 16, background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div style={{ color: '#ef4444', fontSize: 11 }}>Wasteful Placements</div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>{deepInsightsData.data.arbitrageSummary.wastefulPlacements}</div>
-                                        </div>
-                                        <div style={{ padding: 16, background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, textAlign: 'center' }}>
-                                            <div style={{ color: '#ef4444', fontSize: 11 }}>Wasted Spend</div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>
-                                                {formatCurrency(deepInsightsData.data.arbitrageSummary.wastedSpend)}
+                                            <div className="text-muted" style={{ fontSize: 11 }}>
+                                                {deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                    ? 'Blended ROAS'
+                                                    : deepProfileType === 'leads'
+                                                        ? 'Blended CPL'
+                                                        : deepProfileType === 'traffic'
+                                                            ? 'Blended CPC'
+                                                            : 'Total Spend'}
                                             </div>
-                                            <div style={{ fontSize: 10, color: '#ef4444' }}>
-                                                ({deepInsightsData.data.arbitrageSummary.wastedPercent}% of budget)
+                                            <div style={{ fontSize: 24, fontWeight: 700 }}>
+                                                {deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                    ? `${Number(deepPlacementSummary.benchmarkRoas || 0).toFixed(2)}x`
+                                                    : deepProfileType === 'leads'
+                                                        ? formatCurrency(deepPlacementSummary.benchmarkCpl || 0)
+                                                        : deepProfileType === 'traffic'
+                                                            ? formatCurrency(deepPlacementSummary.benchmarkCpc || 0)
+                                                            : formatCurrency(deepPlacementSummary.totalSpend || 0)}
+                                            </div>
+                                        </div>
+                                        <div style={{ padding: 16, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8, textAlign: 'center' }}>
+                                            <div style={{ color: '#10b981', fontSize: 11 }}>Scale</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepPlacementSummary.scaleCount}</div>
+                                        </div>
+                                        <div style={{ padding: 16, background: 'rgba(245, 158, 11, 0.1)', borderRadius: 8, textAlign: 'center' }}>
+                                            <div style={{ color: '#f59e0b', fontSize: 11 }}>Review</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{deepPlacementSummary.reviewCount}</div>
+                                            <div style={{ fontSize: 10, color: '#f59e0b' }}>
+                                                {deepPlacementSummary.holdCount} hold / efficient
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Recommendation */}
-                                    {deepInsightsData.data.arbitrageSummary.wastedPercent > 5 && (
-                                        <div style={{
-                                            marginBottom: 24,
-                                            padding: '16px 20px',
-                                            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.1))',
-                                            borderRadius: 8,
-                                            border: '1px solid rgba(239, 68, 68, 0.3)'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <Zap size={20} style={{ color: '#ef4444' }} />
-                                                <div style={{ fontSize: 13 }}>{deepInsightsData.data.arbitrageSummary.recommendation}</div>
+                                    <div style={{
+                                        marginBottom: 24,
+                                        padding: '16px 20px',
+                                        background: 'rgba(99, 102, 241, 0.08)',
+                                        borderRadius: 8,
+                                        border: '1px solid rgba(99, 102, 241, 0.18)'
+                                    }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                                            <div>
+                                                <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Best efficiency read</div>
+                                                <div style={{ fontWeight: 600 }}>{deepPlacementSummary.topEfficiencyPlacement?.fullName || 'No clear leader yet'}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>
+                                                    {deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                        ? 'Highest purchase volume'
+                                                        : deepProfileType === 'leads'
+                                                            ? 'Highest lead volume'
+                                                            : deepProfileType === 'traffic'
+                                                                ? 'Highest LPV volume'
+                                                                : 'Largest delivery share'}
+                                                </div>
+                                                <div style={{ fontWeight: 600 }}>{deepPlacementSummary.topVolumePlacement?.fullName || 'No clear leader yet'}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>How this ranking works</div>
+                                                <div style={{ fontSize: 13 }}>{deepPlacementSummary.note}</div>
                                             </div>
                                         </div>
-                                    )}
+                                    </div>
 
                                     {/* Placement Table */}
                                     <div style={{ overflowX: 'auto' }}>
@@ -3414,15 +3477,16 @@ export default function AdsPage() {
                                             <thead>
                                                 <tr>
                                                     <th>Placement</th>
-                                                    <th>Intent</th>
+                                                    <th>Spend Share</th>
                                                     <th>Spend</th>
-                                                    <th>CPA</th>
-                                                    <th>Adj. CPA</th>
-                                                    <th>ROAS</th>
+                                                    <th>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? 'Purchases' : deepProfileType === 'leads' ? 'Leads' : deepProfileType === 'traffic' ? 'LPVs' : 'Reach'}</th>
+                                                    <th>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? 'CPA' : deepProfileType === 'leads' ? 'CPL' : deepProfileType === 'traffic' ? 'CPC' : 'CPM'}</th>
+                                                    <th>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? 'ROAS' : deepProfileType === 'leads' ? 'CTR' : deepProfileType === 'traffic' ? 'LPV Rate' : 'CTR'}</th>
+                                                    <th>Decision</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {(deepInsightsData.data.placementArbitrage || []).slice(0, 12).map((p: any, i: number) => (
+                                                {deepPlacementRows.slice(0, 12).map((p: any, i: number) => (
                                                     <tr key={i}>
                                                         <td>
                                                             <div style={{ fontWeight: 500 }}>{p.fullName}</div>
@@ -3430,26 +3494,31 @@ export default function AdsPage() {
                                                                 {formatNumber(p.metrics.impressions)} imp • {formatNumber(p.metrics.clicks)} clicks
                                                             </div>
                                                         </td>
+                                                        <td>{p.metrics.spendShare}%</td>
+                                                        <td>{formatCurrency(p.metrics.spend)}</td>
+                                                        <td>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? formatNumber(p.metrics.purchases) : deepProfileType === 'leads' ? formatNumber(p.metrics.leads) : deepProfileType === 'traffic' ? formatNumber(p.metrics.landingPageViews) : formatNumber(p.metrics.reach)}</td>
+                                                        <td>{deepProfileType === 'sales' || deepProfileType === 'mixed' ? (p.metrics.cpa > 0 ? formatCurrency(p.metrics.cpa) : '—') : deepProfileType === 'leads' ? (p.metrics.cpl > 0 ? formatCurrency(p.metrics.cpl) : '—') : deepProfileType === 'traffic' ? formatCurrency(p.metrics.cpc) : formatCurrency(p.metrics.cpm)}</td>
+                                                        <td>
+                                                            <span style={{ fontWeight: 700, color: p.metrics.roas >= 1 ? '#10b981' : p.metrics.roas > 0 ? '#f59e0b' : 'var(--muted)' }}>
+                                                                {deepProfileType === 'sales' || deepProfileType === 'mixed'
+                                                                    ? (p.metrics.roas > 0 ? `${p.metrics.roas}x` : '—')
+                                                                    : deepProfileType === 'leads'
+                                                                        ? `${Number(p.metrics.ctr || 0).toFixed(2)}%`
+                                                                        : deepProfileType === 'traffic'
+                                                                            ? `${Number(p.metrics.lpvRate || 0).toFixed(1)}%`
+                                                                            : `${Number(p.metrics.ctr || 0).toFixed(2)}%`}
+                                                            </span>
+                                                        </td>
                                                         <td>
                                                             <span style={{
                                                                 padding: '4px 10px',
                                                                 borderRadius: 20,
-                                                                background: `${p.intent.color}20`,
-                                                                color: p.intent.color,
+                                                                background: `${p.recommendationColor}20`,
+                                                                color: p.recommendationColor,
                                                                 fontSize: 11,
                                                                 fontWeight: 600
                                                             }}>
-                                                                {p.intent.label}
-                                                            </span>
-                                                        </td>
-                                                        <td>{formatCurrency(p.metrics.spend)}</td>
-                                                        <td>{p.metrics.cpa > 0 ? formatCurrency(p.metrics.cpa) : '—'}</td>
-                                                        <td style={{ fontWeight: 600, color: p.intent.color }}>
-                                                            {p.metrics.adjustedCPA > 0 ? formatCurrency(p.metrics.adjustedCPA) : '—'}
-                                                        </td>
-                                                        <td>
-                                                            <span style={{ fontWeight: 700, color: p.metrics.roas >= 1 ? '#10b981' : p.metrics.roas > 0 ? '#f59e0b' : 'var(--muted)' }}>
-                                                                {p.metrics.roas > 0 ? `${p.metrics.roas}x` : '—'}
+                                                                {p.recommendation}
                                                             </span>
                                                         </td>
                                                     </tr>
@@ -3459,7 +3528,7 @@ export default function AdsPage() {
                                     </div>
 
                                     <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 8, fontSize: 12 }}>
-                                        <strong>Intent-Adjusted CPA:</strong> This metric accounts for the inherent value of each placement. Feed/Search users have higher intent than Reels/Audience Network users, so a higher CPA may still be worth it.
+                                        <strong>Decision labels:</strong> `Scale` means the placement is already proving itself against the account-level benchmark for this account focus. `Review` means it has taken meaningful spend without proving efficiency. `Hold` or `Needs data` means keep watching before making a budget move.
                                     </div>
                                 </SectionCard>
                             )}
