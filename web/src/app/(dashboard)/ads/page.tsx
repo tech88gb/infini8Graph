@@ -2488,22 +2488,22 @@ export default function AdsPage() {
                                 </div>
                             </SectionCard>
 
-                            {/* Lead Quality Score */}
-                            {advancedData.data.leadQualityScore && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Lead Quality Score (LQS) <InfoTooltip text="LQS is a campaign quality score built from real CTR, click-to-conversion rate, CPA efficiency, spend confidence, and a frequency penalty. It is better read as traffic and conversion quality than as a pure lead metric." /></span>} subtitle="Ranks campaigns by traffic quality, conversion efficiency, and cost discipline">
+                            {/* Campaign Quality Index */}
+                            {(advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore) && (
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Campaign Quality Index <InfoTooltip text="CQI is a blended campaign-quality score built from real CTR, click-to-conversion rate, CPA efficiency, spend confidence, and a frequency penalty. Read it as a practical campaign quality read, not as a pure lead score." /></span>} subtitle="Ranks campaigns by traffic quality, conversion efficiency, and cost discipline">
                                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24 }}>
                                         <div style={{ textAlign: 'center' }}>
                                             <div style={{
                                                 fontSize: 48,
                                                 fontWeight: 700,
-                                                color: parseFloat(advancedData.data.leadQualityScore.average) >= 50 ? '#10b981' : '#f59e0b'
+                                                color: parseFloat((advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore).average) >= 50 ? '#10b981' : '#f59e0b'
                                             }}>
-                                                {advancedData.data.leadQualityScore.average}
+                                                {(advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore).average}
                                             </div>
-                                            <div className="text-muted" style={{ fontSize: 12 }}>Average LQS</div>
+                                            <div className="text-muted" style={{ fontSize: 12 }}>Average CQI</div>
                                         </div>
                                         <div style={{ display: 'grid', gap: 8 }}>
-                                            {(advancedData.data.leadQualityScore.campaigns || []).slice(0, 5).map((c: any) => (
+                                            {((advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore).campaigns || []).slice(0, 5).map((c: any) => (
                                                 <div key={c.id} style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -2547,63 +2547,93 @@ export default function AdsPage() {
 
                             {/* Creative Forensics */}
                             {(advancedData.data.creativeForensics || []).length > 0 && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Evaluates each creative with real performance metrics and labels patterns like winner, clickbait risk, hidden gem, or underperformer. Where video data exists, it also surfaces hook and completion quality." /></span>} subtitle="Creative-by-creative read on CTR, conversions, CPR, CPM, and video hook quality">
+                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Reads each ad creative against its peers using real CTR, click-to-result rate, CPR, CPM, frequency, and video hook quality when available. The labels here are meant to help you decide whether to scale, refresh, or let the creative mature." /></span>} subtitle="Creative-by-creative diagnosis with visuals, cost signals, and practical next actions">
+                                    <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
+                                        The label is a diagnosis, not a vanity badge. Winners combine conversion proof and efficiency. Traffic mismatch means the ad earns clicks but not enough downstream action. Early read means it simply has not spent enough yet to judge fairly.
+                                    </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                                         {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
-                                            // Determine pattern based on data if not provided
-                                            const getPattern = () => {
-                                                if (ad.pattern?.label) return ad.pattern;
-                                                // Fallback pattern detection
-                                                const ctr = parseFloat(ad.ctr) || 0;
-                                                const conv = ad.conversions || 0;
-                                                if (ctr >= 4 && conv >= 30) return { label: '🏆 Winner', color: '#10b981', insight: 'High engagement AND conversions' };
-                                                if (ctr >= 4 && conv < 10) return { label: '⚠️ Clickbait Risk', color: '#f59e0b', insight: 'Good clicks but low conversions - check landing page' };
-                                                if (ctr < 2 && conv >= 20) return { label: '💎 Hidden Gem', color: '#6366f1', insight: 'Low clicks but converts well - optimize creative' };
-                                                if (conv >= 20) return { label: '✓ Performer', color: '#0ea5e9', insight: 'Solid conversion performance' };
-                                                return { label: '📊 Needs Data', color: '#6b7280', insight: 'Not enough conversions to classify pattern' };
-                                            };
-                                            const pattern = getPattern();
+                                            const pattern = ad.pattern || { label: 'Mixed Read', color: '#64748b', insight: 'Mixed performance signals.', action: 'Keep monitoring.' };
+                                            const performanceScore = parseFloat(ad.performanceScore || 0);
 
                                             return (
                                                 <div key={ad.id} style={{
                                                     background: 'var(--background)',
                                                     borderRadius: 12,
                                                     overflow: 'hidden',
-                                                    border: pattern.label?.includes('Winner') || pattern.label?.includes('Gem')
+                                                    border: pattern.type === 'winner'
                                                         ? '2px solid #10b981'
-                                                        : pattern.label?.includes('Clickbait')
-                                                            ? '2px solid #f59e0b'
+                                                        : pattern.type === 'burning_spend' || pattern.type === 'traffic_mismatch'
+                                                            ? '1px solid rgba(239, 68, 68, 0.45)'
                                                             : '1px solid var(--border)'
                                                 }}>
-                                                    {/* Pattern Badge */}
-                                                    <div style={{
-                                                        padding: '10px 16px',
-                                                        background: pattern.color || '#6b7280',
-                                                        color: 'white',
-                                                        fontWeight: 600,
-                                                        fontSize: 13,
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center'
-                                                    }}>
-                                                        <span>{pattern.label}</span>
-                                                        {ad.fatigue?.status !== 'healthy' && (
-                                                            <span style={{
-                                                                padding: '2px 8px',
-                                                                background: 'rgba(255,255,255,0.2)',
-                                                                borderRadius: 4,
-                                                                fontSize: 10
-                                                            }}>
-                                                                {ad.fatigue?.status === 'critical' ? '🔴 Fatigued' : '🟡 Watch'}
-                                                            </span>
+                                                    <div style={{ position: 'relative', height: 172, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(15, 23, 42, 0.95))' }}>
+                                                        {ad.thumbnail ? (
+                                                            <img
+                                                                src={ad.thumbnail}
+                                                                alt={ad.name}
+                                                                loading="lazy"
+                                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                                            />
+                                                        ) : (
+                                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.72)', fontSize: 12 }}>
+                                                                Preview unavailable
+                                                            </div>
                                                         )}
+                                                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.82))' }} />
+                                                        <div style={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                                            <span style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                padding: '6px 10px',
+                                                                borderRadius: 999,
+                                                                background: pattern.color || '#64748b',
+                                                                color: '#fff',
+                                                                fontWeight: 700,
+                                                                fontSize: 11
+                                                            }}>
+                                                                {pattern.label}
+                                                            </span>
+                                                            <span style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                padding: '6px 10px',
+                                                                borderRadius: 999,
+                                                                background: 'rgba(15, 23, 42, 0.82)',
+                                                                border: '1px solid rgba(148, 163, 184, 0.28)',
+                                                                color: performanceScore >= 70 ? '#86efac' : performanceScore >= 45 ? '#fcd34d' : '#fca5a5',
+                                                                fontWeight: 700,
+                                                                fontSize: 11
+                                                            }}>
+                                                                Score {Math.round(performanceScore)}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+                                                            <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', marginBottom: 6, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
+                                                                {ad.name}
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                                {ad.hasVideo && (
+                                                                    <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(15,23,42,0.78)', color: '#cbd5e1', fontSize: 10 }}>
+                                                                        Video
+                                                                    </span>
+                                                                )}
+                                                                {ad.fatigue?.status !== 'healthy' && (
+                                                                    <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.85)', color: '#111827', fontSize: 10, fontWeight: 700 }}>
+                                                                        {ad.fatigue?.status === 'critical' ? 'Fatigue risk' : 'Watch fatigue'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
 
                                                     <div style={{ padding: 16 }}>
-                                                        <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 8 }}>{ad.name}</div>
-                                                        <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>{pattern.insight}</p>
+                                                        <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>{pattern.insight}</p>
+                                                        <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.16)', fontSize: 11, color: '#dbe4f0', marginBottom: 12 }}>
+                                                            <strong style={{ color: '#fff' }}>Next action:</strong> {pattern.action}
+                                                        </div>
 
-                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center' }}>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, textAlign: 'center' }}>
                                                             <div>
                                                                 <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.ctr}%</div>
                                                                 <div style={{ fontSize: 10, color: 'var(--muted)' }}>CTR</div>
@@ -2619,6 +2649,10 @@ export default function AdsPage() {
                                                             <div>
                                                                 <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(parseFloat(ad.cpm || 0))}</div>
                                                                 <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPM</div>
+                                                            </div>
+                                                            <div>
+                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.clickToConversionRate}%</div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Click CVR</div>
                                                             </div>
                                                         </div>
 
@@ -2653,47 +2687,102 @@ export default function AdsPage() {
                                 </SectionCard>
                             )}
 
-                            {/* Learning Phase Status */}
+                            {/* Delivery Readiness */}
                             {(advancedData.data.learningPhase || []).length > 0 && (
                                 <SectionCard
-                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📚 Learning Phase Status <InfoTooltip text="Meta's algorithm needs 50 conversions in 7 days to optimize. This tracks progress for each ad set to tell you when it's safe to scale." /></span>}
-                                    subtitle="Meta needs ~50 conversions per week to optimize delivery — track progress here"
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📚 Delivery Readiness <InfoTooltip text="Meta learning and learning-limited are ad set delivery states. For event-optimized goals, a practical benchmark is about 50 optimization events per week. For reach or impression goals, this section switches to delivery-stability mode instead of pretending there should be 50 conversions." /></span>}
+                                    subtitle="Objective-aware read on learning, limited delivery, and scale readiness"
                                 >
+                                    <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
+                                        This section is based on each ad set&apos;s <strong>objective</strong> and <strong>optimization goal</strong>. Conversion-style ad sets are judged on optimization-event pace. Awareness-style ad sets are judged on delivery stability, not a fake 50-conversion target.
+                                    </div>
                                     <div style={{ display: 'grid', gap: 8 }}>
                                         {(advancedData.data.learningPhase || []).slice(0, 10).map((adset: any) => {
-                                            // Determine status if not provided
-                                            const getStatus = () => {
-                                                if (adset.learningStatus?.label && adset.learningStatus.label !== 'Unknown') {
-                                                    return adset.learningStatus;
-                                                }
-                                                // Fallback status based on conversions
-                                                const conv = adset.conversions || 0;
-                                                if (conv >= 50) return { icon: '✅', label: 'Optimized', color: '#10b981', safeToScale: true };
-                                                if (conv >= 25) return { icon: '📈', label: 'Learning (50%)', color: '#f59e0b', progress: (conv / 50) * 100 };
-                                                if (conv > 0) return { icon: '🔄', label: `Learning (${conv}/50)`, color: '#6366f1', progress: (conv / 50) * 100 };
-                                                return { icon: '⏳', label: 'Not Started', color: '#94a3b8' };
-                                            };
-                                            const status = getStatus();
+                                            const status = adset.learningStatus || { icon: '❓', label: 'Unknown', color: '#94a3b8' };
+                                            const ringValue = adset.benchmarkProgress ?? Math.min(((adset.daysActive || 1) / 14) * 100, 100);
+                                            const radius = 24;
+                                            const circumference = 2 * Math.PI * radius;
+                                            const offset = circumference - (ringValue / 100) * circumference;
 
                                             return (
                                                 <div key={adset.id} style={{
                                                     display: 'flex',
-                                                    alignItems: 'center',
+                                                    alignItems: 'flex-start',
                                                     gap: 16,
                                                     padding: '12px 16px',
                                                     background: 'var(--background)',
                                                     borderRadius: 8,
                                                     borderLeft: `4px solid ${status.color || '#6b7280'}`
                                                 }}>
-                                                    <div style={{ fontSize: 24 }}>{status.icon}</div>
-                                                    <div style={{ flex: 1 }}>
-                                                        <div style={{ fontWeight: 500, fontSize: 13 }}>{adset.name}</div>
-                                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                            {status.label} • {adset.conversions || 0} conversions • {formatCurrency(adset.spend || 0)} spent
+                                                    <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+                                                        <svg width="56" height="56" viewBox="0 0 56 56">
+                                                            <circle cx="28" cy="28" r={radius} fill="none" stroke="rgba(148, 163, 184, 0.18)" strokeWidth="5" />
+                                                            <circle
+                                                                cx="28"
+                                                                cy="28"
+                                                                r={radius}
+                                                                fill="none"
+                                                                stroke={status.color || '#94a3b8'}
+                                                                strokeWidth="5"
+                                                                strokeLinecap="round"
+                                                                strokeDasharray={circumference}
+                                                                strokeDashoffset={offset}
+                                                                transform="rotate(-90 28 28)"
+                                                            />
+                                                        </svg>
+                                                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                                                            <div style={{ fontSize: 14 }}>{status.icon}</div>
+                                                            <div style={{ fontSize: 10, fontWeight: 700 }}>{adset.daysActive}d</div>
                                                         </div>
                                                     </div>
-                                                    {status.progress !== undefined && (
-                                                        <div style={{ width: 100 }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                                                            <div style={{ fontWeight: 600, fontSize: 13 }}>{adset.name}</div>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#c7d2fe', fontSize: 10 }}>
+                                                                {toTitleCase(adset.objectiveType || 'Unknown')}
+                                                            </span>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)', color: '#a7f3d0', fontSize: 10 }}>
+                                                                {toTitleCase(adset.optimizationGoal || 'Unknown')}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                            {status.label} • {formatCurrency(adset.spend || 0)} spent • {adset.daysActive} days live
+                                                        </div>
+                                                        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                                                            <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.55)' }}>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                    {adset.needsOptimizationEvents ? 'Goal pace' : 'Delivery signal'}
+                                                                </div>
+                                                                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                                                                    {adset.needsOptimizationEvents ? `${formatNumber(adset.weeklyPace || 0)}/week` : formatNumber(adset.goalEvents || 0)}
+                                                                </div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                    {adset.needsOptimizationEvents ? adset.goalLabel : adset.benchmarkLabel}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.55)' }}>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>CTR</div>
+                                                                <div style={{ fontSize: 13, fontWeight: 700 }}>{adset.ctr}%</div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Frequency {Number(adset.frequency || 0).toFixed(2)}x</div>
+                                                            </div>
+                                                            <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.55)' }}>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                    {adset.needsOptimizationEvents ? 'Events in window' : 'General conversions'}
+                                                                </div>
+                                                                <div style={{ fontSize: 13, fontWeight: 700 }}>{formatNumber(adset.needsOptimizationEvents ? adset.goalEvents || 0 : adset.conversions || 0)}</div>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                    {adset.needsOptimizationEvents ? adset.benchmarkLabel : 'Shown for context only'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {status.note && (
+                                                            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
+                                                                {status.note}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {adset.needsOptimizationEvents && status.progress !== undefined && (
+                                                        <div style={{ width: 120, flexShrink: 0 }}>
                                                             <div style={{
                                                                 height: 6,
                                                                 background: 'var(--border)',
@@ -2708,7 +2797,7 @@ export default function AdsPage() {
                                                                 }} />
                                                             </div>
                                                             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
-                                                                {Math.round(status.progress)}% to goal
+                                                                {Math.round(status.progress)}% of weekly benchmark
                                                             </div>
                                                         </div>
                                                     )}
@@ -2729,7 +2818,7 @@ export default function AdsPage() {
                                         })}
                                     </div>
                                     <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 8, fontSize: 12 }}>
-                                        <strong>Why this matters:</strong> Ad sets in "Learning" may have unstable performance. Wait until they reach 50+ conversions before making major changes or scaling.
+                                        <strong>Why this matters:</strong> Learning and learning-limited are ad set delivery states. Use event pace for conversion-style goals, but use delivery stability for awareness-style goals. Otherwise you end up penalizing the wrong campaigns with the wrong benchmark.
                                     </div>
                                 </SectionCard>
                             )}

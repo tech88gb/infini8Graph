@@ -1125,11 +1125,187 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v2', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
         }
+
+        const getPresetWindowDays = (preset) => {
+            switch (preset) {
+                case 'today':
+                case 'yesterday':
+                    return 1;
+                case 'last_3d':
+                    return 3;
+                case 'last_7d':
+                    return 7;
+                case 'last_14d':
+                    return 14;
+                case 'last_28d':
+                    return 28;
+                case 'last_30d':
+                    return 30;
+                case 'last_90d':
+                    return 90;
+                default:
+                    return 30;
+            }
+        };
+
+        const getActionTotal = (actions = [], candidates = []) => actions.reduce((sum, action) => {
+            const type = String(action?.action_type || '').toLowerCase();
+            if (candidates.some((candidate) => type.includes(candidate))) {
+                return sum + parseFloat(action?.value || 0);
+            }
+            return sum;
+        }, 0);
+
+        const getMedian = (values = []) => {
+            if (!values.length) return 0;
+            const sorted = [...values].sort((a, b) => a - b);
+            const middle = Math.floor(sorted.length / 2);
+            return sorted.length % 2 === 0
+                ? (sorted[middle - 1] + sorted[middle]) / 2
+                : sorted[middle];
+        };
+
+        const describeOptimizationGoal = (optimizationGoal = '', campaignObjective = '') => {
+            const goal = String(optimizationGoal || '').toUpperCase();
+            const objective = String(campaignObjective || '').toUpperCase();
+
+            const descriptor = {
+                goal,
+                objective,
+                label: goal ? goal.replace(/_/g, ' ') : 'Unknown',
+                friendlyLabel: goal ? goal.replace(/_/g, ' ').toLowerCase() : 'unknown delivery goal',
+                objectiveLabel: objective ? objective.replace(/_/g, ' ') : 'Unknown',
+                benchmarkType: 'delivery',
+                benchmarkLabel: 'No fixed 50-event benchmark',
+                needsOptimizationEvents: false,
+                benchmarkTarget: null,
+                metricSource: 'delivery',
+                actionCandidates: [],
+                metricLabel: 'Delivery'
+            };
+
+            if (['OFFSITE_CONVERSIONS', 'VALUE', 'QUALITY_LEAD', 'LEAD_GENERATION', 'DERIVED_EVENTS'].includes(goal)) {
+                return {
+                    ...descriptor,
+                    friendlyLabel: goal === 'VALUE' ? 'value optimization' : goal.replace(/_/g, ' ').toLowerCase(),
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 optimization events/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'actions',
+                    actionCandidates: ['purchase', 'lead', 'complete_registration', 'add_payment_info', 'initiate_checkout', 'add_to_cart'],
+                    metricLabel: goal === 'LEAD_GENERATION' || goal === 'QUALITY_LEAD' ? 'Leads' : 'Conversion events'
+                };
+            }
+
+            if (goal === 'APP_INSTALLS') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 installs/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'actions',
+                    actionCandidates: ['app_install', 'mobile_app_install'],
+                    metricLabel: 'App installs'
+                };
+            }
+
+            if (goal === 'LANDING_PAGE_VIEWS') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 LPVs/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'actions',
+                    actionCandidates: ['landing_page_view'],
+                    metricLabel: 'Landing page views'
+                };
+            }
+
+            if (goal === 'LINK_CLICKS') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 link clicks/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'clicks',
+                    metricLabel: 'Link clicks'
+                };
+            }
+
+            if (goal === 'POST_ENGAGEMENT') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 engagement events/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'actions',
+                    actionCandidates: ['post_engagement', 'page_engagement', 'post_reaction', 'comment', 'share', 'post_save'],
+                    metricLabel: 'Engagement events'
+                };
+            }
+
+            if (goal === 'THRUPLAY') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 ThruPlays/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'actions',
+                    actionCandidates: ['thruplay', 'video_view'],
+                    metricLabel: 'Video watch events'
+                };
+            }
+
+            if (goal === 'VISIT_INSTAGRAM_PROFILE') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'events',
+                    benchmarkLabel: '50 profile visits/week',
+                    needsOptimizationEvents: true,
+                    benchmarkTarget: 50,
+                    metricSource: 'actions',
+                    actionCandidates: ['visit_instagram_profile', 'profile_visit', 'ig_profile_visit'],
+                    metricLabel: 'Profile visits'
+                };
+            }
+
+            if (goal === 'REACH' || goal === 'IMPRESSIONS') {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'delivery',
+                    benchmarkLabel: 'Delivery-stability goal',
+                    needsOptimizationEvents: false,
+                    benchmarkTarget: null,
+                    metricSource: goal === 'REACH' ? 'reach' : 'impressions',
+                    metricLabel: goal === 'REACH' ? 'Reach' : 'Impressions'
+                };
+            }
+
+            if (objective.includes('AWARENESS')) {
+                return {
+                    ...descriptor,
+                    benchmarkType: 'delivery',
+                    benchmarkLabel: 'Awareness goal - judge delivery stability, not 50 conversions',
+                    needsOptimizationEvents: false,
+                    benchmarkTarget: null,
+                    metricSource: 'impressions',
+                    metricLabel: 'Impressions'
+                };
+            }
+
+            return descriptor;
+        };
 
         // Placement intent weights
         const PLACEMENT_INTENT = {
@@ -1150,7 +1326,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,creative{id,name,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,spend,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
+                    fields: 'id,name,status,creative{id,name,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
                     limit: 100
                 }
             }),
@@ -1158,7 +1334,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/adsets`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal,bid_strategy,targeting,insights.date_preset(' + datePreset + '){spend,impressions,clicks,actions,frequency,ctr,cpc}',
+                    fields: 'id,name,status,effective_status,created_time,start_time,daily_budget,lifetime_budget,optimization_goal,bid_strategy,targeting,campaign{id,name,objective},insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,actions,frequency,ctr,cpc}',
                     limit: 500
                 }
             }),
@@ -1406,9 +1582,9 @@ export async function getAdvancedAnalytics(req, res) {
 
         if (adsRes.status === 'fulfilled') {
             const ads = adsRes.value.data.data || [];
-
-            creativeForensics = ads.filter(ad => ad.insights?.data?.[0]).map(ad => {
+            const creativeBase = ads.filter(ad => ad.insights?.data?.[0]).map(ad => {
                 const insights = ad.insights.data[0];
+                const actions = insights.actions || [];
                 const ctr = parseFloat(insights.ctr || 0);
                 const cpc = parseFloat(insights.cpc || 0);
                 const cpm = parseFloat(insights.cpm || 0);
@@ -1417,119 +1593,171 @@ export async function getAdvancedAnalytics(req, res) {
                 const spend = parseFloat(insights.spend || 0);
                 const frequency = parseFloat(insights.frequency || 0);
 
-                // Video metrics
                 const v25 = parseInt(insights.video_p25_watched_actions?.[0]?.value || 0);
                 const v50 = parseInt(insights.video_p50_watched_actions?.[0]?.value || 0);
                 const v75 = parseInt(insights.video_p75_watched_actions?.[0]?.value || 0);
                 const v100 = parseInt(insights.video_p100_watched_actions?.[0]?.value || 0);
                 const hasVideo = v25 > 0;
 
-                // Leads/purchases
-                const leads = parseInt((insights.actions || []).find(a => a.action_type === 'lead')?.value || 0);
-                const purchases = parseInt((insights.actions || []).find(a => a.action_type === 'purchase')?.value || 0);
+                const leads = getActionTotal(actions, ['lead']);
+                const purchases = getActionTotal(actions, ['purchase']);
                 const conversions = leads + purchases;
                 const costPerConversion = conversions > 0 ? spend / conversions : null;
                 const hookRate = hasVideo && impressions > 0 ? (v25 / impressions * 100) : null;
                 const completionRate = hasVideo && v25 > 0 ? (v100 / v25 * 100) : null;
+                const clickToConversionRate = clicks > 0 ? (conversions / clicks * 100) : 0;
 
-                // Determine creative pattern
-                let pattern = { type: 'unknown', label: 'Analyzing...', color: '#6b7280', insight: '' };
-
-                if (hasVideo) {
-                    const retentionRate = completionRate || 0;
-
-                    if (v25 > 500 && conversions < 3) {
-                        pattern = {
-                            type: 'entertainment',
-                            label: '🎭 Entertainment',
-                            color: '#f59e0b',
-                            insight: 'High views but low conversions - entertaining but not converting'
-                        };
-                    } else if (ctr < 1 && conversions > 5) {
-                        pattern = {
-                            type: 'buyer_magnet',
-                            label: '🎯 Buyer Magnet',
-                            color: '#10b981',
-                            insight: 'Lower CTR but strong conversions - attracts buyers not browsers'
-                        };
-                    } else if (ctr > 2 && conversions < 2) {
-                        pattern = {
-                            type: 'clickbait',
-                            label: '⚠️ Clickbait',
-                            color: '#ef4444',
-                            insight: 'High CTR but weak conversions - clickbait pattern detected'
-                        };
-                    } else if (hookRate > 50 && retentionRate > 60) {
-                        pattern = {
-                            type: 'engaging',
-                            label: '✨ Engaging',
-                            color: '#6366f1',
-                            insight: 'Strong hook and retention - quality content'
-                        };
-                    } else if (conversions > 0 && spend / conversions < 50) {
-                        pattern = {
-                            type: 'efficient',
-                            label: '💰 Efficient',
-                            color: '#10b981',
-                            insight: 'Good cost per conversion - keep running'
-                        };
-                    }
-                } else {
-                    // Non-video creative analysis
-                    if (ctr > 2 && conversions > 3) {
-                        pattern = { type: 'winner', label: '🏆 Winner', color: '#10b981', insight: 'High engagement AND conversions' };
-                    } else if (ctr > 2 && conversions < 2) {
-                        pattern = { type: 'clickbait', label: '⚠️ Clickbait', color: '#ef4444', insight: 'High clicks but no conversions' };
-                    } else if (ctr < 0.5 && conversions > 0) {
-                        pattern = { type: 'hidden_gem', label: '💎 Hidden Gem', color: '#8b5cf6', insight: 'Low visibility but converts well when seen' };
-                    } else if (spend > 100 && conversions === 0) {
-                        pattern = { type: 'underperformer', label: '📉 Underperformer', color: '#ef4444', insight: 'Spending without results - consider pausing' };
-                    }
-                }
-
-                // Fatigue status per creative
-                let creativeFatigue = 'healthy';
-                const fatigueReasons = [];
-                if (frequency > 4) creativeFatigue = 'critical';
-                else if (frequency > 2.5) creativeFatigue = 'warning';
-                if (frequency > 2.5) fatigueReasons.push(`Frequency ${frequency.toFixed(2)}x`);
-                if (hookRate !== null && hookRate < 10) fatigueReasons.push(`Weak hook ${hookRate.toFixed(1)}%`);
-                if (costPerConversion !== null && costPerConversion > 1500) fatigueReasons.push(`High CPR ₹${costPerConversion.toFixed(0)}`);
-                if (cpm > 350) fatigueReasons.push(`High CPM ₹${cpm.toFixed(0)}`);
+                const thumbnail = ad.creative?.thumbnail_url
+                    || ad.creative?.object_story_spec?.video_data?.image_url
+                    || ad.creative?.object_story_spec?.link_data?.picture
+                    || ad.creative?.object_story_spec?.photo_data?.image_url
+                    || null;
 
                 return {
                     id: ad.id,
                     name: ad.name,
                     status: ad.status,
-                    thumbnail: ad.creative?.thumbnail_url,
+                    thumbnail,
                     impressions,
                     clicks,
-                    ctr: ctr.toFixed(2),
-                    cpc: cpc.toFixed(2),
-                    cpm: cpm.toFixed(2),
+                    ctr,
+                    cpc,
+                    cpm,
                     spend,
-                    frequency: frequency.toFixed(2),
+                    frequency,
                     conversions,
                     leads,
                     purchases,
-                    costPerConversion: costPerConversion !== null ? costPerConversion.toFixed(2) : null,
+                    costPerConversion,
+                    clickToConversionRate,
                     hasVideo,
                     videoMetrics: hasVideo ? {
-                        hookRate: hookRate !== null ? hookRate.toFixed(1) : 0,
+                        hookRate: hookRate !== null ? hookRate : 0,
                         retention25: v25,
                         retention50: v50,
                         retention75: v75,
                         retention100: v100,
-                        completionRate: completionRate !== null ? completionRate.toFixed(1) : 0
+                        completionRate: completionRate !== null ? completionRate : 0
+                    } : null
+                };
+            });
+
+            const medianCtr = getMedian(creativeBase.map(ad => ad.ctr).filter(value => value > 0));
+            const medianCpm = getMedian(creativeBase.map(ad => ad.cpm).filter(value => value > 0));
+            const medianFrequency = getMedian(creativeBase.map(ad => ad.frequency).filter(value => value > 0));
+            const medianCpa = getMedian(creativeBase.map(ad => ad.costPerConversion).filter(value => value !== null && value > 0));
+            const medianSpend = getMedian(creativeBase.map(ad => ad.spend).filter(value => value > 0));
+
+            creativeForensics = creativeBase.map(ad => {
+                let pattern;
+
+                if (ad.conversions >= 10 && ad.costPerConversion !== null && (medianCpa === 0 || ad.costPerConversion <= medianCpa * 0.9) && ad.ctr >= medianCtr * 0.9) {
+                    pattern = {
+                        type: 'winner',
+                        label: 'Winner',
+                        color: '#10b981',
+                        insight: 'Strong conversion volume with efficient cost per result.',
+                        action: 'Keep scaling carefully and use this creative as a benchmark.'
+                    };
+                } else if (ad.ctr >= Math.max(2.5, medianCtr * 1.15) && ad.conversions <= 2) {
+                    pattern = {
+                        type: 'traffic_mismatch',
+                        label: 'Traffic Mismatch',
+                        color: '#f59e0b',
+                        insight: 'The creative is earning clicks, but those clicks are not turning into outcomes.',
+                        action: 'Check landing-page fit, offer clarity, and audience intent.'
+                    };
+                } else if (ad.conversions >= 5 && ad.costPerConversion !== null && (medianCpa === 0 || ad.costPerConversion <= medianCpa * 0.95) && ad.ctr < medianCtr) {
+                    pattern = {
+                        type: 'efficient_niche',
+                        label: 'Efficient Niche',
+                        color: '#6366f1',
+                        insight: 'Lower CTR, but the traffic is qualified and converts efficiently.',
+                        action: 'Protect this creative and test broader hooks without changing the core promise.'
+                    };
+                } else if (ad.spend >= Math.max(1500, medianSpend) && ad.conversions === 0) {
+                    pattern = {
+                        type: 'burning_spend',
+                        label: 'Burning Spend',
+                        color: '#ef4444',
+                        insight: 'Meaningful spend has gone in without conversion proof.',
+                        action: 'Pause or refresh this creative unless it serves an upper-funnel purpose.'
+                    };
+                } else if (ad.hasVideo && ad.videoMetrics && ad.videoMetrics.hookRate < 8 && ad.spend >= Math.max(1000, medianSpend * 0.6)) {
+                    pattern = {
+                        type: 'hook_issue',
+                        label: 'Hook Weakness',
+                        color: '#f97316',
+                        insight: 'The opening seconds are losing viewers before the message can land.',
+                        action: 'Rework the first 1-3 seconds and front-load the value proposition.'
+                    };
+                } else if (ad.spend < Math.max(600, medianSpend * 0.35) && ad.conversions < 3) {
+                    pattern = {
+                        type: 'early_read',
+                        label: 'Early Read',
+                        color: '#64748b',
+                        insight: 'There is not enough delivery yet for a confident creative verdict.',
+                        action: 'Let it collect more spend or impressions before making a hard call.'
+                    };
+                } else {
+                    pattern = {
+                        type: 'mixed',
+                        label: 'Mixed Read',
+                        color: '#0ea5e9',
+                        insight: 'The creative has signals worth watching, but the picture is not one-sided.',
+                        action: 'Compare audience, placement mix, and landing-page fit before changing it.'
+                    };
+                }
+
+                let creativeFatigue = 'healthy';
+                const fatigueReasons = [];
+                if (ad.frequency > Math.max(3.4, medianFrequency + 0.8)) creativeFatigue = 'critical';
+                else if (ad.frequency > Math.max(2.4, medianFrequency + 0.4)) creativeFatigue = 'warning';
+
+                if (ad.frequency > Math.max(2.4, medianFrequency + 0.4)) fatigueReasons.push(`Frequency ${ad.frequency.toFixed(2)}x`);
+                if (ad.videoMetrics?.hookRate !== null && ad.videoMetrics?.hookRate < 10) fatigueReasons.push(`Weak hook ${ad.videoMetrics.hookRate.toFixed(1)}%`);
+                if (ad.costPerConversion !== null && medianCpa > 0 && ad.costPerConversion > medianCpa * 1.35) fatigueReasons.push(`High CPR ₹${ad.costPerConversion.toFixed(0)}`);
+                if (medianCpm > 0 && ad.cpm > medianCpm * 1.3) fatigueReasons.push(`High CPM ₹${ad.cpm.toFixed(0)}`);
+
+                const performanceScore = Math.max(
+                    0,
+                    Math.min(
+                        100,
+                        (
+                            Math.min((ad.ctr / Math.max(medianCtr || 1, 1)) * 25, 25) +
+                            Math.min((ad.clickToConversionRate / 1.5) * 30, 30) +
+                            Math.min((ad.conversions / 15) * 25, 25) +
+                            (ad.costPerConversion !== null && medianCpa > 0 ? Math.min((medianCpa / ad.costPerConversion) * 20, 20) : 0)
+                        )
+                    )
+                );
+
+                return {
+                    ...ad,
+                    ctr: ad.ctr.toFixed(2),
+                    cpc: ad.cpc.toFixed(2),
+                    cpm: ad.cpm.toFixed(2),
+                    frequency: ad.frequency.toFixed(2),
+                    clickToConversionRate: ad.clickToConversionRate.toFixed(2),
+                    costPerConversion: ad.costPerConversion !== null ? ad.costPerConversion.toFixed(2) : null,
+                    videoMetrics: ad.videoMetrics ? {
+                        ...ad.videoMetrics,
+                        hookRate: ad.videoMetrics.hookRate.toFixed(1),
+                        completionRate: ad.videoMetrics.completionRate.toFixed(1)
                     } : null,
                     pattern,
+                    performanceScore: performanceScore.toFixed(0),
                     fatigue: {
                         status: creativeFatigue,
-                        frequency,
+                        frequency: ad.frequency,
                         reasons: fatigueReasons
                     }
                 };
-            }).sort((a, b) => b.conversions - a.conversions);
+            }).sort((a, b) => {
+                const scoreDiff = parseFloat(b.performanceScore) - parseFloat(a.performanceScore);
+                if (scoreDiff !== 0) return scoreDiff;
+                return b.conversions - a.conversions;
+            });
 
             const videoCreatives = creativeForensics.filter(ad => ad.hasVideo && ad.videoMetrics && ad.spend > 0);
             if (videoCreatives.length > 0) {
@@ -1595,50 +1823,79 @@ export async function getAdvancedAnalytics(req, res) {
 
         if (adsetsRes.status === 'fulfilled') {
             const adsets = adsetsRes.value.data.data || [];
+            const selectedWindowDays = getPresetWindowDays(datePreset);
 
             learningPhase = adsets.map(adset => {
                 const status = adset.effective_status || adset.status;
                 const insights = adset.insights?.data?.[0] || {};
+                const actions = insights.actions || [];
                 const spend = parseFloat(insights.spend || 0);
-                const conversions = (insights.actions || []).reduce((sum, a) => {
-                    if (['purchase', 'lead', 'complete_registration', 'add_to_cart'].includes(a.action_type)) {
-                        return sum + parseInt(a.value);
-                    }
-                    return sum;
-                }, 0);
+                const campaignObjective = adset.campaign?.objective || '';
+                const goalProfile = describeOptimizationGoal(adset.optimization_goal, campaignObjective);
+                const generalConversions = getActionTotal(actions, ['purchase', 'lead', 'complete_registration', 'add_to_cart']);
+                const goalEvents = goalProfile.metricSource === 'clicks'
+                    ? parseFloat(insights.clicks || 0)
+                    : goalProfile.metricSource === 'impressions'
+                        ? parseFloat(insights.impressions || 0)
+                        : goalProfile.metricSource === 'reach'
+                            ? parseFloat(insights.reach || 0)
+                            : getActionTotal(actions, goalProfile.actionCandidates);
+                const daysActive = Math.max(
+                    1,
+                    Math.ceil(
+                        (Date.now() - new Date(adset.start_time || adset.created_time || Date.now()).getTime()) / (1000 * 60 * 60 * 24)
+                    )
+                );
+                const weeklyPace = selectedWindowDays > 0
+                    ? (goalEvents / selectedWindowDays) * 7
+                    : goalEvents;
+                const benchmarkProgress = goalProfile.benchmarkTarget
+                    ? Math.min((weeklyPace / goalProfile.benchmarkTarget) * 100, 100)
+                    : null;
 
-                // Determine learning status
                 let learningStatus = { status: 'unknown', label: 'Unknown', color: '#6b7280', icon: '❓' };
                 const isLearning = status === 'LEARNING' || status === 'PENDING_REVIEW';
                 const isLimited = status === 'LEARNING_LIMITED';
                 const isActive = status === 'ACTIVE';
 
-                if (isLearning) {
-                    const progress = Math.min((conversions / 50) * 100, 100);
+                if (goalProfile.needsOptimizationEvents && isLearning) {
                     learningStatus = {
                         status: 'learning',
-                        label: `Learning (${conversions}/50)`,
+                        label: 'Learning',
                         color: '#f59e0b',
                         icon: '📚',
-                        progress,
-                        risk: conversions < 20 ? 'high' : conversions < 35 ? 'medium' : 'low',
-                        riskLabel: conversions < 20 ? 'At risk of Limited' : conversions < 35 ? 'On track' : 'Almost there'
+                        progress: benchmarkProgress,
+                        risk: weeklyPace < 25 ? 'high' : weeklyPace < 45 ? 'medium' : 'low',
+                        riskLabel: weeklyPace < 25 ? 'Pace is too low' : weeklyPace < 45 ? 'Needs more event volume' : 'Nearly stable',
+                        note: `Projected pace: ${weeklyPace.toFixed(1)} ${goalProfile.metricLabel.toLowerCase()}/week`
                     };
-                } else if (isLimited) {
+                } else if (goalProfile.needsOptimizationEvents && isLimited) {
                     learningStatus = {
                         status: 'limited',
                         label: 'Learning Limited',
                         color: '#ef4444',
                         icon: '⚠️',
-                        recommendation: 'Needs 50+ conversions/week. Consider: broader audience, higher budget, or simpler conversion event'
+                        recommendation: `Needs more ${goalProfile.metricLabel.toLowerCase()} volume per week. Consider broader targeting, fewer edits, or a simpler optimization event.`,
+                        progress: benchmarkProgress
+                    };
+                } else if (!goalProfile.needsOptimizationEvents && isLearning) {
+                    learningStatus = {
+                        status: 'delivery_learning',
+                        label: 'New Delivery',
+                        color: '#6366f1',
+                        icon: '🌀',
+                        note: 'This goal is judged on delivery stability rather than a 50-event benchmark.'
                     };
                 } else if (isActive) {
                     learningStatus = {
-                        status: 'active',
-                        label: 'Optimized',
+                        status: goalProfile.needsOptimizationEvents ? 'active' : 'delivery_active',
+                        label: goalProfile.needsOptimizationEvents ? 'Stable Delivery' : 'Delivery Stable',
                         color: '#10b981',
                         icon: '✅',
-                        safeToScale: conversions > 50 && spend > 100
+                        safeToScale: goalProfile.needsOptimizationEvents ? weeklyPace >= 50 && spend > 100 : false,
+                        note: goalProfile.needsOptimizationEvents
+                            ? `Projected pace: ${weeklyPace.toFixed(1)} ${goalProfile.metricLabel.toLowerCase()}/week`
+                            : 'This ad set is not judged by a fixed event-volume threshold.'
                     };
                 }
 
@@ -1647,17 +1904,29 @@ export async function getAdvancedAnalytics(req, res) {
                     name: adset.name,
                     status: adset.status,
                     effectiveStatus: status,
+                    campaignName: adset.campaign?.name || null,
+                    campaignObjective,
                     optimizationGoal: adset.optimization_goal,
                     bidStrategy: adset.bid_strategy,
                     budget: adset.daily_budget ? parseFloat(adset.daily_budget) / 100 : (adset.lifetime_budget ? parseFloat(adset.lifetime_budget) / 100 : 0),
                     budgetType: adset.daily_budget ? 'daily' : 'lifetime',
                     spend,
-                    conversions,
+                    conversions: generalConversions,
+                    goalEvents: parseFloat(goalEvents.toFixed(1)),
+                    goalLabel: goalProfile.metricLabel,
+                    benchmarkLabel: goalProfile.benchmarkLabel,
+                    benchmarkProgress: benchmarkProgress !== null ? parseFloat(benchmarkProgress.toFixed(1)) : null,
+                    daysActive,
+                    weeklyPace: parseFloat(weeklyPace.toFixed(1)),
+                    needsOptimizationEvents: goalProfile.needsOptimizationEvents,
+                    objectiveType: goalProfile.objectiveLabel,
+                    optimizationType: goalProfile.friendlyLabel,
                     learningStatus,
+                    startTime: adset.start_time || null,
                     frequency: parseFloat(insights.frequency || 0),
                     ctr: parseFloat(insights.ctr || 0).toFixed(2)
                 };
-            });
+            }).sort((a, b) => (b.spend || 0) - (a.spend || 0));
         }
 
         // ==================== 5. RETARGETING LIFT ====================
@@ -1749,7 +2018,7 @@ export async function getAdvancedAnalytics(req, res) {
             }
         }
 
-        // ==================== 6. LEAD QUALITY SCORE (LQS) ====================
+        // ==================== 6. CAMPAIGN QUALITY INDEX ====================
         let leadQualityScore = null;
 
         if (campaignsRes.status === 'fulfilled') {
@@ -1844,6 +2113,7 @@ export async function getAdvancedAnalytics(req, res) {
                 learningPhase,
                 retargetingLift,
                 leadQualityScore,
+                campaignQualityIndex: leadQualityScore,
                 summary: {
                     fatigueStatus: fatigueAnalysis.statusLabel,
                     adsAnalyzed: creativeForensics.length,
