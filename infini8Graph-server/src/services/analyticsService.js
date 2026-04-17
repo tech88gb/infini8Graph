@@ -441,7 +441,7 @@ class AnalyticsService {
      */
     async getOverview(startDate = null, endDate = null) {
         // Build a cache key that includes the dates
-        const dateKey = `v5_core_${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v6_core_${startDate || 'default'}_${endDate || 'default'}`;
         
         // Check cache first
         const cached = await this.checkCache('overview', dateKey);
@@ -466,16 +466,13 @@ class AnalyticsService {
             unfollows: 0,
             followerDelta: 0
         };
-        const fetchLimit = (startDate || endDate)
-            ? MEDIA_FETCH_LIMITS.overview.ranged
-            : MEDIA_FETCH_LIMITS.overview.default;
         const overviewTasks = [
             async () => {
-                const fetchedMedia = await this.instagram.getAllMediaWithInsights(fetchLimit, {
+                const fetchedMedia = await this.collectMediaForDateWindow('overview', startDate, endDate, {
                     includeDetailedVideoInsights: false,
                     fetchShares: true
                 });
-                return this.filterMediaByDate(fetchedMedia, startDate, endDate);
+                return fetchedMedia;
             },
             async () => this.getDailyAccountMetrics(startDate, endDate),
             async () => this.getAccountAggregateMetrics(startDate, endDate)
@@ -729,26 +726,35 @@ class AnalyticsService {
         }));
 
         // Calculate week-over-week changes
-        const thisWeekPosts = media.filter(p => {
+        const selectedEndDate = endDate
+            ? new Date(`${endDate}T23:59:59Z`)
+            : new Date();
+        const weekAgo = new Date(selectedEndDate);
+        weekAgo.setUTCDate(weekAgo.getUTCDate() - 6);
+        const previousWeekEnd = new Date(weekAgo);
+        previousWeekEnd.setUTCSeconds(previousWeekEnd.getUTCSeconds() - 1);
+        const previousWeekStart = new Date(previousWeekEnd);
+        previousWeekStart.setUTCDate(previousWeekStart.getUTCDate() - 6);
+
+        const thisWeekPosts = media.filter((p) => {
             const postDate = new Date(p.timestamp);
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            return postDate >= weekAgo;
+            return postDate >= weekAgo && postDate <= selectedEndDate;
         });
 
-        const lastWeekPosts = media.filter(p => {
+        const lastWeekPosts = media.filter((p) => {
             const postDate = new Date(p.timestamp);
-            const weekAgo = new Date();
-            const twoWeeksAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-            return postDate >= twoWeeksAgo && postDate < weekAgo;
+            return postDate >= previousWeekStart && postDate <= previousWeekEnd;
         });
 
         const thisWeekEngagement = thisWeekPosts.reduce((sum, p) => sum + p.engagement, 0);
         const lastWeekEngagement = lastWeekPosts.reduce((sum, p) => sum + p.engagement, 0);
         const engagementChange = lastWeekEngagement > 0
             ? ((thisWeekEngagement - lastWeekEngagement) / lastWeekEngagement * 100).toFixed(1)
+            : 0;
+        const thisWeekLikes = thisWeekPosts.reduce((sum, p) => sum + (p.likeCount || 0), 0);
+        const lastWeekLikes = lastWeekPosts.reduce((sum, p) => sum + (p.likeCount || 0), 0);
+        const likesChange = lastWeekLikes > 0
+            ? ((thisWeekLikes - lastWeekLikes) / lastWeekLikes * 100).toFixed(1)
             : 0;
 
         const followerTrend = this.buildFollowerTrendFromDailyMetrics(accountMetrics, {
@@ -817,9 +823,15 @@ class AnalyticsService {
                 postsThisWeek: thisWeekPosts.length,
                 engagementThisWeek: thisWeekEngagement,
                 engagementChange: parseFloat(engagementChange),
+                likesThisWeek: thisWeekLikes,
+                likesChange: parseFloat(likesChange),
                 avgEngagementPerPost: thisWeekPosts.length > 0
                     ? Math.round(thisWeekEngagement / thisWeekPosts.length)
-                    : 0
+                    : 0,
+                periodStart: weekAgo.toISOString().split('T')[0],
+                periodEnd: selectedEndDate.toISOString().split('T')[0],
+                previousPeriodStart: previousWeekStart.toISOString().split('T')[0],
+                previousPeriodEnd: previousWeekEnd.toISOString().split('T')[0]
             },
             // === Follower-to-Engagement Ratio Trend (weekly buckets) ===
             // Declining ratio over time = audience getting stale

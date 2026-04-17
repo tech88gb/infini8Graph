@@ -165,18 +165,6 @@ export default function GrowthPage() {
     const accountMetrics = growth.accountMetrics || [];
     const comparisonSummary = growth.comparisonSummary || {};
 
-    // Calculate follower acquisition rate
-    const followerAcquisitionRate = growth.currentFollowers && weeklyStats.engagementThisWeek
-        ? ((weeklyStats.engagementThisWeek / growth.currentFollowers) * 100).toFixed(2)
-        : '0';
-
-    // Calculate week-over-week changes
-    const totalLikesThisWeek = growthData.slice(-7).reduce((sum: number, d: any) => sum + (d.likes || 0), 0);
-    const totalLikesLastWeek = growthData.slice(-14, -7).reduce((sum: number, d: any) => sum + (d.likes || 0), 0);
-    const likesChange = totalLikesLastWeek > 0
-        ? (((totalLikesThisWeek - totalLikesLastWeek) / totalLikesLastWeek) * 100).toFixed(1)
-        : '0';
-
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
@@ -226,7 +214,14 @@ export default function GrowthPage() {
             </div>
 
             {/* Week-over-Week Changes */}
-            <SectionCard title="Weekly Performance" subtitle="Comparison with the previous week">
+            <SectionCard
+                title="Weekly Performance"
+                subtitle={
+                    weeklyStats.periodStart && weeklyStats.periodEnd
+                        ? `Comparison for ${weeklyStats.periodStart} → ${weeklyStats.periodEnd} against the previous 7-day window`
+                        : 'Comparison with the previous week'
+                }
+            >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                     <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -271,9 +266,9 @@ export default function GrowthPage() {
                         <div style={{
                             fontSize: 24,
                             fontWeight: 700,
-                            color: parseFloat(likesChange) >= 0 ? '#10b981' : '#ef4444'
+                            color: (weeklyStats.likesChange || 0) >= 0 ? '#10b981' : '#ef4444'
                         }}>
-                            {parseFloat(likesChange) >= 0 ? '+' : ''}{likesChange}%
+                            {(weeklyStats.likesChange || 0) >= 0 ? '+' : ''}{weeklyStats.likesChange || 0}%
                         </div>
                     </div>
                 </div>
