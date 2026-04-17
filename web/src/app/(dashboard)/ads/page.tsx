@@ -894,18 +894,6 @@ export default function AdsPage() {
         enabled: !!effectiveAccount && activeTab === 'deep'
     });
 
-    if (accountsLoading) {
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
-                    <p className="text-muted">Loading ad accounts...</p>
-                </div>
-            </div>
-        );
-    }
-
-
     // Extract data from insights
     const summary = insightsData?.data?.summary || {};
     const relevanceDiagnostics = insightsData?.data?.relevanceDiagnostics || {};
@@ -1059,6 +1047,17 @@ export default function AdsPage() {
             setCampaignPage(campaignTotalPages);
         }
     }, [campaignPage, campaignTotalPages]);
+
+    if (accountsLoading) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                    <p className="text-muted">Loading ad accounts...</p>
+                </div>
+            </div>
+        );
+    }
 
     const videoRetentionCards = [
         { label: '25% watched', value: Number(videoViews.views_25 || 0), helper: 'Reached the 25% watch milestone' },
