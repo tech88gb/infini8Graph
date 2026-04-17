@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { instagramApi } from '@/lib/api';
 import { analyticsQueryOptions } from '@/lib/analyticsQueryOptions';
@@ -97,6 +97,13 @@ export default function ReelsPage() {
     });
     const currentCursor = cursorHistory[cursorHistory.length - 1] || undefined;
     const currentPage = cursorHistory.length;
+    const rangeDays = useMemo(() => {
+        const start = new Date(`${dateRange.startDate}T00:00:00Z`);
+        const end = new Date(`${dateRange.endDate}T00:00:00Z`);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+        return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    }, [dateRange.endDate, dateRange.startDate]);
+    const useFastSummary = rangeDays >= 60;
 
     useEffect(() => {
         setCursorHistory([null]);
@@ -107,10 +114,24 @@ export default function ReelsPage() {
         queryFn: async () => {
             const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate, {
                 after: currentCursor,
-                limit: REELS_PER_PAGE
+                limit: REELS_PER_PAGE,
+                summaryMode: useFastSummary ? 'fast' : 'full'
             });
             return res.data.data;
         },
+        ...analyticsQueryOptions
+    });
+
+    const { data: hydratedSummaryData } = useQuery({
+        queryKey: ['reels-summary-full', activeAccountId, dateRange.startDate, dateRange.endDate],
+        queryFn: async () => {
+            const res = await instagramApi.getReels(dateRange.startDate, dateRange.endDate, {
+                summaryMode: 'full',
+                summaryOnly: true
+            });
+            return res.data.data;
+        },
+        enabled: Boolean(activeAccountId) && useFastSummary && Boolean(data),
         ...analyticsQueryOptions
     });
 
@@ -142,9 +163,10 @@ export default function ReelsPage() {
     }
 
     const reels = data?.reels || [];
-    const summary = data?.summary || {};
-    const comparison = data?.comparison || {};
+    const summary = hydratedSummaryData?.summary || data?.summary || {};
+    const comparison = hydratedSummaryData?.comparison || data?.comparison || {};
     const pagination = data?.pagination || {};
+    const summaryHydrated = Boolean(hydratedSummaryData?.summary);
     const playsAvailable = reels.some((reel: any) => (reel.plays || 0) > 0);
     const diagnosticReels = [...reels]
         .sort((a: any, b: any) => (b.reach || 0) - (a.reach || 0))
@@ -175,6 +197,13 @@ export default function ReelsPage() {
                 <div>
                     <h1 className="page-title">Reels Analytics</h1>
                     <p className="page-subtitle">Performance metrics for your video content</p>
+                    {useFastSummary && (
+                        <p className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+                            {summaryHydrated
+                                ? 'Full-range summary loaded. Reel page cards remain paginated for faster browsing.'
+                                : 'Fast summary shown first for long date ranges while the full-range totals finish loading in the background.'}
+                        </p>
+                    )}
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />

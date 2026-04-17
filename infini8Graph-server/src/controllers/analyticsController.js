@@ -84,11 +84,13 @@ export async function getHashtags(req, res) {
 
 export async function getReels(req, res) {
     try {
-        const { startDate, endDate, after, limit = 12 } = req.query;
+        const { startDate, endDate, after, limit = 12, summaryMode = 'full', summaryOnly = 'false' } = req.query;
         const analytics = await getAnalyticsService(req);
         const data = await analytics.getReelsAnalytics(startDate, endDate, {
             after,
-            limit: parseInt(limit, 10) || 12
+            limit: parseInt(limit, 10) || 12,
+            summaryMode,
+            summaryOnly: summaryOnly === 'true'
         });
         res.json({ success: true, data });
     } catch (error) {

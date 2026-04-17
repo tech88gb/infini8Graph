@@ -133,6 +133,14 @@ class AnalyticsService {
         return Number((total / values.length).toFixed(decimals));
     }
 
+    getDateRangeDays(startDate = null, endDate = null) {
+        if (!startDate || !endDate) return null;
+        const start = new Date(`${startDate}T00:00:00Z`);
+        const end = new Date(`${endDate}T00:00:00Z`);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+        return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    }
+
     parseInsightMetricValue(value) {
         if (typeof value === 'number') return value;
         if (typeof value === 'string') {
@@ -1294,20 +1302,24 @@ class AnalyticsService {
             ? Math.min(Math.max(requestedLimit, 6), 24)
             : 12;
         const after = options.after || null;
-        const dateKey = `v4_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}`;
+        const summaryMode = options.summaryMode === 'fast' ? 'fast' : 'full';
+        const summaryOnly = Boolean(options.summaryOnly);
+        const rangeDays = this.getDateRangeDays(startDate, endDate);
+        const useFastSummary = summaryMode === 'fast' || ((startDate || endDate) && (rangeDays || 0) >= 60);
+        const dateKey = `v6_${startDate || 'default'}_${endDate || 'default'}_${after || 'first'}_${targetReels}_${summaryMode}_${summaryOnly ? 'summary' : 'page'}`;
         const cached = await this.checkCache('reels', dateKey);
         if (cached) return cached;
 
         const reels = [];
         const nonReels = [];
         const batchSize = Math.min(Math.max(targetReels, 12), 18);
-        const maxPagesToScan = 4;
+        const maxPagesToScan = summaryOnly ? 0 : (useFastSummary ? 2 : 4);
         let nextCursor = after;
         let pagesScanned = 0;
 
         while (pagesScanned < maxPagesToScan && reels.length < targetReels) {
             const response = await this.instagram.getMediaPageWithInsights(batchSize, nextCursor, {
-                includeDetailedVideoInsights: true,
+                includeDetailedVideoInsights: !useFastSummary,
                 detailedInsightConcurrency: 2
             });
             const batch = this.filterMediaByDate(response?.data || [], startDate, endDate);
@@ -1331,8 +1343,8 @@ class AnalyticsService {
         }
 
         const { startStr } = this.clampDateWindow(startDate, endDate);
-        const summaryBatchSize = (startDate || endDate) ? 30 : 18;
-        const maxSummaryPagesToScan = (startDate || endDate) ? 24 : 8;
+        const summaryBatchSize = useFastSummary ? 18 : ((startDate || endDate) ? 30 : 18);
+        const maxSummaryPagesToScan = useFastSummary ? 8 : ((startDate || endDate) ? 24 : 8);
         const summaryReels = [];
         const summaryNonReels = [];
         let summaryCursor = null;
@@ -1340,7 +1352,7 @@ class AnalyticsService {
 
         while (summaryPagesScanned < maxSummaryPagesToScan) {
             const response = await this.instagram.getMediaPageWithInsights(summaryBatchSize, summaryCursor, {
-                includeDetailedVideoInsights: true,
+                includeDetailedVideoInsights: !useFastSummary,
                 detailedInsightConcurrency: 2
             });
             const rawBatch = response?.data || [];
@@ -1358,9 +1370,10 @@ class AnalyticsService {
             summaryPagesScanned += 1;
             summaryCursor = response?.paging?.cursors?.after || null;
             const oldestBatchDate = (rawBatch[rawBatch.length - 1]?.timestamp || '').split('T')[0];
+            const batchHasInRangeContent = filteredBatch.length > 0;
 
             if (!summaryCursor) break;
-            if (startDate && oldestBatchDate && oldestBatchDate < startStr) {
+            if (startDate && oldestBatchDate && oldestBatchDate < startStr && !batchHasInRangeContent) {
                 break;
             }
         }
@@ -1371,14 +1384,16 @@ class AnalyticsService {
         // Fetch virality breakdown (follow_type) for top reels — capped to avoid rate overload
         const TOP_REELS_VIRALITY = 6;
         const viralityMap = {};
-        await Promise.allSettled(
-            reels.slice(0, TOP_REELS_VIRALITY).map(async (r) => {
-                try {
-                    const breakdown = await this.instagram.getReelReachByFollowType(r.id);
-                    if (breakdown) viralityMap[r.id] = breakdown;
-                } catch { /* non-fatal */ }
-            })
-        );
+        if (!useFastSummary) {
+            await Promise.allSettled(
+                reels.slice(0, TOP_REELS_VIRALITY).map(async (r) => {
+                    try {
+                        const breakdown = await this.instagram.getReelReachByFollowType(r.id);
+                        if (breakdown) viralityMap[r.id] = breakdown;
+                    } catch { /* non-fatal */ }
+                })
+            );
+        }
 
         // Average play rate used to detect algorithm boost window candidates
         const avgPlayRate = aggregateReels.length > 0
@@ -1544,7 +1559,10 @@ class AnalyticsService {
                 pagesScanned,
                 summaryPagesScanned,
                 nextCursor,
-                hasNextPage: Boolean(nextCursor)
+                hasNextPage: Boolean(nextCursor),
+                summaryMode,
+                summaryOnly,
+                usedFastSummary: useFastSummary
             },
             lastUpdated: new Date().toISOString()
         };

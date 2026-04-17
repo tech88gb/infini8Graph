@@ -117,11 +117,13 @@ export const instagramApi = (() => {
         },
         getBestTime: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/best-time${buildParams(startDate, endDate)}`),
         getHashtags: (startDate?: string, endDate?: string) => instagramApiClient.get(`/instagram/hashtags${buildParams(startDate, endDate)}`),
-        getReels: (startDate?: string, endDate?: string, options?: { after?: string; limit?: number }) =>
+        getReels: (startDate?: string, endDate?: string, options?: { after?: string; limit?: number; summaryMode?: 'fast' | 'full'; summaryOnly?: boolean }) =>
             instagramApiClient.get(
                 `/instagram/reels${buildParams(startDate, endDate, {
                     after: options?.after,
-                    limit: options?.limit
+                    limit: options?.limit,
+                    summaryMode: options?.summaryMode,
+                    summaryOnly: options?.summaryOnly ? 'true' : undefined
                 })}`
             ),
         getPosts: (limit = 12, startDate?: string, endDate?: string, includeCollabs = false, options?: { after?: string }) => {
