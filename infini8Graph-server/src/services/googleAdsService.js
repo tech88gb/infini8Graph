@@ -1470,6 +1470,53 @@ export async function getGeoPerformance(userId, preset = '30d') {
     }
 }
 
+export async function getLocalPresenceSignals(userId, preset = '30d') {
+    try {
+        const perf = await getAdsPerformance(userId, preset);
+        if (!perf?.connected) return { connected: false };
+
+        const creds = await getCustomerId(userId);
+        if (!creds) return { connected: false };
+        const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+        const { startDate, endDate } = getDateRange(preset);
+
+        let callClicks = null;
+        let callClickTypes = [];
+
+        try {
+            const rows = await customer.query(`
+                SELECT
+                    segments.click_type,
+                    metrics.clicks
+                FROM campaign
+                WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+                AND campaign.status = 'ENABLED'
+            `);
+
+            const callRows = (rows || []).filter((row) => /CALL|PHONE/i.test(String(row.segments?.click_type || '')));
+            if (callRows.length > 0) {
+                callClicks = callRows.reduce((sum, row) => sum + Number(row.metrics?.clicks || 0), 0);
+                callClickTypes = [...new Set(callRows.map((row) => String(row.segments?.click_type || '')).filter(Boolean))];
+            } else {
+                callClicks = 0;
+            }
+        } catch (callError) {
+            console.warn('⚠️ Local presence call metric query failed:', callError.message);
+        }
+
+        return {
+            connected: true,
+            adClicksToSite: Number(perf.metrics?.clicks || 0),
+            callClicks,
+            callClickTypes,
+            period: preset,
+        };
+    } catch (error) {
+        console.error('❌ Local presence signals error:', error.message);
+        return { connected: false, adClicksToSite: 0, callClicks: null, callClickTypes: [], error: error.message };
+    }
+}
+
 export default {
     getAdsPerformance,
     getCampaignBreakdown,
@@ -1484,5 +1531,6 @@ export default {
     getAssetPerformance,
     getBiddingInsights,
     getGeoPerformance,
+    getLocalPresenceSignals,
 };
 

@@ -234,6 +234,7 @@ export const googleAdsApi = {
     getAssetData: (preset = '30d') => googleApi.get(`/google/auth/assets?preset=${preset}`),
     getBidding: (preset = '30d') => googleApi.get(`/google/auth/bidding?preset=${preset}`),
     getGeo: (preset = '30d') => googleApi.get(`/google/auth/geo?preset=${preset}`),
+    getLocalPresence: (preset = '30d') => googleApi.get(`/google/auth/local-presence?preset=${preset}`),
     getDiscovery: () => googleApi.get('/google/auth/accounts'),
     updateAccount: (payload: { customerId: string; loginCustomerId?: string; allClientIds?: string[] }) =>
         googleApi.post('/google/auth/update-account', payload),
