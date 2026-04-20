@@ -158,6 +158,7 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
     const totalWasteSpend = wasted.reduce((sum: number, term: any) => sum + Number(term.spend || 0), 0);
     const totalWasteClicks = wasted.reduce((sum: number, term: any) => sum + Number(term.clicks || 0), 0);
     const strongAssetCount = allAssets.filter((asset: any) => ['BEST', 'GOOD'].includes(String(asset.performance || '').toUpperCase())).length;
+    const notApplicableAssetCount = allAssets.filter((asset: any) => String(asset.performance || '').toUpperCase() === 'NOT_APPLICABLE').length;
     const averageAssetCtr = allAssets.length > 0
         ? allAssets.reduce((sum: number, asset: any) => sum + asset.ctr, 0) / allAssets.length
         : 0;
@@ -202,11 +203,17 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
                     label="Strong Assets"
                     value={fmtNumber(strongAssetCount)}
                     tone={strongAssetCount > 0 ? 'success' : 'default'}
-                    tooltip="Asset count labeled BEST or GOOD by Google Ads in the latest 30-day asset view."
+                    tooltip="Only assets labeled GOOD or BEST by Google Ads are counted here. NOT_APPLICABLE, LEARNING, LOW, and other labels are excluded."
+                />
+                <CompactMetric
+                    label="Assets Without Label"
+                    value={fmtNumber(notApplicableAssetCount)}
+                    tone={notApplicableAssetCount > 0 ? 'warning' : 'default'}
+                    tooltip="Assets marked NOT_APPLICABLE by Google Ads. These assets exist in the selected range, but Google did not assign a performance label that can be judged as strong or weak."
                 />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -236,7 +243,9 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>No high-waste terms detected currently.</td>
+                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>
+                                            {`No terms matched the current waste rule in this ${preset} window.`}
+                                        </td>
                                     </tr>
                                 )}
                             </tbody>
@@ -311,6 +320,36 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
                         )) : (
                             <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 13 }}>
                                 No strong assets surfaced from the current asset view.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Info size={16} color="#f59e0b" />
+                            Assets Without Label
+                            <InfoTooltip text="These assets returned NOT_APPLICABLE from Google Ads. They are present in the selected date range, but Google does not consider them eligible for a GOOD/BEST style performance label in this context." />
+                        </h3>
+                        <span className="badge badge-warning">{fmtNumber(notApplicableAssetCount)} NOT APPLICABLE</span>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {allAssets.filter((asset: any) => String(asset.performance || '').toUpperCase() === 'NOT_APPLICABLE').slice(0, 4).map((asset: any, index: number) => (
+                            <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: index === Math.min(notApplicableAssetCount, 4) - 1 ? 'none' : '1px solid var(--border)' }}>
+                                <div style={{ maxWidth: '68%' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.type.replace(/_/g, ' ')} • {fmtNumber(asset.impressions)} impressions</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700 }}>{asset.ctr.toFixed(2)}% CTR</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtNumber(asset.clicks)} clicks</div>
+                                </div>
+                            </div>
+                        ))}
+                        {notApplicableAssetCount === 0 && (
+                            <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 13 }}>
+                                No NOT APPLICABLE assets were returned for this selected window.
                             </div>
                         )}
                     </div>
