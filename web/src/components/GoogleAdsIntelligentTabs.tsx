@@ -409,6 +409,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
     const topSpend = summary?.topLocationBySpend;
     const topEfficiency = summary?.topLocationByEfficiency;
     const lowEfficiency = summary?.lowEfficiencyLocations || [];
+    const primaryGranularity = summary?.primaryGranularity || 'Geo';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -418,11 +419,11 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
                             Geo Performance
                         </div>
-                        <div style={{ fontSize: 24, fontWeight: 800 }}>Location Efficiency</div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>{primaryGranularity} Efficiency</div>
                         <span className="badge badge-info">{preset} window</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        Aggregated by geography, not by campaign
+                        State-first geography rows from Google Ads
                     </div>
                 </div>
             </div>
@@ -458,7 +459,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <MapPin size={16} color="#10b981" />
                             Geo Spend vs. Outcomes
-                            <InfoTooltip text="Compares spend and clicks across the top geographic rows for the selected window. This is a geography-first view, not a campaign chart." />
+                            <InfoTooltip text="Compares spend and clicks across the top state, region, or country rows returned by Google Ads for the selected window." />
                         </h3>
                     </div>
                     <div style={{ padding: 20 }}>
@@ -484,7 +485,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         {topSpend ? (
                             <>
                                 <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6 }}>{topSpend.location}</div>
-                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topSpend.targetType} • {topSpend.matchType}</div>
+                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topSpend.geoLevel} • {topSpend.countryCode || topSpend.targetType}</div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
                                     <div>
                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>Spend Share</div>
@@ -506,7 +507,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         {topEfficiency ? (
                             <>
                                 <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6 }}>{topEfficiency.location}</div>
-                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topEfficiency.targetType} • {topEfficiency.matchType}</div>
+                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topEfficiency.geoLevel} • {topEfficiency.countryCode || topEfficiency.targetType}</div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
                                     <div>
                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>Cost / Conv.</div>
@@ -531,7 +532,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Globe size={16} color="#6366f1" />
                             Location Efficiency Table
-                            <InfoTooltip text="Aggregated geography rows with spend share, clicks, modeled conversions, CPC, conversion rate, and cost per conversion." />
+                            <InfoTooltip text="Aggregated state, region, or country rows with spend share, clicks, modeled conversions, CPC, conversion rate, and cost per conversion." />
                         </h3>
                     </div>
                     <div style={{ padding: '0 20px 20px' }}>
@@ -554,7 +555,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                                         <tr key={index}>
                                             <td>
                                                 <div style={{ fontWeight: 600 }}>{location.location}</div>
-                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{location.targetType} • {location.matchType}</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{location.geoLevel} • {location.countryCode || location.targetType}</div>
                                             </td>
                                             <td>{fmtCurrency(location.spend)}</td>
                                             <td>{location.spendShare}%</td>

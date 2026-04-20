@@ -293,6 +293,11 @@ function mapGeoTargetingType(value) {
     return labels[value] || String(value || 'UNKNOWN');
 }
 
+function extractGeoTargetId(resourceName) {
+    const match = String(resourceName || '').match(/geoTargetConstants\/(\d+)/i);
+    return match ? match[1] : '';
+}
+
 async function resolveGeoTargetDetails(customer, ids = []) {
     const uniqueIds = [...new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean))];
     if (!uniqueIds.length) return {};
@@ -1307,37 +1312,83 @@ export async function getGeoPerformance(userId, preset = '30d') {
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
         const { startDate, endDate } = getDateRange(preset);
 
-        const rows = await customer.query(`
-            SELECT
-                geographic_view.country_criterion_id,
-                geographic_view.location_type,
-                metrics.cost_micros,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.conversions,
-                campaign.name
-            FROM geographic_view
-            WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
-            AND metrics.cost_micros > 0
-            LIMIT 50
-        `);
+        let rows = [];
+        let geoMode = 'state-first';
 
-        const geoIds = (rows || []).map((row) => row.geographic_view?.country_criterion_id).filter(Boolean);
+        try {
+            rows = await customer.query(`
+                SELECT
+                    segments.geo_target_state,
+                    segments.geo_target_region,
+                    segments.geo_target_country,
+                    metrics.cost_micros,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.conversions
+                FROM campaign
+                WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+                AND metrics.cost_micros > 0
+                LIMIT 5000
+            `);
+        } catch (segmentError) {
+            console.warn('⚠️ Geo segment query failed, falling back to geographic_view:', segmentError.message);
+            geoMode = 'country-fallback';
+            rows = await customer.query(`
+                SELECT
+                    geographic_view.country_criterion_id,
+                    geographic_view.location_type,
+                    metrics.cost_micros,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.conversions
+                FROM geographic_view
+                WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+                AND metrics.cost_micros > 0
+                LIMIT 500
+            `);
+        }
+
+        const geoIds = (rows || []).map((row) => {
+            if (geoMode === 'state-first') {
+                return (
+                    extractGeoTargetId(row.segments?.geo_target_state)
+                    || extractGeoTargetId(row.segments?.geo_target_region)
+                    || extractGeoTargetId(row.segments?.geo_target_country)
+                );
+            }
+            return String(row.geographic_view?.country_criterion_id || '').trim();
+        }).filter(Boolean);
         const geoDetails = await resolveGeoTargetDetails(customer, geoIds);
         const locationMap = {};
 
         (rows || []).forEach((row) => {
-            const geoId = String(row.geographic_view?.country_criterion_id || '').trim();
-            const locationType = mapGeoTargetingType(row.geographic_view?.location_type);
+            const geoId = geoMode === 'state-first'
+                ? (
+                    extractGeoTargetId(row.segments?.geo_target_state)
+                    || extractGeoTargetId(row.segments?.geo_target_region)
+                    || extractGeoTargetId(row.segments?.geo_target_country)
+                )
+                : String(row.geographic_view?.country_criterion_id || '').trim();
+
+            const geoLevel = geoMode === 'state-first'
+                ? (extractGeoTargetId(row.segments?.geo_target_state) ? 'State'
+                    : extractGeoTargetId(row.segments?.geo_target_region) ? 'Region'
+                    : extractGeoTargetId(row.segments?.geo_target_country) ? 'Country'
+                    : 'Unknown')
+                : 'Country';
+            const geoScope = geoMode === 'state-first'
+                ? 'Most specific user geo'
+                : mapGeoTargetingType(row.geographic_view?.location_type).replace(/_/g, ' ');
             const geoMeta = geoDetails[geoId] || {};
-            const key = `${geoId}:${locationType}`;
+            const key = `${geoId}:${geoLevel}:${geoScope}`;
             if (!locationMap[key]) {
                 locationMap[key] = {
                     id: geoId || 'unknown',
                     location: geoMeta.name || (geoId ? `Geo ${geoId}` : 'Unknown location'),
-                    targetType: geoMeta.targetType || 'Unknown',
+                    targetType: geoMeta.targetType || geoLevel,
                     countryCode: geoMeta.countryCode || '',
-                    matchType: locationType.replace(/_/g, ' '),
+                    geoLevel,
+                    matchType: geoScope,
                     spend: 0,
                     impressions: 0,
                     clicks: 0,
@@ -1373,6 +1424,9 @@ export async function getGeoPerformance(userId, preset = '30d') {
             spendShare: totalSpend > 0 ? parseFloat(((location.spend / totalSpend) * 100).toFixed(1)) : 0,
         }));
         const locationsWithConversion = enrichedLocations.filter((location) => location.conversions > 0);
+        const stateCount = enrichedLocations.filter((location) => location.geoLevel === 'State').length;
+        const regionCount = enrichedLocations.filter((location) => location.geoLevel === 'Region').length;
+        const countryCount = enrichedLocations.filter((location) => location.geoLevel === 'Country').length;
 
         const summary = {
             totalSpend: parseFloat(totalSpend.toFixed(2)),
@@ -1390,7 +1444,9 @@ export async function getGeoPerformance(userId, preset = '30d') {
             lowEfficiencyLocations: [...locationsWithConversion]
                 .filter((location) => location.costPerConversion !== null)
                 .sort((a, b) => (b.costPerConversion || 0) - (a.costPerConversion || 0))
-                .slice(0, 3)
+                .slice(0, 3),
+            geoMode,
+            primaryGranularity: stateCount > 0 ? 'State' : regionCount > 0 ? 'Region' : countryCount > 0 ? 'Country' : 'Geo',
         };
 
         return { connected: true, locations: enrichedLocations, summary, period: preset };
