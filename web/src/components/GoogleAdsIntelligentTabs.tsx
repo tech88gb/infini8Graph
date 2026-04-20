@@ -115,9 +115,9 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
     });
 
     const { data: assetData, isLoading: assetLoading } = useQuery({
-        queryKey: ['google-assets'],
+        queryKey: ['google-assets', preset],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssetData();
+            const res = await googleAdsApi.getAssetData(preset);
             return res.data.data;
         },
         staleTime: 300000,
@@ -171,10 +171,10 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
                             Conversion Integrity
                         </div>
                         <div style={{ fontSize: 24, fontWeight: 800 }}>Waste + Asset Quality</div>
-                        <span className="badge badge-info">{preset} terms</span>
+                        <span className="badge badge-info">{preset} window</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        Assets use Google&apos;s latest 30-day asset labels
+                        Terms and assets match the selected range
                     </div>
                 </div>
             </div>
@@ -301,11 +301,11 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
                             <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: index === strongAssets.length - 1 ? 'none' : '1px solid var(--border)' }}>
                                 <div style={{ maxWidth: '70%' }}>
                                     <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.type} • {asset.campaign}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.type.replace(/_/g, ' ')} • {asset.campaign}</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{fmtNumber(asset.clicks)} clicks</div>
-                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{asset.performance} • {asset.ctr.toFixed(2)}% CTR</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{asset.performance.replace(/_/g, ' ')} • {asset.ctr.toFixed(2)}% CTR</div>
                                 </div>
                             </div>
                         )) : (
@@ -330,7 +330,7 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
                             <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: index === weakAssets.length - 1 ? 'none' : '1px solid var(--border)' }}>
                                 <div style={{ maxWidth: '68%' }}>
                                     <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.performance} • {fmtNumber(asset.impressions)} impressions</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.performance.replace(/_/g, ' ')} • {fmtNumber(asset.impressions)} impressions</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ fontSize: 13, fontWeight: 700 }}>{asset.ctr.toFixed(2)}% CTR</div>
@@ -565,9 +565,9 @@ export function WastedSpendTab({ preset }: { preset: string }) {
     });
 
     const { data: assetData, isLoading: assetLoading } = useQuery({
-        queryKey: ['google-assets'],
+        queryKey: ['google-assets', preset],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssetData();
+            const res = await googleAdsApi.getAssetData(preset);
             return res.data.data;
         },
         staleTime: 300000,

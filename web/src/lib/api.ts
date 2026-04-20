@@ -231,7 +231,7 @@ export const googleAdsApi = {
     getAuctionInsights: (preset = '30d') => googleApi.get(`/google/auth/auction-insights?preset=${preset}`),
     getSearchTerms: (preset = '30d') => googleApi.get(`/google/auth/search-terms?preset=${preset}`),
     getQualityScore: () => googleApi.get('/google/auth/quality-score'),
-    getAssetData: () => googleApi.get('/google/auth/assets'),
+    getAssetData: (preset = '30d') => googleApi.get(`/google/auth/assets?preset=${preset}`),
     getBidding: (preset = '30d') => googleApi.get(`/google/auth/bidding?preset=${preset}`),
     getGeo: (preset = '30d') => googleApi.get(`/google/auth/geo?preset=${preset}`),
     getDiscovery: () => googleApi.get('/google/auth/accounts'),

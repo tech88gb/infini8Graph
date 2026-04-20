@@ -202,6 +202,83 @@ function getDateRange(preset = '30d') {
     return { startDate: fmt(from), endDate: fmt(today) };
 }
 
+function mapAssetPerformanceLabel(value) {
+    const labels = {
+        0: 'UNSPECIFIED',
+        1: 'UNKNOWN',
+        2: 'PENDING',
+        3: 'LEARNING',
+        4: 'LOW',
+        5: 'GOOD',
+        6: 'BEST',
+        7: 'NOT_APPLICABLE',
+        UNSPECIFIED: 'UNSPECIFIED',
+        UNKNOWN: 'UNKNOWN',
+        PENDING: 'PENDING',
+        LEARNING: 'LEARNING',
+        LOW: 'LOW',
+        GOOD: 'GOOD',
+        BEST: 'BEST',
+        NOT_APPLICABLE: 'NOT_APPLICABLE',
+    };
+    return labels[value] || String(value || 'UNKNOWN');
+}
+
+function mapServedAssetFieldType(value) {
+    const labels = {
+        0: 'UNSPECIFIED',
+        1: 'UNKNOWN',
+        2: 'HEADLINE_1',
+        3: 'HEADLINE_2',
+        4: 'HEADLINE_3',
+        5: 'DESCRIPTION_1',
+        6: 'DESCRIPTION_2',
+        7: 'HEADLINE',
+        8: 'HEADLINE_IN_PORTRAIT',
+        9: 'LONG_HEADLINE',
+        10: 'DESCRIPTION',
+        11: 'DESCRIPTION_IN_PORTRAIT',
+        12: 'BUSINESS_NAME_IN_PORTRAIT',
+        13: 'BUSINESS_NAME',
+        14: 'MARKETING_IMAGE',
+        15: 'MARKETING_IMAGE_IN_PORTRAIT',
+        16: 'SQUARE_MARKETING_IMAGE',
+        17: 'PORTRAIT_MARKETING_IMAGE',
+        18: 'LOGO',
+        19: 'LANDSCAPE_LOGO',
+        20: 'CALL_TO_ACTION',
+        21: 'YOU_TUBE_VIDEO',
+        22: 'SITELINK',
+        23: 'CALL',
+        24: 'MOBILE_APP',
+        25: 'CALLOUT',
+        26: 'STRUCTURED_SNIPPET',
+        UNSPECIFIED: 'UNSPECIFIED',
+        UNKNOWN: 'UNKNOWN',
+        HEADLINE_1: 'HEADLINE_1',
+        HEADLINE_2: 'HEADLINE_2',
+        HEADLINE_3: 'HEADLINE_3',
+        DESCRIPTION_1: 'DESCRIPTION_1',
+        DESCRIPTION_2: 'DESCRIPTION_2',
+        HEADLINE: 'HEADLINE',
+        LONG_HEADLINE: 'LONG_HEADLINE',
+        DESCRIPTION: 'DESCRIPTION',
+        BUSINESS_NAME: 'BUSINESS_NAME',
+        MARKETING_IMAGE: 'MARKETING_IMAGE',
+        SQUARE_MARKETING_IMAGE: 'SQUARE_MARKETING_IMAGE',
+        PORTRAIT_MARKETING_IMAGE: 'PORTRAIT_MARKETING_IMAGE',
+        LOGO: 'LOGO',
+        CALL_TO_ACTION: 'CALL_TO_ACTION',
+        YOU_TUBE_VIDEO: 'YOU_TUBE_VIDEO',
+        SITELINK: 'SITELINK',
+        CALL: 'CALL',
+        MOBILE_APP: 'MOBILE_APP',
+        CALLOUT: 'CALLOUT',
+        STRUCTURED_SNIPPET: 'STRUCTURED_SNIPPET',
+    };
+    return labels[value] || String(value || 'UNKNOWN');
+}
+
 function summarizeGoogleChannelMix(campaigns = []) {
     const totals = {
         search: 0,
@@ -1080,11 +1157,12 @@ export async function getQualityScoreDiagnostics(userId) {
 
 // ===================== ASSET PERFORMANCE (RSA) =====================
 
-export async function getAssetPerformance(userId) {
+export async function getAssetPerformance(userId, preset = '30d') {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
+        const { startDate, endDate } = getDateRange(preset);
 
         // Responsive Search Ad Asset performance
         const rows = await customer.query(`
@@ -1097,7 +1175,7 @@ export async function getAssetPerformance(userId) {
                 metrics.clicks,
                 campaign.name
             FROM ad_group_ad_asset_view
-            WHERE segments.date DURING LAST_30_DAYS
+            WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
             AND metrics.impressions > 0
             ORDER BY metrics.impressions DESC
             LIMIT 50
@@ -1106,14 +1184,14 @@ export async function getAssetPerformance(userId) {
         const assets = (rows || []).map(r => ({
             id: r.asset?.id,
             text: r.asset?.text_asset?.text || '',
-            performance: r.ad_group_ad_asset_view?.performance_label || 'LEARNING',
-            type: r.ad_group_ad_asset_view?.field_type || '',
+            performance: mapAssetPerformanceLabel(r.ad_group_ad_asset_view?.performance_label),
+            type: mapServedAssetFieldType(r.ad_group_ad_asset_view?.field_type),
             impressions: Number(r.metrics?.impressions || 0),
             clicks: Number(r.metrics?.clicks || 0),
             campaign: r.campaign?.name || ''
         }));
 
-        return { connected: true, assets };
+        return { connected: true, assets, period: preset };
     } catch (error) {
         console.error('❌ Asset performance error:', error.message);
         return { connected: true, assets: [], error: error.message };

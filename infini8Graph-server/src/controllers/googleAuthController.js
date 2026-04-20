@@ -218,7 +218,8 @@ export async function getQualityScore(req, res) {
 export async function getAssetData(req, res) {
     try {
         const userId = req.user?.userId;
-        const data = await getAssetPerformance(userId);
+        const { preset = '30d' } = req.query;
+        const data = await getAssetPerformance(userId, preset);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Asset performance controller error:', error.message);

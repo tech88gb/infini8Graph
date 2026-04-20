@@ -1048,7 +1048,7 @@ function IntelligenceTab() {
     const { data: assetData, isLoading: assetLoading } = useQuery({
         queryKey: ['google-assets'],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssetData();
+            const res = await googleAdsApi.getAssetData('30d');
             return res.data.data;
         }
     });
@@ -1555,7 +1555,7 @@ export default function GoogleAdsPage() {
             googleAdsApi.getAlerts().then((res) => res.data.data).catch(() => alertsData),
             googleAdsApi.getBidding(preset).then((res) => res.data.data).catch(() => null),
             googleAdsApi.getQualityScore().then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getAssetData().then((res) => res.data.data).catch(() => null)
+            googleAdsApi.getAssetData(preset).then((res) => res.data.data).catch(() => null)
         ]);
 
         const customerId = latestAccounts?.customerId || latestStatus?.account?.customerId || 'google-ads';
