@@ -1482,6 +1482,25 @@ export async function getLocalPresenceSignals(userId, preset = '30d') {
 
         let callClicks = null;
         let callClickTypes = [];
+        let callConversions = null;
+        let callConversionCategories = [];
+        let hasCallTracking = false;
+
+        try {
+            const actionRows = await customer.query(`
+                SELECT
+                    conversion_action.type,
+                    conversion_action.status
+                FROM conversion_action
+                WHERE conversion_action.status = 'ENABLED'
+            `);
+            const callActionRows = (actionRows || []).filter((row) =>
+                /CALL|PHONE/i.test(String(row.conversion_action?.type || ''))
+            );
+            hasCallTracking = callActionRows.length > 0;
+        } catch (actionError) {
+            console.warn('⚠️ Call conversion action lookup failed:', actionError.message);
+        }
 
         try {
             const rows = await customer.query(`
@@ -1497,23 +1516,62 @@ export async function getLocalPresenceSignals(userId, preset = '30d') {
             if (callRows.length > 0) {
                 callClicks = callRows.reduce((sum, row) => sum + Number(row.metrics?.clicks || 0), 0);
                 callClickTypes = [...new Set(callRows.map((row) => String(row.segments?.click_type || '')).filter(Boolean))];
-            } else {
-                callClicks = 0;
             }
         } catch (callError) {
             console.warn('⚠️ Local presence call metric query failed:', callError.message);
         }
 
+        try {
+            const rows = await customer.query(`
+                SELECT
+                    segments.conversion_action_category,
+                    metrics.conversions
+                FROM campaign
+                WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+                AND campaign.status = 'ENABLED'
+            `);
+
+            const callRows = (rows || []).filter((row) =>
+                /CALL|PHONE/i.test(String(row.segments?.conversion_action_category || ''))
+            );
+            if (callRows.length > 0) {
+                callConversions = callRows.reduce((sum, row) => sum + Number(row.metrics?.conversions || 0), 0);
+                callConversionCategories = [...new Set(callRows.map((row) => String(row.segments?.conversion_action_category || '')).filter(Boolean))];
+            }
+        } catch (conversionError) {
+            console.warn('⚠️ Local presence call conversion query failed:', conversionError.message);
+        }
+
+        const roundedCallConversions = callConversions !== null ? Math.round(callConversions) : null;
+        const bestEffortCallInteractions =
+            callClicks !== null && callClicks > 0 ? callClicks
+                : roundedCallConversions !== null && roundedCallConversions > 0 ? roundedCallConversions
+                    : hasCallTracking ? 0 : null;
+
         return {
             connected: true,
             adClicksToSite: Number(perf.metrics?.clicks || 0),
-            callClicks,
+            callClicks: bestEffortCallInteractions,
             callClickTypes,
+            rawCallClickInteractions: callClicks,
+            callConversions,
+            callConversionCategories,
+            hasCallTracking,
             period: preset,
         };
     } catch (error) {
         console.error('❌ Local presence signals error:', error.message);
-        return { connected: false, adClicksToSite: 0, callClicks: null, callClickTypes: [], error: error.message };
+        return {
+            connected: false,
+            adClicksToSite: 0,
+            callClicks: null,
+            callClickTypes: [],
+            rawCallClickInteractions: null,
+            callConversions: null,
+            callConversionCategories: [],
+            hasCallTracking: false,
+            error: error.message
+        };
     }
 }
 

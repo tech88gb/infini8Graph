@@ -874,6 +874,9 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
     const totalClicks = locations.reduce((s: number, l: any) => s + (l.clicks || 0), 0);
     const adClicksToSite = Number(localPresenceData?.adClicksToSite ?? totalClicks ?? 0);
     const realCallClicks = localPresenceData?.callClicks;
+    const hasCallTracking = Boolean(localPresenceData?.hasCallTracking);
+    const rawCallClickInteractions = localPresenceData?.rawCallClickInteractions;
+    const callConversions = localPresenceData?.callConversions;
     const estimatedDirections  = Math.round(totalClicks * 0.18);
     const localPresenceScore = Math.min(100, Math.round(
         (localKeywords.length > 0 ? 30 : 0) +
@@ -910,7 +913,7 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 {[
                     { label: 'Estimated Directions', value: estimatedDirections.toLocaleString(), icon: MapPin, color: '#10b981', tip: 'Estimated from geo-attributed ad clicks in the selected window. This is a directional proxy until Google Business Profile data is integrated.' },
-                    { label: 'Call Interactions', value: realCallClicks === null ? '—' : realCallClicks.toLocaleString(), icon: Crosshair, color: '#6366f1', tip: realCallClicks === null ? 'Google Ads did not return a call-related click metric for this account/query, so no call number is shown.' : 'Real call-related Google Ads click interactions returned from click-type reporting in the selected window.' },
+                    { label: 'Call Interactions', value: realCallClicks === null ? 'Not surfaced' : realCallClicks.toLocaleString(), icon: Crosshair, color: '#6366f1', tip: realCallClicks === null ? 'Google Ads did not surface enough call-tracking evidence for this account/query, so the app is not forcing a zero.' : rawCallClickInteractions > 0 ? 'Built from real call-related click interactions returned by Google Ads.' : callConversions > 0 ? 'Built from call-related conversion rows because direct call click interactions were not surfaced.' : 'Google Ads has call tracking configured, but no call-related interactions were recorded in the selected window.' },
                     { label: 'Ad Clicks to Site', value: adClicksToSite.toLocaleString(), icon: Globe, color: '#f59e0b', tip: 'Real Google Ads clicks in the selected window. This is ad traffic to site, not Business Profile website clicks.' },
                     { label: 'Local Presence Score', value: `${localPresenceScore}/100`, icon: ShieldAlert, color: getScoreColor(localPresenceScore), tip: 'Composite score based on local keyword presence, geo coverage, estimated direction demand, and real call interaction data when Google Ads returns it.' },
                 ].map((m, i) => (
@@ -973,11 +976,15 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                             { 
                                 label: 'Call Response', 
                                 pass: realCallClicks === null ? false : realCallClicks > 5, 
-                                value: realCallClicks === null ? 'No Ads call metric' : `${realCallClicks} call clicks`,
+                                value: realCallClicks === null ? 'Call signal not surfaced' : `${realCallClicks} call interactions`,
                                 why: realCallClicks === null
-                                    ? 'Google Ads did not surface call interaction clicks for this account or query shape.'
+                                    ? hasCallTracking
+                                        ? 'Google Ads call tracking exists, but this query did not surface enough call interaction evidence to score strongly.'
+                                        : 'No call-tracking signal is configured or surfaced in Google Ads for this account.'
                                     : 'Minimal call interaction volume indicates weak call intent or missing call assets.',
-                                fix: 'Enable or strengthen call assets and ensure call reporting is configured in Google Ads.'
+                                fix: hasCallTracking
+                                    ? 'Review call asset coverage and verify that call reporting and call-related conversion actions are firing correctly.'
+                                    : 'Enable call assets and call reporting in Google Ads before judging phone response performance.'
                             },
                         ].map((item, i) => (
                             <div key={i} style={{ 
@@ -1052,7 +1059,7 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                     )}
                 </div>
                 <div style={{ padding: '12px 24px', fontSize: 11, color: 'var(--muted)', background: 'rgba(0,0,0,0.02)', borderTop: '1px solid var(--border)', fontStyle: 'italic' }}>
-                    Estimated Directions is modeled from geo-attributed click behavior. Call Interactions and Ad Clicks to Site come from Google Ads when available.
+                    Estimated Directions is modeled from geo-attributed click behavior. Call Interactions now use the best available Google Ads call signal: call clicks first, then call-related conversions, and only show zero when call tracking exists but no call activity was recorded.
                 </div>
             </div>
 
@@ -1087,7 +1094,7 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                                     <td>₹{(l.spend || 0).toLocaleString()}</td>
                                     <td>{(l.clicks || 0).toLocaleString()}</td>
                                     <td style={{ color: '#10b981', fontWeight: 600 }}>~{Math.round((l.clicks || 0) * 0.18)}</td>
-                                    <td style={{ color: '#6366f1', fontWeight: 600 }}>{realCallClicks === null ? '—' : 'See top card'}</td>
+                                    <td style={{ color: '#6366f1', fontWeight: 600 }}>{realCallClicks === null ? 'Not surfaced' : 'See top card'}</td>
                                     <td>₹{l.clicks > 0 ? (l.spend / l.clicks).toFixed(2) : '—'}</td>
                                 </tr>
                             ))}
