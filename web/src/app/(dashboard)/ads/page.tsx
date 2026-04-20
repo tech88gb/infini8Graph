@@ -1231,42 +1231,50 @@ export default function AdsPage() {
 
             {/* Summary Metrics */}
             {accountProfile?.label && (
-                <div
-                    className="card"
-                    style={{
-                        marginBottom: 20,
-                        padding: 18,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 16,
-                        flexWrap: 'wrap',
-                        border: '1px solid rgba(99,102,241,0.22)',
-                        background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(16,185,129,0.08))'
-                    }}
-                >
-                    <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: 6 }}>
-                            Account Focus
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <div
+                        className="card"
+                        style={{
+                            padding: '12px 14px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            border: '1px solid rgba(99,102,241,0.18)',
+                            background: 'rgba(99,102,241,0.06)',
+                            minWidth: 0
+                        }}
+                    >
+                        <div style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #6366f1, #10b981)',
+                            flexShrink: 0
+                        }} />
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' }}>
+                                    Account Focus
+                                </span>
+                                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--foreground)' }}>{accountProfile.label}</span>
+                            </div>
+                            <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                {objectiveMixLabel || accountProfile.description}
+                            </div>
                         </div>
-                        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{accountProfile.label}</div>
-                        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>
-                            {accountProfile.description}
-                            {objectiveMixLabel ? ` ${objectiveMixLabel}.` : ''}
-                        </p>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {(accountProfile.recommendedMetrics || []).slice(0, 6).map((metricKey: string) => (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {(accountProfile.recommendedMetrics || []).slice(0, 4).map((metricKey: string) => (
                             <span
                                 key={metricKey}
                                 style={{
-                                    padding: '6px 10px',
+                                    padding: '5px 9px',
                                     borderRadius: 999,
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: 600,
-                                    background: 'rgba(255,255,255,0.06)',
+                                    background: 'rgba(255,255,255,0.04)',
                                     border: '1px solid rgba(255,255,255,0.08)',
-                                    color: 'var(--foreground)'
+                                    color: 'var(--muted)'
                                 }}
                             >
                                 {toTitleCase(metricKey)}
