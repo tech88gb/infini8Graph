@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { googleAdsApi } from '@/lib/api';
 import {
@@ -20,7 +21,7 @@ import {
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
     Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin,
-    Crosshair, UserCheck, ShieldAlert, X, Sparkles
+    Crosshair, UserCheck, ShieldAlert, X, Sparkles, HelpCircle
 } from 'lucide-react';
 import {
     TrueRoasTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab,
@@ -176,6 +177,66 @@ function AlertCard({ alert }: { alert: any }) {
     );
 }
 
+function InfoTooltip({ text }: { text: string }) {
+    const [show, setShow] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const [rect, setRect] = useState<DOMRect | null>(null);
+    const iconRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const handleMouseEnter = () => {
+        if (iconRef.current) {
+            setRect(iconRef.current.getBoundingClientRect());
+            setShow(true);
+        }
+    };
+
+    return (
+        <div ref={iconRef} style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }}>
+            <HelpCircle
+                size={14}
+                style={{ color: 'var(--muted)', cursor: 'help', opacity: 0.7 }}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={() => setShow(false)}
+            />
+            {mounted && show && rect && createPortal(
+                <div style={{
+                    position: 'absolute',
+                    top: rect.top + window.scrollY - 8,
+                    left: rect.left + rect.width / 2 + window.scrollX,
+                    transform: 'translate(-50%, -100%)',
+                    background: '#1e293b',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    width: Math.min(260, window.innerWidth - 32),
+                    zIndex: 999999,
+                    pointerEvents: 'none',
+                    lineHeight: 1.5,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    textAlign: 'center'
+                }}>
+                    {text}
+                    <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        borderWidth: 6,
+                        borderStyle: 'solid',
+                        borderColor: '#1e293b transparent transparent transparent'
+                    }} />
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
 function HealthSignalCard({ item }: { item: any }) {
     const tones: Record<string, { color: string; bg: string; border: string; icon: any }> = {
         success: { color: '#10b981', bg: '#10b98112', border: '#10b98133', icon: CheckCircle },
@@ -193,7 +254,10 @@ function HealthSignalCard({ item }: { item: any }) {
                     <Icon size={14} style={{ color: tone.color }} />
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{item.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
+                        {item.title}
+                        {item.tooltip && <InfoTooltip text={item.tooltip} />}
+                    </div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: tone.color, lineHeight: 1.1 }}>{item.value}</div>
                     <div style={{ marginTop: 5, fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {item.note}
@@ -348,20 +412,20 @@ function OverviewTab({ preset }: { preset: string }) {
     const activeBudgetCount = budgetCampaigns.filter((campaign: any) => Number(campaign.spent || 0) > 0).length;
     const highestBudgetPressure = budgetCampaigns[0] || null;
     const metricCards = [
-        { label: 'Total Spend', value: fmtINR(m.spend), icon: DollarSign, color: '#6366f1' },
-        { label: 'Conversions', value: fmt(m.conversions, 0), icon: Target, color: '#f59e0b' },
-        { label: 'Cost / Conv.', value: fmtINR(m.costPerConversion), icon: Zap, color: '#0ea5e9' },
-        { label: 'Conversion Rate', value: fmtPct(m.conversionRate), icon: TrendingUp, color: '#10b981' },
-        { label: 'Avg CPC', value: fmtINR(m.avgCpc), icon: MousePointer, color: '#ec4899' },
-        { label: 'CTR', value: fmtPct(m.ctr), icon: Activity, color: '#14b8a6' },
+        { label: 'Total Spend', value: fmtINR(m.spend), icon: DollarSign, color: '#6366f1', tooltip: 'Total spend across enabled campaigns in the selected reporting window.' },
+        { label: 'Conversions', value: fmt(m.conversions, 0), icon: Target, color: '#f59e0b', tooltip: 'Total conversions reported by Google Ads for the selected period.' },
+        { label: 'Cost / Conv.', value: fmtINR(m.costPerConversion), icon: Zap, color: '#0ea5e9', tooltip: 'Spend divided by conversions. Lower is usually better when conversion quality is stable.' },
+        { label: 'Conversion Rate', value: fmtPct(m.conversionRate), icon: TrendingUp, color: '#10b981', tooltip: 'Conversions divided by clicks for the selected period.' },
+        { label: 'Avg CPC', value: fmtINR(m.avgCpc), icon: MousePointer, color: '#ec4899', tooltip: 'Average cost per click across enabled campaigns.' },
+        { label: 'CTR', value: fmtPct(m.ctr), icon: Activity, color: '#14b8a6', tooltip: 'Click-through rate across impressions in the selected window.' },
         ...(showRevenueMetrics
             ? [
-                { label: 'Conv. Value', value: fmtINR(m.conversionValue), icon: BarChart2, color: '#8b5cf6' },
-                { label: 'ROAS', value: m.roas ? `${m.roas.toFixed(2)}x` : '—', icon: TrendingUp, color: m.roas >= 4 ? '#10b981' : m.roas >= 2 ? '#f59e0b' : '#ef4444' },
+                { label: 'Conv. Value', value: fmtINR(m.conversionValue), icon: BarChart2, color: '#8b5cf6', tooltip: 'Total tracked conversion value returned by Google Ads.' },
+                { label: 'ROAS', value: m.roas ? `${m.roas.toFixed(2)}x` : '—', icon: TrendingUp, color: m.roas >= 4 ? '#10b981' : m.roas >= 2 ? '#f59e0b' : '#ef4444', tooltip: 'Tracked conversion value divided by spend. This is only shown when value tracking looks usable.' },
             ]
             : [
-                { label: 'Clicks', value: fmt(m.clicks, 0), icon: MousePointer, color: '#ec4899' },
-                { label: 'Impressions', value: fmt(m.impressions, 0), icon: Eye, color: '#0ea5e9' },
+                { label: 'Clicks', value: fmt(m.clicks, 0), icon: MousePointer, color: '#ec4899', tooltip: 'Total clicks across enabled campaigns for the selected period.' },
+                { label: 'Impressions', value: fmt(m.impressions, 0), icon: Eye, color: '#0ea5e9', tooltip: 'Total impressions served in the selected reporting window.' },
             ])
     ];
     const healthSignals = [
@@ -369,13 +433,15 @@ function OverviewTab({ preset }: { preset: string }) {
             tone: m.conversionRate >= 8 ? 'success' : m.conversionRate >= 3 ? 'info' : 'warning',
             title: 'Conversion Efficiency',
             value: fmtPct(m.conversionRate),
-            note: m.conversionRate >= 8 ? 'Strong click-to-conversion flow' : m.conversionRate >= 3 ? 'Usable, keep monitoring' : 'Needs landing/query cleanup'
+            note: m.conversionRate >= 8 ? 'Strong click-to-conversion flow' : m.conversionRate >= 3 ? 'Usable, keep monitoring' : 'Needs landing/query cleanup',
+            tooltip: 'Conversions divided by clicks for the selected window. This is the cleanest quick read on whether paid traffic is turning into actions.'
         },
         {
             tone: m.avgCpc <= 10 ? 'success' : m.avgCpc <= 25 ? 'info' : 'warning',
             title: 'Click Cost',
             value: fmtINR(m.avgCpc),
-            note: m.avgCpc <= 10 ? 'CPC looks disciplined' : m.avgCpc <= 25 ? 'Manageable cost level' : 'Traffic is getting expensive'
+            note: m.avgCpc <= 10 ? 'CPC looks disciplined' : m.avgCpc <= 25 ? 'Manageable cost level' : 'Traffic is getting expensive',
+            tooltip: 'Average cost per click across enabled campaigns in the selected period.'
         },
         {
             tone: valueTracking.quality === 'strong' ? 'success' : valueTracking.quality === 'partial' ? 'info' : 'warning',
@@ -387,7 +453,8 @@ function OverviewTab({ preset }: { preset: string }) {
                 : valueTracking.quality === 'weak'
                         ? 'Weak revenue signal'
                         : 'No clear value signal',
-            note: showRevenueMetrics ? 'ROAS can lead the view' : 'Efficiency should lead the view'
+            note: showRevenueMetrics ? 'ROAS can lead the view' : 'Efficiency should lead the view',
+            tooltip: 'A heuristic confidence read on whether conversion value data is strong enough to trust ROAS as a headline KPI.'
         },
         {
             tone: highestBudgetPressure?.utilization >= 90 ? 'warning' : activeBudgetCount > 0 ? 'info' : 'warning',
@@ -399,14 +466,15 @@ function OverviewTab({ preset }: { preset: string }) {
                 ? 'One campaign is near cap'
                 : activeBudgetCount > 0
                     ? `${activeBudgetCount} campaign${activeBudgetCount > 1 ? 's' : ''} spending today`
-                    : 'No meaningful spend yet'
+                    : 'No meaningful spend yet',
+            tooltip: 'Today-only pacing read based on campaign budget usage returned by Google Ads. This is intentionally separate from the selected reporting window.'
         }
     ];
     const summaryStats = [
-        { label: 'Focus', value: focus.label || 'Mixed' },
-        { label: 'Primary Mix', value: focus.primaryMix || 'Mixed distribution' },
-        { label: 'Mode', value: showRevenueMetrics ? 'Revenue-aware' : 'Efficiency-first' },
-        { label: 'Value / Conv.', value: m.valuePerConversion ? fmtINR(m.valuePerConversion) : '—' },
+        { label: 'Focus', value: focus.label || 'Mixed', tooltip: 'High-level account classification inferred from campaign mix, channel types, and conversion/value behavior.' },
+        { label: 'Primary Mix', value: focus.primaryMix || 'Mixed distribution', tooltip: 'The dominant campaign distribution in the account, weighted primarily by spend.' },
+        { label: 'Mode', value: showRevenueMetrics ? 'Revenue-aware' : 'Efficiency-first', tooltip: 'Whether the overview should prioritize ROAS/value metrics or operate as an efficiency-first dashboard.' },
+        { label: 'Value / Conv.', value: m.valuePerConversion ? fmtINR(m.valuePerConversion) : '—', tooltip: 'Average tracked conversion value per conversion in the selected period.' },
     ];
 
     return (
@@ -427,7 +495,10 @@ function OverviewTab({ preset }: { preset: string }) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
                     {summaryStats.map((item, index) => (
                         <div key={index} style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>{item.label}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>
+                                {item.label}
+                                {item.tooltip && <InfoTooltip text={item.tooltip} />}
+                            </div>
                             <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.value}</div>
                         </div>
                     ))}
@@ -448,7 +519,10 @@ function OverviewTab({ preset }: { preset: string }) {
                             <div style={{ padding: 6, borderRadius: 6, background: `${stat.color}22` }}>
                                 <stat.icon size={14} style={{ color: stat.color }} />
                             </div>
-                            <span className="text-muted" style={{ fontSize: 12 }}>{stat.label}</span>
+                            <span className="text-muted" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center' }}>
+                                {stat.label}
+                                {stat.tooltip && <InfoTooltip text={stat.tooltip} />}
+                            </span>
                         </div>
                         <div style={{ fontSize: 22, fontWeight: 700 }}>{stat.value}</div>
                     </div>
