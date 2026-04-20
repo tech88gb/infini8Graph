@@ -410,6 +410,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
     const topEfficiency = summary?.topLocationByEfficiency;
     const lowEfficiency = summary?.lowEfficiencyLocations || [];
     const primaryGranularity = summary?.primaryGranularity || 'Geo';
+    const granularityNote = summary?.granularityNote || 'State-first geography rows from Google Ads';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -423,7 +424,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         <span className="badge badge-info">{preset} window</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        State-first geography rows from Google Ads
+                        {granularityNote}
                     </div>
                 </div>
             </div>
@@ -485,7 +486,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         {topSpend ? (
                             <>
                                 <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6 }}>{topSpend.location}</div>
-                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topSpend.geoLevel} • {topSpend.countryCode || topSpend.targetType}</div>
+                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topSpend.geoLevel} • {topSpend.countryCode || topSpend.targetType}{topSpend.matchType ? ` • ${topSpend.matchType}` : ''}</div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
                                     <div>
                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>Spend Share</div>
@@ -507,7 +508,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                         {topEfficiency ? (
                             <>
                                 <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6 }}>{topEfficiency.location}</div>
-                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topEfficiency.geoLevel} • {topEfficiency.countryCode || topEfficiency.targetType}</div>
+                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topEfficiency.geoLevel} • {topEfficiency.countryCode || topEfficiency.targetType}{topEfficiency.matchType ? ` • ${topEfficiency.matchType}` : ''}</div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
                                     <div>
                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>Cost / Conv.</div>
@@ -555,7 +556,7 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                                         <tr key={index}>
                                             <td>
                                                 <div style={{ fontWeight: 600 }}>{location.location}</div>
-                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{location.geoLevel} • {location.countryCode || location.targetType}</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{location.geoLevel} • {location.countryCode || location.targetType}{location.matchType ? ` • ${location.matchType}` : ''}</div>
                                             </td>
                                             <td>{fmtCurrency(location.spend)}</td>
                                             <td>{location.spendShare}%</td>

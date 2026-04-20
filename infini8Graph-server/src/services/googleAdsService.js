@@ -1380,7 +1380,9 @@ export async function getGeoPerformance(userId, preset = '30d') {
                 ? 'Most specific user geo'
                 : mapGeoTargetingType(row.geographic_view?.location_type).replace(/_/g, ' ');
             const geoMeta = geoDetails[geoId] || {};
-            const key = `${geoId}:${geoLevel}:${geoScope}`;
+            const key = geoMode === 'state-first'
+                ? `${geoId}:${geoLevel}:${geoScope}`
+                : `${geoId}:${geoLevel}`;
             if (!locationMap[key]) {
                 locationMap[key] = {
                     id: geoId || 'unknown',
@@ -1389,6 +1391,7 @@ export async function getGeoPerformance(userId, preset = '30d') {
                     countryCode: geoMeta.countryCode || '',
                     geoLevel,
                     matchType: geoScope,
+                    coverageModes: new Set(),
                     spend: 0,
                     impressions: 0,
                     clicks: 0,
@@ -1396,6 +1399,7 @@ export async function getGeoPerformance(userId, preset = '30d') {
                 };
             }
 
+            locationMap[key].coverageModes.add(geoScope);
             locationMap[key].spend += Number(row.metrics?.cost_micros || 0) / 1_000_000;
             locationMap[key].impressions += Number(row.metrics?.impressions || 0);
             locationMap[key].clicks += Number(row.metrics?.clicks || 0);
@@ -1406,8 +1410,11 @@ export async function getGeoPerformance(userId, preset = '30d') {
             const cpc = location.clicks > 0 ? location.spend / location.clicks : 0;
             const conversionRate = location.clicks > 0 ? (location.conversions / location.clicks) * 100 : 0;
             const costPerConversion = location.conversions > 0 ? location.spend / location.conversions : null;
+            const coverageModes = Array.from(location.coverageModes || []);
             return {
                 ...location,
+                coverageModes,
+                matchType: coverageModes.length > 1 ? coverageModes.join(' + ') : (coverageModes[0] || location.matchType),
                 spend: parseFloat(location.spend.toFixed(2)),
                 conversions: parseFloat(location.conversions.toFixed(1)),
                 cpc: parseFloat(cpc.toFixed(2)),
@@ -1447,6 +1454,13 @@ export async function getGeoPerformance(userId, preset = '30d') {
                 .slice(0, 3),
             geoMode,
             primaryGranularity: stateCount > 0 ? 'State' : regionCount > 0 ? 'Region' : countryCount > 0 ? 'Country' : 'Geo',
+            granularityNote: geoMode === 'state-first'
+                ? (stateCount > 0
+                    ? 'Google returned state-level geography for this window.'
+                    : regionCount > 0
+                        ? 'Google returned region-level geography, but no state rows surfaced for this window.'
+                        : 'Google returned only country-level geography for this window.')
+                : 'Google did not return granular geo segments for this account/query, so country totals are shown instead.',
         };
 
         return { connected: true, locations: enrichedLocations, summary, period: preset };
