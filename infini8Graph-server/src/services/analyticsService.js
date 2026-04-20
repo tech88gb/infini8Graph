@@ -415,17 +415,25 @@ class AnalyticsService {
                     comments: Number(post.commentsCount || 0),
                     likes: Number(post.likeCount || 0),
                     profileActivity: Number(post.profileActivity || 0),
+                    shares: Number(post.shares || 0),
                     attributionEndStr,
                     fullyObserved,
                     daysObserved,
                     estimatedFollowers: 0,
                     attributedDays: new Set(),
-                    overlapCounts: []
+                    overlapCounts: [],
+                    attributionShares: []
                 };
             })
             .sort((a, b) => b.publishDate.localeCompare(a.publishDate));
 
-        const maxProfileActivity = Math.max(...posts.map((post) => post.profileActivity), 0);
+        const intentSignals = posts.map((post) => (
+            Number(post.profileActivity || 0) +
+            (Number(post.saved || 0) * 12) +
+            (Number(post.comments || 0) * 4) +
+            (Number(post.shares || 0) * 8)
+        ));
+        const maxIntentSignal = Math.max(...intentSignals, 0);
         const maxReach = Math.max(...posts.map((post) => post.reach), 0);
         const maxEngagement = Math.max(...posts.map((post) => post.engagement), 0);
         const maxSaveRate = Math.max(
@@ -433,12 +441,13 @@ class AnalyticsService {
             0
         );
 
-        const postWeights = Object.fromEntries(posts.map((post) => {
-            const profileIntentNorm = maxProfileActivity > 0 ? post.profileActivity / maxProfileActivity : 0;
+        const postWeights = Object.fromEntries(posts.map((post, index) => {
+            const intentSignal = intentSignals[index] || 0;
+            const intentSignalNorm = maxIntentSignal > 0 ? intentSignal / maxIntentSignal : 0;
             const reachNorm = maxReach > 0 ? post.reach / maxReach : 0;
             const engagementNorm = maxEngagement > 0 ? post.engagement / maxEngagement : 0;
             const saveRateNorm = maxSaveRate > 0 ? ((post.reach > 0 ? post.saved / post.reach : 0) / maxSaveRate) : 0;
-            const baseWeight = (profileIntentNorm * 0.45) + (reachNorm * 0.25) + (engagementNorm * 0.2) + (saveRateNorm * 0.1);
+            const baseWeight = (intentSignalNorm * 0.4) + (reachNorm * 0.25) + (engagementNorm * 0.2) + (saveRateNorm * 0.15);
             return [post.id, Math.max(baseWeight, 0.05)];
         }));
 
@@ -457,26 +466,41 @@ class AnalyticsService {
             if (totalWeight <= 0) return;
 
             candidatePosts.forEach((post) => {
-                const allocatedGain = day.gain * ((postWeights[post.id] || 0) / totalWeight);
+                const allocationShare = (postWeights[post.id] || 0) / totalWeight;
+                const allocatedGain = day.gain * allocationShare;
                 post.estimatedFollowers += allocatedGain;
                 post.attributedDays.add(day.date);
                 post.overlapCounts.push(candidatePosts.length);
+                post.attributionShares.push(allocationShare);
             });
         });
 
         const estimatedPosts = posts
             .map((post) => {
                 const maxOverlap = post.overlapCounts.length > 0 ? Math.max(...post.overlapCounts) : 0;
-                const confidence = maxOverlap <= 1 && post.fullyObserved
-                    ? 'High'
-                    : maxOverlap <= 2 && post.daysObserved >= 2
-                        ? 'Medium'
-                        : 'Low';
-                const confidenceReason = maxOverlap <= 1
-                    ? 'No competing posts in the 3-day attribution window'
-                    : maxOverlap === 2
-                        ? 'One competing post overlapped this attribution window'
-                        : 'Multiple posts overlapped this attribution window';
+                const avgOverlap = post.overlapCounts.length > 0
+                    ? post.overlapCounts.reduce((sum, count) => sum + count, 0) / post.overlapCounts.length
+                    : 0;
+                const avgAttributionShare = post.attributionShares.length > 0
+                    ? post.attributionShares.reduce((sum, share) => sum + share, 0) / post.attributionShares.length
+                    : 0;
+
+                let confidence = 'Low';
+                let confidenceReason = 'This post shared follower-gain days with several nearby posts.';
+
+                if (post.fullyObserved && avgAttributionShare >= 0.55 && avgOverlap <= 3) {
+                    confidence = 'High';
+                    confidenceReason = avgOverlap <= 1.5
+                        ? 'This post dominated its attribution window with little competition.'
+                        : 'This post captured most of the follower-gain weight despite nearby posts.';
+                } else if (post.daysObserved >= 2 && avgAttributionShare >= 0.25 && avgOverlap <= 5) {
+                    confidence = 'Medium';
+                    confidenceReason = avgOverlap <= 3
+                        ? 'This post had meaningful overlap, but still held a solid share of attributed gains.'
+                        : 'This post competed in a crowded window but still won a usable share of follower gains.';
+                } else if (!post.fullyObserved) {
+                    confidenceReason = `Only ${post.daysObserved} of 3 attribution days are fully observed.`;
+                }
 
                 return {
                     id: post.id,
@@ -493,7 +517,13 @@ class AnalyticsService {
                     attributionWindow: `${post.publishDate} → ${post.attributionEndStr}`,
                     daysObserved: post.daysObserved,
                     competingPosts: maxOverlap > 0 ? maxOverlap - 1 : 0,
-                    profileActivity: post.profileActivity,
+                    intentSignal: (
+                        Number(post.profileActivity || 0) +
+                        (Number(post.saved || 0) * 12) +
+                        (Number(post.comments || 0) * 4) +
+                        (Number(post.shares || 0) * 8)
+                    ),
+                    avgAttributionShare: Number((avgAttributionShare * 100).toFixed(1)),
                     reach: post.reach,
                     engagement: post.engagement,
                     saved: post.saved,

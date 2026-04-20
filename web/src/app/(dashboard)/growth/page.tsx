@@ -505,7 +505,7 @@ export default function GrowthPage() {
                                     <th>Est. Lift</th>
                                     <th>Confidence</th>
                                     <th>Window</th>
-                                    <th>Profile Activity</th>
+                                    <th>Intent Signal</th>
                                     <th>Reach</th>
                                     <th>Engagement</th>
                                 </tr>
@@ -574,9 +574,10 @@ export default function GrowthPage() {
                                             <div style={{ fontSize: 12 }}>{post.attributionWindow}</div>
                                             <div className="text-muted" style={{ fontSize: 11 }}>
                                                 {post.competingPosts > 0 ? `${post.competingPosts} competing posts` : 'No overlap'}
+                                                {post.avgAttributionShare ? ` • ${post.avgAttributionShare}% avg share` : ''}
                                             </div>
                                         </td>
-                                        <td>{(post.profileActivity || 0).toLocaleString()}</td>
+                                        <td>{(post.intentSignal || 0).toLocaleString()}</td>
                                         <td>{(post.reach || 0).toLocaleString()}</td>
                                         <td>{(post.engagement || 0).toLocaleString()}</td>
                                     </tr>
