@@ -202,6 +202,146 @@ function getDateRange(preset = '30d') {
     return { startDate: fmt(from), endDate: fmt(today) };
 }
 
+function summarizeGoogleChannelMix(campaigns = []) {
+    const totals = {
+        search: 0,
+        brandSearch: 0,
+        genericSearch: 0,
+        performanceMax: 0,
+        shopping: 0,
+        local: 0,
+        awareness: 0,
+        leadGen: 0,
+    };
+    let totalWeight = 0;
+
+    campaigns.forEach((campaign) => {
+        const spend = Number(campaign?.spend || 0);
+        const weight = spend > 0 ? spend : 1;
+        totalWeight += weight;
+        const name = String(campaign?.name || '').toLowerCase();
+        const channelType = String(campaign?.channelType || '').toUpperCase();
+        const isBrand = /\bbrand|branded\b/.test(name);
+        const isGeneric = /\bgeneric|prospect|prospecting|competitor|non[\s-]?brand\b/.test(name);
+        const isLeadGen = /\blead|form|inquir|enquir|signup|sign[-\s]?up|contact|quote|demo\b/.test(name);
+        const isLocal = /\blocal|store|maps|near me|location\b/.test(name) || channelType === 'LOCAL';
+        const isAwareness = /\bawareness|video|display|reach|view\b/.test(name)
+            || ['VIDEO', 'DISPLAY', 'DEMAND_GEN'].includes(channelType);
+
+        if (channelType === 'SEARCH') {
+            totals.search += weight;
+            if (isBrand) totals.brandSearch += weight;
+            else totals.genericSearch += weight;
+        }
+        if (channelType === 'PERFORMANCE_MAX') totals.performanceMax += weight;
+        if (channelType === 'SHOPPING') totals.shopping += weight;
+        if (isLocal) totals.local += weight;
+        if (isAwareness) totals.awareness += weight;
+        if (isLeadGen) totals.leadGen += weight;
+    });
+
+    const denominator = totalWeight || 1;
+    const share = (value) => value / denominator;
+    const rankedMix = [
+        { label: 'Search', share: share(totals.search) },
+        { label: 'Performance Max', share: share(totals.performanceMax) },
+        { label: 'Shopping', share: share(totals.shopping) },
+        { label: 'Awareness', share: share(totals.awareness) },
+        { label: 'Local', share: share(totals.local) },
+    ].filter(entry => entry.share > 0.05)
+        .sort((a, b) => b.share - a.share);
+
+    return {
+        totals,
+        primaryMix: rankedMix.slice(0, 2).map(entry => `${entry.label} ${Math.round(entry.share * 100)}%`).join(' • ') || 'Mixed campaign distribution',
+        share,
+    };
+}
+
+function inferGoogleAccountFocus(campaigns = [], aggregate = {}) {
+    const mix = summarizeGoogleChannelMix(campaigns);
+    const totals = mix.totals;
+    const searchShare = mix.share(totals.search);
+    const brandSearchShare = mix.share(totals.brandSearch);
+    const genericSearchShare = mix.share(totals.genericSearch);
+    const pmaxShoppingShare = mix.share(totals.performanceMax + totals.shopping);
+    const localShare = mix.share(totals.local);
+    const awarenessShare = mix.share(totals.awareness);
+    const leadGenShare = mix.share(totals.leadGen);
+    const spend = Number(aggregate.spend || 0);
+    const conversions = Number(aggregate.conversions || 0);
+    const conversionValue = Number(aggregate.conversionValue || 0);
+    const valuePerConversion = conversions > 0 ? conversionValue / conversions : 0;
+    const roas = spend > 0 ? conversionValue / spend : 0;
+    const valueTrackingQuality = conversions >= 10
+        ? ((conversionValue <= 0 || roas < 0.2 || valuePerConversion < 20) ? 'weak' : 'strong')
+        : (conversionValue > 0 ? 'partial' : 'unavailable');
+
+    const response = {
+        label: 'Mixed',
+        type: 'mixed',
+        description: 'Performance is spread across multiple Google Ads campaign styles.',
+        primaryMix: mix.primaryMix,
+        valueTrackingQuality,
+    };
+
+    if (brandSearchShare >= 0.45) {
+        return {
+            ...response,
+            label: 'Brand Search',
+            type: 'brand_search',
+            description: 'This account leans heavily on branded demand capture, so CPC discipline and conversion efficiency matter most.',
+        };
+    }
+
+    if (localShare >= 0.35) {
+        return {
+            ...response,
+            label: 'Local / Store Visits',
+            type: 'local',
+            description: 'This account looks locally oriented. Coverage, click quality, and budget pacing will matter more than headline ROAS alone.',
+        };
+    }
+
+    if (pmaxShoppingShare >= 0.4 && valueTrackingQuality !== 'weak') {
+        return {
+            ...response,
+            label: 'Sales / Ecommerce',
+            type: 'sales',
+            description: 'Performance Max or Shopping has real weight here, so revenue efficiency and cost per conversion should lead the overview.',
+        };
+    }
+
+    if (leadGenShare >= 0.3 || (searchShare >= 0.55 && valueTrackingQuality === 'weak' && conversions > 0)) {
+        return {
+            ...response,
+            label: 'Lead Generation',
+            type: 'lead_gen',
+            description: 'This account behaves more like a lead-gen setup, so conversion rate, cost per lead, and click quality are more trustworthy than ROAS.',
+        };
+    }
+
+    if (awarenessShare >= 0.4) {
+        return {
+            ...response,
+            label: 'Awareness / Reach',
+            type: 'awareness',
+            description: 'Upper-funnel campaign types are prominent, so delivery and engagement signals deserve more weight than revenue metrics.',
+        };
+    }
+
+    if (genericSearchShare >= 0.35 || searchShare >= 0.55) {
+        return {
+            ...response,
+            label: 'Prospecting / Generic Search',
+            type: 'prospecting',
+            description: 'This account is driven by non-brand search demand, so CPC, CTR, and conversion rate are the core operating metrics.',
+        };
+    }
+
+    return response;
+}
+
 // ===================== OVERVIEW METRICS =====================
 
 export async function getAdsPerformance(userId, preset = '30d') {
@@ -218,6 +358,9 @@ export async function getAdsPerformance(userId, preset = '30d') {
 
         const rows = await customer.query(`
             SELECT
+                campaign.id,
+                campaign.name,
+                campaign.advertising_channel_type,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -230,6 +373,7 @@ export async function getAdsPerformance(userId, preset = '30d') {
         `);
 
         let impressions = 0, clicks = 0, costMicros = 0, conversions = 0, convValue = 0;
+        const campaignMap = {};
         (rows || []).forEach((r) => {
             const m = r.metrics;
             impressions += Number(m?.impressions || 0);
@@ -237,12 +381,45 @@ export async function getAdsPerformance(userId, preset = '30d') {
             costMicros  += Number(m?.cost_micros || 0);
             conversions += Number(m?.conversions || 0);
             convValue   += Number(m?.conversions_value || 0);
+
+            const campaignId = r.campaign?.id;
+            if (!campaignId) return;
+
+            if (!campaignMap[campaignId]) {
+                campaignMap[campaignId] = {
+                    id: campaignId,
+                    name: r.campaign?.name || 'Unknown',
+                    channelType: r.campaign?.advertising_channel_type || 'UNKNOWN',
+                    costMicros: 0,
+                    conversions: 0,
+                    conversionValue: 0,
+                };
+            }
+
+            campaignMap[campaignId].costMicros += Number(m?.cost_micros || 0);
+            campaignMap[campaignId].conversions += Number(m?.conversions || 0);
+            campaignMap[campaignId].conversionValue += Number(m?.conversions_value || 0);
         });
 
         const spend = costMicros / 1_000_000;
         const ctr   = impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : '0.00';
         const roas  = spend > 0 ? (convValue / spend).toFixed(2) : '0.00';
         const costPerConversion = conversions > 0 ? (spend / conversions).toFixed(2) : '0.00';
+        const avgCpc = clicks > 0 ? (spend / clicks).toFixed(2) : '0.00';
+        const conversionRate = clicks > 0 ? ((conversions / clicks) * 100).toFixed(2) : '0.00';
+        const valuePerConversion = conversions > 0 ? (convValue / conversions).toFixed(2) : '0.00';
+        const valueTrackingQuality = conversions >= 10
+            ? ((convValue <= 0 || (spend > 0 && convValue / spend < 0.2) || convValue / Math.max(conversions, 1) < 20) ? 'weak' : 'strong')
+            : (convValue > 0 ? 'partial' : 'unavailable');
+        const campaignSummaries = Object.values(campaignMap).map((campaign) => ({
+            ...campaign,
+            spend: campaign.costMicros / 1_000_000,
+        }));
+        const accountFocus = inferGoogleAccountFocus(campaignSummaries, {
+            spend,
+            conversions,
+            conversionValue: convValue,
+        });
 
         const result = {
             connected: true,
@@ -257,6 +434,21 @@ export async function getAdsPerformance(userId, preset = '30d') {
                 conversionValue: parseFloat(convValue.toFixed(2)),
                 roas: parseFloat(roas),
                 costPerConversion: parseFloat(costPerConversion),
+                avgCpc: parseFloat(avgCpc),
+                conversionRate: parseFloat(conversionRate),
+                valuePerConversion: parseFloat(valuePerConversion),
+            },
+            accountFocus,
+            valueTracking: {
+                quality: valueTrackingQuality,
+                trustedRevenueMetrics: valueTrackingQuality === 'strong',
+                reason: valueTrackingQuality === 'strong'
+                    ? 'Conversion value looks strong enough to keep ROAS and value metrics in the overview.'
+                    : valueTrackingQuality === 'partial'
+                        ? 'Value tracking exists, but volume is still too thin to make ROAS the headline KPI.'
+                        : valueTrackingQuality === 'weak'
+                            ? 'Conversions are present, but revenue/value tracking looks too weak to headline ROAS confidently.'
+                            : 'This account does not yet have enough value tracking to make ROAS the primary operating metric.',
             },
             period: preset,
         };
