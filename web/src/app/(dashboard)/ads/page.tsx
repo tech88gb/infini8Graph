@@ -2246,30 +2246,16 @@ export default function AdsPage() {
                             {/* ===== FEATURE: FULL FUNNEL ANALYSIS - Bounce Rate per Campaign (analytics.readonly) ===== */}
                             <SectionCard
                                 title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    Bounce Rate per Campaign
-                                    <InfoTooltip text="This section compares upper-funnel page events to downstream content events. When View Content exceeds Landing Page Views, Meta event counting is not directly comparable, so bounce is shown as unavailable instead of a misleading negative number." />
+                                    {bounceComparable ? 'Landing Page Bounce Read' : 'Landing Page Handoff Quality'}
+                                    <InfoTooltip text={bounceComparable
+                                        ? 'This section compares Landing Page Views against View Content to estimate how much paid landing-page traffic continues deeper into the site.'
+                                        : 'Landing Page View and View Content are both real Meta events, but for this account they are not behaving like a strict step-to-step pair. This card is shown as a landing-page handoff diagnostic instead of a true bounce calculation.'} />
                                 </span>}
-                                subtitle="Landing-page quality view using real Meta event counts plus campaign-level directional signals"
+                                subtitle={bounceComparable
+                                    ? 'Landing-page quality read using real Meta event counts from the selected period'
+                                    : 'Directional landing-page health read using real Meta event counts when LPV and View Content are not directly comparable'}
                             >
                                 {(() => {
-                                    const campaignRows = (campaigns || [])
-                                        .filter((c: any) => parseInt(c.insights?.data?.[0]?.clicks || 0) > 0)
-                                        .slice(0, 12)
-                                        .map((c: any) => {
-                                            const insight = c.insights?.data?.[0] || {};
-                                            const clicks  = parseInt(insight.clicks || 0);
-                                            const spend   = parseFloat(insight.spend || 0);
-                                            const ctr     = parseFloat(insight.ctr || 0);
-                                            const freq    = parseFloat(insight.frequency || 1);
-                                            const normalizedCtr = Math.min(ctr / 3, 1);
-                                            const br = parseFloat(Math.max(15, Math.min(95, 90 - normalizedCtr * 60 + freq * 2)).toFixed(1));
-                                            return { name: c.name, status: c.status, clicks, spend, ctr, br };
-                                        })
-                                        .sort((a: any, b: any) => b.br - a.br);
-
-                                    const getBC = (br: number) => br > 70 ? '#ef4444' : br > 50 ? '#f59e0b' : '#10b981';
-                                    const getBL = (br: number) => br > 70 ? 'High Bounce' : br > 50 ? 'Moderate' : 'Healthy';
-
                                     return (
                                         <div>
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
@@ -2284,16 +2270,20 @@ export default function AdsPage() {
                                                         label: 'Continued to Content',
                                                         value: formatNumber(vc),
                                                         col: '#10b981',
-                                                        helper: contentContinuationRate !== null ? `${contentContinuationRate.toFixed(1)}% of LPV volume` : 'Meta content-view events recorded.'
+                                                        helper: contentContinuationRate !== null && bounceComparable
+                                                            ? `${contentContinuationRate.toFixed(1)}% of LPV volume continued to content`
+                                                            : 'Real Meta View Content events recorded in the same reporting window.'
                                                     },
                                                     {
-                                                        label: 'Overall Bounce Rate',
-                                                        value: overallBounce !== null ? `${overallBounce.toFixed(1)}%` : 'Not comparable',
-                                                        col: overallBounce !== null && overallBounce > 70 ? '#ef4444' : '#f59e0b',
+                                                        label: bounceComparable ? 'Overall Bounce Rate' : 'Comparability',
+                                                        value: overallBounce !== null ? `${overallBounce.toFixed(1)}%` : 'Directional only',
+                                                        col: overallBounce !== null
+                                                            ? overallBounce > 70 ? '#ef4444' : '#f59e0b'
+                                                            : '#0ea5e9',
                                                         warn: overallBounce !== null && overallBounce > 70,
                                                         helper: overallBounce !== null
                                                             ? 'Calculated as (Landing Page Views - Continued to Content) / Landing Page Views.'
-                                                            : 'View Content exceeds Landing Page Views, so Meta event counts are not directly comparable for a bounce calculation here.'
+                                                            : 'View Content exceeds Landing Page Views here, which usually means Meta event counting is capturing additional content events beyond the clean landing-page sequence.'
                                                     },
                                                 ].map((m: any, i: number) => (
                                                     <div key={i} style={{ padding: 16, background: m.warn ? 'rgba(239,68,68,0.06)' : 'var(--background)', borderRadius: 8, textAlign: 'center', border: m.warn ? '1px solid rgba(239,68,68,0.25)' : 'none' }}>
@@ -2307,57 +2297,14 @@ export default function AdsPage() {
                                                 ))}
                                             </div>
 
-                                            {campaignRows.length > 0 ? (
-                                                <div style={{ overflowX: 'auto' }}>
-                                                    <table className="table">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>Campaign</th>
-                                                                <th>Status</th>
-                                                                <th>Spend</th>
-                                                                <th>Clicks</th>
-                                                                <th>CTR</th>
-                                                                <th><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Bounce Rate<InfoTooltip text="Derived from CTR-to-frequency ratio as a proxy. Install Meta Pixel ViewContent event for exact per-campaign bounce data." /></span></th>
-                                                                <th>Landing Page Health</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {campaignRows.map((c: any, idx: number) => {
-                                                                const col = getBC(c.br);
-                                                                const lbl = getBL(c.br);
-                                                                return (
-                                                                    <tr key={idx}>
-                                                                        <td style={{ fontWeight: 500, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</td>
-                                                                        <td><span className={`badge ${c.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}`}>{c.status}</span></td>
-                                                                        <td>{formatCurrency(c.spend)}</td>
-                                                                        <td>{formatNumber(c.clicks)}</td>
-                                                                        <td style={{ color: c.ctr > 2 ? '#10b981' : 'inherit', fontWeight: c.ctr > 2 ? 600 : 400 }}>{formatPercent(c.ctr)}</td>
-                                                                        <td>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                                                <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden', minWidth: 60 }}>
-                                                                                    <div style={{ width: `${Math.min(c.br, 100)}%`, height: '100%', background: col, borderRadius: 3 }} />
-                                                                                </div>
-                                                                                <span style={{ fontWeight: 700, fontSize: 13, color: col, minWidth: 42 }}>{c.br}%</span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td>
-                                                                            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: `${col}20`, color: col }}>{lbl}</span>
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                    <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(239,68,68,0.05)', borderRadius: 6, fontSize: 12, color: 'var(--muted)', borderLeft: '3px solid #ef4444' }}>
-                                                        <strong style={{ color: 'var(--foreground)' }}>{`\uD83D\uDCA1 Fix High-Bounce Campaigns:`}</strong>
-                                                        {` Match landing page messaging to ad copy, improve load speed (<2s), and add trust signals. A 10-point bounce reduction typically yields a 15\u201325% conversion lift.`}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>
-                                                    <p style={{ fontSize: 13 }}>Open the <strong>Campaigns</strong> tab to load campaign data, then return here to see per-campaign bounce rates.</p>
-                                                </div>
-                                            )}
+                                            <div style={{ padding: '12px 14px', background: bounceComparable ? 'rgba(16,185,129,0.06)' : 'rgba(14,165,233,0.08)', borderRadius: 8, fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+                                                <strong style={{ color: 'var(--foreground)' }}>
+                                                    {bounceComparable ? 'How to interpret this:' : 'Why this is directional only:'}
+                                                </strong>{' '}
+                                                {bounceComparable
+                                                    ? 'Landing Page View is the cleaner top-of-funnel denominator here, so the bounce read is usable. A high bounce rate usually points to message mismatch, slow page load, weak above-the-fold clarity, or trust gaps right after the click.'
+                                                    : 'Meta is counting View Content more broadly than Landing Page View in this account, so a classic bounce formula would be misleading. Treat this as a landing-page handoff check instead: focus on LPV volume, downstream purchase strength, and whether landing-page messaging matches the ad promise.'}
+                                            </div>
                                         </div>
                                     );
                                 })()}
