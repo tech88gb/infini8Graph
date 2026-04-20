@@ -24,7 +24,7 @@ import {
     Crosshair, UserCheck, ShieldAlert, X, Sparkles, HelpCircle
 } from 'lucide-react';
 import {
-    TrueRoasTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab,
+    ConversionIntegrityTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab,
     LocalSearchDominanceTab, BiddingIntelligenceTab
 } from '@/components/GoogleAdsIntelligentTabs';
 import {
@@ -1515,7 +1515,7 @@ export default function GoogleAdsPage() {
 
     const tabs = [
         { key: 'overview', label: 'Overview', icon: BarChart2 },
-        { key: 'true-roas', label: 'True ROAS', icon: Activity },
+        { key: 'true-roas', label: 'Conversion Integrity', icon: Activity },
         { key: 'local', label: 'Local Impact', icon: MapPin },
         { key: 'local-search', label: 'Local Search Dominance', icon: Globe },
         { key: 'bidding-intel', label: 'Bidding Intelligence', icon: ShieldAlert },
@@ -1664,7 +1664,7 @@ export default function GoogleAdsPage() {
             {/* Tab Content */}
             <div style={{ padding: '20px 0' }}>
                 {activeTab === 'overview' && <OverviewTab preset={preset} />}
-                {activeTab === 'true-roas' && <TrueRoasTab />}
+                {activeTab === 'true-roas' && <ConversionIntegrityTab preset={preset} />}
                 {activeTab === 'local' && <LocalImpactTab />}
                 {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} />}
                 {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} />}

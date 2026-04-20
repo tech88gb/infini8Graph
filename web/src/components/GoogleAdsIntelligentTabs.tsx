@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { googleAdsApi } from '@/lib/api';
 import {
@@ -6,16 +7,103 @@ import {
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
     Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin,
-    Crosshair, UserCheck, ShieldAlert
+    Crosshair, UserCheck, ShieldAlert, HelpCircle
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
     BarChart as ReBarChart, Bar, PieChart, Pie, Cell, CartesianGrid, Legend
 } from 'recharts';
 
-// ==================== TRUE ROAS (ADS + ANALYTICS) ====================
+function fmtNumber(value: number, digits = 0) {
+    return value?.toLocaleString('en-US', { maximumFractionDigits: digits }) ?? '0';
+}
 
-export function TrueRoasTab({ preset = '30d' }: { preset?: string }) {
+function fmtCurrency(value: number) {
+    return `₹${fmtNumber(value, 2)}`;
+}
+
+function InfoTooltip({ text }: { text: string }) {
+    const [show, setShow] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const [rect, setRect] = useState<DOMRect | null>(null);
+    const iconRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const handleMouseEnter = () => {
+        if (iconRef.current) {
+            setRect(iconRef.current.getBoundingClientRect());
+            setShow(true);
+        }
+    };
+
+    return (
+        <div ref={iconRef} style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }}>
+            <HelpCircle
+                size={14}
+                style={{ color: 'var(--muted)', cursor: 'help', opacity: 0.7 }}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={() => setShow(false)}
+            />
+            {mounted && show && rect && createPortal(
+                <div style={{
+                    position: 'absolute',
+                    top: rect.top + window.scrollY - 8,
+                    left: rect.left + rect.width / 2 + window.scrollX,
+                    transform: 'translate(-50%, -100%)',
+                    background: '#1e293b',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    width: Math.min(260, window.innerWidth - 32),
+                    zIndex: 999999,
+                    pointerEvents: 'none',
+                    lineHeight: 1.5,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    textAlign: 'center'
+                }}>
+                    {text}
+                    <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        borderWidth: 6,
+                        borderStyle: 'solid',
+                        borderColor: '#1e293b transparent transparent transparent'
+                    }} />
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
+function CompactMetric({ label, value, tone = 'default', tooltip }: { label: string; value: string; tone?: 'default' | 'success' | 'warning' | 'danger'; tooltip?: string }) {
+    const colors = {
+        default: '#e5e7eb',
+        success: '#34d399',
+        warning: '#fbbf24',
+        danger: '#f87171'
+    };
+
+    return (
+        <div className="card" style={{ padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
+                {label}
+                {tooltip && <InfoTooltip text={tooltip} />}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: colors[tone], lineHeight: 1.1 }}>{value}</div>
+        </div>
+    );
+}
+
+// ==================== CONVERSION INTEGRITY ====================
+
+export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) {
     const { data: searchTerms, isLoading: stLoading } = useQuery({
         queryKey: ['google-search-terms', preset],
         queryFn: async () => {
@@ -39,40 +127,102 @@ export function TrueRoasTab({ preset = '30d' }: { preset?: string }) {
     if (stLoading || assetLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const wasted = searchTerms?.wastedSpend || [];
-    const highPotentials = searchTerms?.terms?.filter((t: any) => t.conversions > 0).slice(0, 3) || [];
+    const allTerms = searchTerms?.terms || [];
+    const convertingTerms = [...allTerms]
+        .filter((term: any) => term.conversions > 0)
+        .map((term: any) => ({
+            ...term,
+            costPerConversion: term.conversions > 0 ? term.spend / term.conversions : 0,
+            conversionRate: term.clicks > 0 ? (term.conversions / term.clicks) * 100 : 0
+        }))
+        .sort((a: any, b: any) => {
+            if (b.conversions !== a.conversions) return b.conversions - a.conversions;
+            return a.costPerConversion - b.costPerConversion;
+        })
+        .slice(0, 5);
+    const allAssets = (assetData?.assets || []).map((asset: any) => ({
+        ...asset,
+        ctr: asset.impressions > 0 ? (asset.clicks / asset.impressions) * 100 : 0
+    }));
+    const strongAssets = allAssets
+        .filter((asset: any) => ['BEST', 'GOOD'].includes(String(asset.performance || '').toUpperCase()))
+        .sort((a: any, b: any) => {
+            if (b.clicks !== a.clicks) return b.clicks - a.clicks;
+            return b.ctr - a.ctr;
+        })
+        .slice(0, 4);
+    const weakAssets = allAssets
+        .filter((asset: any) => !['BEST', 'GOOD'].includes(String(asset.performance || '').toUpperCase()) && asset.impressions >= 100)
+        .sort((a: any, b: any) => b.impressions - a.impressions)
+        .slice(0, 4);
+    const totalWasteSpend = wasted.reduce((sum: number, term: any) => sum + Number(term.spend || 0), 0);
+    const totalWasteClicks = wasted.reduce((sum: number, term: any) => sum + Number(term.clicks || 0), 0);
+    const strongAssetCount = allAssets.filter((asset: any) => ['BEST', 'GOOD'].includes(String(asset.performance || '').toUpperCase())).length;
+    const averageAssetCtr = allAssets.length > 0
+        ? allAssets.reduce((sum: number, asset: any) => sum + asset.ctr, 0) / allAssets.length
+        : 0;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{
-                padding: 20, borderRadius: 12, background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(16,185,129,0.05) 100%)',
-                border: '1px solid rgba(99,102,241,0.2)', display: 'flex', gap: 16, alignItems: 'center'
-            }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #4285F4, #34A853)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Activity size={24} color="#fff" />
-                </div>
-                <div>
-                    <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>Conversion Integrity & Waste Detector</h4>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
-                        Correlating high-cost search terms and creative assets with conversion data to identify budget leaks.
-                    </p>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Conversion Integrity
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>Waste + Asset Quality</div>
+                        <span className="badge badge-info">{preset} terms</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Assets use Google&apos;s latest 30-day asset labels
+                    </div>
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                {/* Wasted Terms */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
+                <CompactMetric
+                    label="Spend At Risk"
+                    value={fmtCurrency(totalWasteSpend)}
+                    tone={totalWasteSpend > 0 ? 'danger' : 'default'}
+                    tooltip="Combined spend from tracked search terms in the selected window that have zero conversions and crossed the waste threshold."
+                />
+                <CompactMetric
+                    label="Zero-Conv Terms"
+                    value={fmtNumber(wasted.length)}
+                    tone={wasted.length >= 5 ? 'warning' : 'default'}
+                    tooltip="Count of search terms flagged as waste candidates because they spent money but drove no conversions."
+                />
+                <CompactMetric
+                    label="Waste Clicks"
+                    value={fmtNumber(totalWasteClicks)}
+                    tone={totalWasteClicks > 0 ? 'warning' : 'default'}
+                    tooltip="Clicks consumed by the current set of zero-conversion high-spend terms."
+                />
+                <CompactMetric
+                    label="Strong Assets"
+                    value={fmtNumber(strongAssetCount)}
+                    tone={strongAssetCount > 0 ? 'success' : 'default'}
+                    tooltip="Asset count labeled BEST or GOOD by Google Ads in the latest 30-day asset view."
+                />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20 }}>
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <AlertTriangle size={16} color="#ef4444" />
-                            Live "Zero-Conv" High Spend Terms
+                            Waste Detector
+                            <InfoTooltip text={`Search terms from the selected ${preset} window with spend >= ₹5 and zero conversions. This is a waste candidate list, not an automatic negative-keyword command.`} />
                         </h3>
+                        <span className="badge badge-danger">{fmtCurrency(totalWasteSpend)} at risk</span>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                         <table className="table" style={{ fontSize: 13 }}>
                             <thead>
                                 <tr>
                                     <th>Search Term</th>
-                                    <th>Real Spend</th>
+                                    <th>Spend</th>
+                                    <th>Clicks</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
@@ -80,12 +230,13 @@ export function TrueRoasTab({ preset = '30d' }: { preset?: string }) {
                                 {wasted.length > 0 ? wasted.slice(0, 5).map((t: any, i: number) => (
                                     <tr key={i}>
                                         <td style={{ fontWeight: 500 }}>"{t.term}"</td>
-                                        <td style={{ color: '#ef4444', fontWeight: 600 }}>₹{t.spend}</td>
+                                        <td style={{ color: '#ef4444', fontWeight: 600 }}>{fmtCurrency(t.spend)}</td>
+                                        <td>{fmtNumber(t.clicks)}</td>
                                         <td><span className="badge badge-danger">Wasted</span></td>
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={3} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>No high-waste terms detected currently.</td>
+                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>No high-waste terms detected currently.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -93,31 +244,104 @@ export function TrueRoasTab({ preset = '30d' }: { preset?: string }) {
                     </div>
                     <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
                         <Info size={12} style={{ display: 'inline', marginRight: 4 }} />
-                        These real terms have zero conversions. Consider adding them to your Negative Keyword list.
+                        These are the clearest negative-keyword review candidates in the selected window.
                     </div>
                 </div>
 
-                {/* Micro-Conversion Potential */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <CheckCircle size={16} color="#10b981" />
+                            Efficient Search Terms
+                            <InfoTooltip text="Top converting search terms ranked by conversion count first, then by lower cost per conversion." />
+                        </h3>
+                        <span className="badge badge-success">{fmtNumber(convertingTerms.length)} surfaced</span>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table" style={{ fontSize: 13 }}>
+                            <thead>
+                                <tr>
+                                    <th>Search Term</th>
+                                    <th>Conv.</th>
+                                    <th>Spend</th>
+                                    <th>Cost / Conv.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {convertingTerms.length > 0 ? convertingTerms.map((term: any, index: number) => (
+                                    <tr key={index}>
+                                        <td style={{ fontWeight: 500 }}>{term.term}</td>
+                                        <td style={{ color: '#10b981', fontWeight: 700 }}>{fmtNumber(term.conversions)}</td>
+                                        <td>{fmtCurrency(term.spend)}</td>
+                                        <td>{fmtCurrency(term.costPerConversion)}</td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>No converting search terms surfaced in this window yet.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Target size={16} color="#6366f1" />
-                            High-Performance Real Assets
+                            Asset Quality
+                            <InfoTooltip text="Google asset labels plus click-through behavior from the asset view. This is an asset-quality read, not a true ROAS measure." />
                         </h3>
+                        <span className="badge badge-info">{averageAssetCtr.toFixed(2)}% avg CTR</span>
                     </div>
                     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {assetData?.assets?.slice(0, 3).map((a: any, i: number) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: i === 2 ? 'none' : '1px solid var(--border)' }}>
+                        {strongAssets.length > 0 ? strongAssets.map((asset: any, index: number) => (
+                            <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: index === strongAssets.length - 1 ? 'none' : '1px solid var(--border)' }}>
                                 <div style={{ maxWidth: '70%' }}>
-                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.text}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>Type: {a.type} • {a.campaign}</div>
+                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.type} • {asset.campaign}</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{a.clicks} Clicks</div>
-                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{a.performance} Label</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{fmtNumber(asset.clicks)} clicks</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{asset.performance} • {asset.ctr.toFixed(2)}% CTR</div>
                                 </div>
                             </div>
-                        ))}
+                        )) : (
+                            <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 13 }}>
+                                No strong assets surfaced from the current asset view.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertCircle size={16} color="#f59e0b" />
+                            Asset Review Queue
+                            <InfoTooltip text="Assets without a strong Google label and with enough impressions to review. Use this as a refresh queue, not as proof of wasted spend." />
+                        </h3>
+                        <span className="badge badge-warning">{fmtNumber(weakAssets.length)} to review</span>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {weakAssets.length > 0 ? weakAssets.map((asset: any, index: number) => (
+                            <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: index === weakAssets.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                <div style={{ maxWidth: '68%' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.performance} • {fmtNumber(asset.impressions)} impressions</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700 }}>{asset.ctr.toFixed(2)}% CTR</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtNumber(asset.clicks)} clicks</div>
+                                </div>
+                            </div>
+                        )) : (
+                            <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 13 }}>
+                                No obvious asset-review candidates from the current Google asset labels.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
