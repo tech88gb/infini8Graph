@@ -1160,6 +1160,17 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
         retry: false
     });
 
+    const { data: keywordData, isLoading: kLoading } = useQuery({
+        queryKey: ['google-keywords-intel', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getKeywords(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
+    });
+
     const { data: auctionData, isLoading: aLoading } = useQuery({
         queryKey: ['google-auction-intel', preset],
         queryFn: async () => {
@@ -1171,71 +1182,244 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
         retry: false
     });
 
-    if (bLoading || aLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+    if (bLoading || aLoading || kLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
-    const keywords     = (biddingData?.keywords || []).slice(0, 5);
-    const competitors  = auctionData?.competitors || [];
+    const heatmap = biddingData?.heatmap || [];
+    const competitors = auctionData?.competitors || [];
+    const keywords = (keywordData?.keywords || [])
+        .filter((kw: any) => Number(kw.clicks || 0) > 0 || Number(kw.spend || 0) > 0)
+        .sort((a: any, b: any) => {
+            if ((b.spend || 0) !== (a.spend || 0)) return (b.spend || 0) - (a.spend || 0);
+            return (b.clicks || 0) - (a.clicks || 0);
+        })
+        .slice(0, 5);
 
-    // Calculate Threat Score per keyword:
-    // Score = (competitor overlap rate × 0.4) + (position lost share × 0.4) + (impression share deficit × 0.2)
-    const keywordsWithThreat = keywords.map((kw: any, i: number) => {
-        const topComp           = competitors[i % competitors.length] || {};
-        const overlapRate       = parseFloat(topComp.overlapRate || 0);
-        const posAbove          = parseFloat(topComp.positionAboveRate || 20 + Math.random() * 30);
-        const impressionDeficit = Math.max(0, 100 - parseFloat(topComp.impressionShare || 60));
-        const threatScore       = Math.round(overlapRate * 0.4 + posAbove * 0.4 + impressionDeficit * 0.2);
-        const competitor        = topComp.domain || `competitor${i + 1}.com`;
-        return { ...kw, threatScore: Math.min(threatScore, 100), competitor, overlapRate, posAbove };
+    const dayLabels: Record<string, string> = {
+        MONDAY: 'Mon',
+        TUESDAY: 'Tue',
+        WEDNESDAY: 'Wed',
+        THURSDAY: 'Thu',
+        FRIDAY: 'Fri',
+        SATURDAY: 'Sat',
+        SUNDAY: 'Sun',
+        UNKNOWN: 'Unknown'
+    };
+    const formatWindow = (slot: any) => `${dayLabels[String(slot?.day || 'UNKNOWN')] || slot?.day || 'Unknown'} ${String(slot?.hour ?? 0).padStart(2, '0')}:00`;
+
+    const windows = heatmap.map((slot: any) => {
+        const spend = Number(slot.spend || 0);
+        const clicks = Number(slot.clicks || 0);
+        const conversions = Number(slot.conversions || 0);
+        const roas = Number(slot.roas || 0);
+        const cvr = clicks > 0 ? (conversions / clicks) * 100 : 0;
+        const costPerConversion = conversions > 0 ? spend / conversions : null;
+        return {
+            ...slot,
+            spend,
+            clicks,
+            conversions,
+            roas,
+            cvr: parseFloat(cvr.toFixed(2)),
+            costPerConversion: costPerConversion !== null ? parseFloat(costPerConversion.toFixed(2)) : null,
+            label: formatWindow(slot)
+        };
     });
 
-    const maxThreat        = keywordsWithThreat.reduce((m: any, k: any) => k.threatScore > (m?.threatScore || 0) ? k : m, null);
-    const avgThreatScore   = keywordsWithThreat.length > 0
+    const productiveWindows = windows
+        .filter((slot: any) => slot.conversions > 0 || slot.roas > 0)
+        .sort((a: any, b: any) => {
+            if (b.roas !== a.roas) return b.roas - a.roas;
+            if (b.conversions !== a.conversions) return b.conversions - a.conversions;
+            return a.spend - b.spend;
+        });
+    const bestWindows = productiveWindows.slice(0, 5);
+
+    const costlyWeakWindows = windows
+        .filter((slot: any) => slot.spend > 0)
+        .sort((a: any, b: any) => {
+            const aWaste = (a.costPerConversion === null ? a.spend : a.costPerConversion) + (a.roas === 0 ? 25 : 0);
+            const bWaste = (b.costPerConversion === null ? b.spend : b.costPerConversion) + (b.roas === 0 ? 25 : 0);
+            return bWaste - aWaste;
+        })
+        .slice(0, 5);
+
+    const bestWindow = bestWindows[0] || null;
+    const riskiestWindow = costlyWeakWindows[0] || null;
+
+    const topComp = competitors[0] || null;
+    const competitorPressure = topComp
+        ? Math.round(
+            Number(topComp.overlapRate || 0) * 0.4
+            + Number(topComp.positionAboveRate || 0) * 0.35
+            + Math.max(0, 100 - Number(topComp.impressionShare || 0)) * 0.25
+        )
+        : null;
+
+    const topCompetitors = competitors.slice(0, 5);
+    const primaryCompetitor = topCompetitors[0] || null;
+
+    const keywordsWithThreat = keywords.map((kw: any, i: number) => {
+        const comp = topCompetitors[i % Math.max(topCompetitors.length, 1)] || {};
+        const overlapRate = Number(comp.overlapRate || 0);
+        const posAbove = Number(comp.positionAboveRate || 0);
+        const impressionDeficit = Math.max(0, 100 - Number(comp.impressionShare || 0));
+        const qualityScore = kw.qualityScore ?? null;
+        const qualityWeakness = qualityScore === null ? 40 : Math.max(0, (10 - qualityScore) * 10);
+        const threatScore = Math.min(100, Math.round(
+            overlapRate * 0.35
+            + posAbove * 0.30
+            + impressionDeficit * 0.20
+            + qualityWeakness * 0.15
+        ));
+        return {
+            ...kw,
+            text: kw.keyword,
+            cpcBid: Number(kw.cpc || 0),
+            competitor: comp.domain || 'Auction data unavailable',
+            overlapRate,
+            posAbove,
+            impressionShare: Number(comp.impressionShare || 0),
+            threatScore
+        };
+    });
+
+    const maxThreat = keywordsWithThreat.reduce((m: any, k: any) => k.threatScore > (m?.threatScore || 0) ? k : m, null);
+    const avgThreatScore = keywordsWithThreat.length > 0
         ? Math.round(keywordsWithThreat.reduce((s: number, k: any) => s + k.threatScore, 0) / keywordsWithThreat.length)
         : 0;
+    const combinedSignal = Math.round(
+        ((bestWindow?.roas || 0) > 0 ? Math.min((bestWindow?.roas || 0) * 20, 100) : 25) * 0.4
+        + (competitorPressure ?? 30) * 0.35
+        + (keywordsWithThreat.length > 0 ? avgThreatScore : 30) * 0.25
+    );
 
     const getThreatColor = (s: number) => s >= 75 ? '#ef4444' : s >= 45 ? '#f59e0b' : '#10b981';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Feature Banner */}
             <div style={{
                 padding: 20, borderRadius: 12,
-                background: avgThreatScore >= 75 ? 'rgba(239,68,68,0.07)' : avgThreatScore >= 45 ? 'rgba(245,158,11,0.07)' : 'rgba(16,185,129,0.07)',
-                border: `1px solid ${getThreatColor(avgThreatScore)}33`,
+                background: combinedSignal >= 75 ? 'rgba(239,68,68,0.07)' : combinedSignal >= 45 ? 'rgba(245,158,11,0.07)' : 'rgba(16,185,129,0.07)',
+                border: `1px solid ${getThreatColor(combinedSignal)}33`,
                 display: 'flex', gap: 16, alignItems: 'flex-start'
             }}>
-                <div style={{ width: 56, height: 56, borderRadius: 14, background: `${getThreatColor(avgThreatScore)}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <ShieldAlert size={28} style={{ color: getThreatColor(avgThreatScore) }} />
+                <div style={{ width: 56, height: 56, borderRadius: 14, background: `${getThreatColor(combinedSignal)}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <ShieldAlert size={28} style={{ color: getThreatColor(combinedSignal) }} />
                 </div>
                 <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                        <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Keyword Threat Intelligence</h4>
+                        <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Bidding Intelligence</h4>
                     </div>
                     <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
-                        {maxThreat ? (
-                            <>Competitor <strong>{maxThreat.competitor}</strong> is outranking you on <strong>"{maxThreat.text}"</strong> with a Threat Score of <strong style={{ color: getThreatColor(maxThreat.threatScore) }}>{maxThreat.threatScore}/100</strong>. Raise your bid or improve Quality Score to reclaim position.</>
+                        {bestWindow ? (
+                            <>
+                                Best current bidding window is <strong>{bestWindow.label}</strong> with <strong>{bestWindow.roas.toFixed(2)}x ROAS</strong>.
+                                {maxThreat ? <> Competitive pressure is led by <strong>{maxThreat.competitor}</strong> against <strong>"{maxThreat.text}"</strong>.</> : ' Auction pressure data is limited, so this view is leaning on timing efficiency first.'}
+                            </>
                         ) : (
-                            'Monitors when competitors outrank you on your top 5 keywords and calculates a composite Threat Score.'
+                            'Combines real day-part bidding performance with auction pressure on your most valuable keywords.'
                         )}
                     </p>
                     <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                         <div>
-                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>AVG THREAT SCORE</div>
-                            <div style={{ fontSize: 22, fontWeight: 800, color: getThreatColor(avgThreatScore) }}>{avgThreatScore}/100</div>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>COMBINED SIGNAL</div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: getThreatColor(combinedSignal) }}>{combinedSignal}/100</div>
                         </div>
                         <div style={{ flex: 1, height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${avgThreatScore}%`, height: '100%', background: `linear-gradient(90deg, ${getThreatColor(avgThreatScore)}, ${getThreatColor(avgThreatScore)}99)`, borderRadius: 4 }} />
+                            <div style={{ width: `${combinedSignal}%`, height: '100%', background: `linear-gradient(90deg, ${getThreatColor(combinedSignal)}, ${getThreatColor(combinedSignal)}99)`, borderRadius: 4 }} />
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Top 5 Keywords Threat Table */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
+                <CompactMetric
+                    label="Best Window"
+                    value={bestWindow ? bestWindow.label : 'Not surfaced'}
+                    tone={bestWindow ? 'success' : 'default'}
+                    tooltip="Best day-part window ranked by ROAS first, then conversions, from the selected date range."
+                />
+                <CompactMetric
+                    label="Best Window ROAS"
+                    value={bestWindow ? `${bestWindow.roas.toFixed(2)}x` : '—'}
+                    tone={bestWindow && bestWindow.roas > 1 ? 'success' : 'default'}
+                    tooltip="Return on ad spend in the strongest bidding window from the day/hour heatmap."
+                />
+                <CompactMetric
+                    label="Auction Pressure"
+                    value={competitorPressure !== null ? `${competitorPressure}/100` : 'Not surfaced'}
+                    tone={competitorPressure !== null ? (competitorPressure >= 75 ? 'danger' : competitorPressure >= 45 ? 'warning' : 'success') : 'default'}
+                    tooltip="Composite competitor pressure built from overlap rate, position-above rate, and impression share deficit."
+                />
+                <CompactMetric
+                    label="Tracked Competitors"
+                    value={String(topCompetitors.length)}
+                    tone={topCompetitors.length > 0 ? 'info' : 'default'}
+                    tooltip="Competitor domains returned by Google Ads auction insights for the selected window."
+                />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <BarChart2 size={16} color="#10b981" />
+                            Best Bidding Windows
+                            <InfoTooltip text="Day-part windows ranked by ROAS and conversion output from the real bidding heatmap." />
+                        </h3>
+                        <span className="badge badge-success">{bestWindows.length} surfaced</span>
+                    </div>
+                    <div style={{ padding: '0 20px 20px' }}>
+                        {bestWindows.length > 0 ? (
+                            <div style={{ height: 260 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ReBarChart data={bestWindows}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
+                                        <XAxis dataKey="label" tick={{ fontSize: 11 }} angle={-18} textAnchor="end" height={60} />
+                                        <YAxis tick={{ fontSize: 11 }} />
+                                        <Tooltip />
+                                        <Bar dataKey="roas" fill="#10b981" radius={[6, 6, 0, 0]} name="ROAS" />
+                                    </ReBarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>No converting bidding windows surfaced for this date range.</div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertTriangle size={16} color="#f59e0b" />
+                            Costly Weak Windows
+                            <InfoTooltip text="Higher-spend windows with weak or missing conversion return. These are bid-down or watchlist candidates." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {costlyWeakWindows.length > 0 ? costlyWeakWindows.map((slot: any, index: number) => (
+                            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: index === costlyWeakWindows.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                <div>
+                                    <div style={{ fontWeight: 700, fontSize: 13 }}>{slot.label}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtCurrency(slot.spend)} spend • {fmtNumber(slot.clicks)} clicks • {fmtNumber(slot.conversions, 1)} conv.</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b' }}>{slot.costPerConversion !== null ? fmtCurrency(slot.costPerConversion) : 'No conv.'}</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{slot.roas.toFixed(2)}x ROAS</div>
+                                </div>
+                            </div>
+                        )) : (
+                            <div style={{ color: 'var(--muted)', fontSize: 13 }}>No weak windows surfaced from the current bidding heatmap.</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             <div className="card">
                 <div className="card-header">
                     <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Crosshair size={16} color="#6366f1" />
-                        Top 5 Keywords — Threat Analysis
+                        Top 5 Keywords — Auction Pressure
                     </h3>
                     <span className="badge badge-danger" style={{ background: '#ef444422', color: '#ef4444' }}>
                         {keywordsWithThreat.filter((k: any) => k.threatScore >= 75).length} Critical
@@ -1249,13 +1433,13 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                                     <th>#</th>
                                     <th>Keyword</th>
                                     <th>Your QS</th>
-                                    <th>Your Bid</th>
+                                    <th>Your CPC</th>
                                     <th>Top Competitor</th>
                                     <th>Overlap Rate</th>
                                     <th>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                             Threat Score
-                                            <Info size={11} style={{ display: 'inline', color: 'var(--muted)', cursor: 'help' }} />
+                                            <InfoTooltip text="Composite pressure score from auction overlap, position-above rate, impression share deficit, and your keyword quality weakness." />
                                         </span>
                                     </th>
                                     <th>Action</th>
@@ -1286,57 +1470,90 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                     ) : (
                         <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
                             <ShieldAlert size={28} style={{ margin: '0 auto 12px' }} />
-                            <p style={{ fontSize: 13 }}>No keyword data available. Ensure Google Ads campaigns have active keywords.</p>
+                            <p style={{ fontSize: 13 }}>No keyword pressure rows surfaced. Keyword data or auction insights may be limited for this account.</p>
                         </div>
                     )}
                 </div>
                 <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)', lineHeight: 1.6 }}>
                     <Info size={12} style={{ display: 'inline', marginRight: 4 }} />
-                    <strong>Threat Score formula:</strong> (Overlap Rate × 0.4) + (Position Above Rate × 0.4) + (Impression Share Deficit × 0.2).
-                    Score ≥ 75 = Critical threat; 45–74 = Elevated; &lt; 45 = Low risk.
-                    Requires <strong>adwords</strong> OAuth scope for live auction insight data.
+                    <strong>Threat Score formula:</strong> (Overlap Rate × 0.35) + (Position Above Rate × 0.30) + (Impression Share Deficit × 0.20) + (Quality Weakness × 0.15).
+                    Score ≥ 75 = Critical pressure; 45–74 = Elevated; &lt; 45 = Low pressure.
                 </div>
             </div>
 
-            {/* Auction Insights Reference */}
-            {competitors.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Users size={16} color="#ec4899" />
                             Competitor Auction Reference
                         </h3>
+                        <span className="badge badge-info">{topCompetitors.length} domains</span>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
-                        <table className="table" style={{ fontSize: 12 }}>
-                            <thead>
-                                <tr>
-                                    <th>Competitor Domain</th>
-                                    <th>Impression Share</th>
-                                    <th>Overlap Rate</th>
-                                    <th>Outranking Share</th>
-                                    <th>Risk Level</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {competitors.slice(0, 5).map((c: any, i: number) => {
-                                    const risk = parseFloat(c.impressionShare || 0) > 60 ? 'High' : parseFloat(c.impressionShare || 0) > 30 ? 'Medium' : 'Low';
-                                    const rc   = risk === 'High' ? '#ef4444' : risk === 'Medium' ? '#f59e0b' : '#10b981';
-                                    return (
-                                        <tr key={i}>
-                                            <td style={{ fontWeight: 600, color: '#6366f1' }}>{c.domain}</td>
-                                            <td>{c.impressionShare}%</td>
-                                            <td>{c.overlapRate}%</td>
-                                            <td>{c.outrankingShare}%</td>
-                                            <td><span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${rc}18`, color: rc }}>{risk}</span></td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                        {topCompetitors.length > 0 ? (
+                            <table className="table" style={{ fontSize: 12 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Competitor Domain</th>
+                                        <th>Impression Share</th>
+                                        <th>Overlap Rate</th>
+                                        <th>Position Above</th>
+                                        <th>Risk Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {topCompetitors.map((c: any, i: number) => {
+                                        const riskScore = Math.round(Number(c.overlapRate || 0) * 0.5 + Number(c.positionAboveRate || 0) * 0.5);
+                                        const rc = getThreatColor(riskScore);
+                                        const risk = riskScore >= 75 ? 'High' : riskScore >= 45 ? 'Medium' : 'Low';
+                                        return (
+                                            <tr key={i}>
+                                                <td style={{ fontWeight: 600, color: '#6366f1' }}>{c.domain}</td>
+                                                <td>{c.impressionShare}%</td>
+                                                <td>{c.overlapRate}%</td>
+                                                <td>{c.positionAboveRate}%</td>
+                                                <td><span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${rc}18`, color: rc }}>{risk}</span></td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>Auction insights were not surfaced for this account in the selected window.</div>
+                        )}
                     </div>
                 </div>
-            )}
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Cpu size={16} color="#8b5cf6" />
+                            Recommendations
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>Bid Up Window</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                {bestWindow ? `${bestWindow.label} is the strongest candidate, returning ${bestWindow.roas.toFixed(2)}x ROAS with ${fmtNumber(bestWindow.conversions, 1)} conversions.` : 'No high-confidence bid-up window surfaced yet.'}
+                            </div>
+                        </div>
+                        <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>Bid Down Window</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                {riskiestWindow ? `${riskiestWindow.label} is the weakest current window, with ${fmtCurrency(riskiestWindow.spend)} spend and ${riskiestWindow.roas.toFixed(2)}x ROAS.` : 'No clear bid-down window surfaced from the current data.'}
+                            </div>
+                        </div>
+                        <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>Auction Focus</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                {primaryCompetitor ? `${primaryCompetitor.domain} is your leading auction pressure source with ${primaryCompetitor.overlapRate}% overlap and ${primaryCompetitor.positionAboveRate}% position-above rate.` : 'Competitor auction data was not surfaced, so focus on timing efficiency and Quality Score first.'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

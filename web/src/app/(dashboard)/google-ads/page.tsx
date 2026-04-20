@@ -1519,7 +1519,6 @@ export default function GoogleAdsPage() {
         { key: 'local', label: 'Geo Performance', icon: MapPin },
         { key: 'local-search', label: 'Local Search Dominance', icon: Globe },
         { key: 'bidding-intel', label: 'Bidding Intelligence', icon: ShieldAlert },
-        { key: 'competitors', label: 'Threats', icon: Crosshair },
         { key: 'search-terms', label: 'Wasted Spend', icon: Zap },
         { key: 'persona', label: 'Customer Persona', icon: UserCheck },
         { key: 'campaigns', label: 'Campaigns', icon: Target },
@@ -1668,10 +1667,10 @@ export default function GoogleAdsPage() {
                 {activeTab === 'local' && <LocalImpactTab />}
                 {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} />}
                 {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} />}
+                {activeTab === 'competitors' && <BiddingIntelligenceTab preset={preset} />}
                 {activeTab === 'persona' && <PersonaBuilderTab />}
                 {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
                 {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
-                {activeTab === 'competitors' && <CompetitorThreatTab preset={preset} />}
                 {activeTab === 'search-terms' && <WastedSpendTab preset={preset} />}
                 {activeTab === 'alerts' && <AlertsTab />}
             </div>
