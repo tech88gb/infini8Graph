@@ -342,35 +342,47 @@ class AnalyticsService {
         const looksLikeAbsoluteFollowerBase = currentFollowerCount <= 0
             ? maxSnapshotValue > 0
             : maxSnapshotValue >= currentFollowerCount * 0.5;
+        const looksLikeDailyFollowerGainSeries = snapshots.length > 0 && !looksLikeAbsoluteFollowerBase && maxSnapshotValue > 0;
 
         return {
             snapshots,
-            looksLikeAbsoluteFollowerBase
+            looksLikeAbsoluteFollowerBase,
+            looksLikeDailyFollowerGainSeries
         };
     }
 
     estimateFollowerLiftByPost(media = [], dailyMetrics = [], currentFollowerCount = 0, startDate = null, endDate = null) {
-        const { snapshots, looksLikeAbsoluteFollowerBase } = this.assessFollowerSnapshotSeries(dailyMetrics, currentFollowerCount);
-        if (!looksLikeAbsoluteFollowerBase || snapshots.length < 2 || media.length === 0) {
+        const {
+            snapshots,
+            looksLikeAbsoluteFollowerBase,
+            looksLikeDailyFollowerGainSeries
+        } = this.assessFollowerSnapshotSeries(dailyMetrics, currentFollowerCount);
+
+        if ((!looksLikeAbsoluteFollowerBase && !looksLikeDailyFollowerGainSeries) || snapshots.length === 0 || media.length === 0) {
             return {
                 available: false,
                 reason: 'Follower snapshots are not reliable enough for post-level estimation.',
-                methodology: 'Estimated follower lift needs believable daily follower-count snapshots from Meta. This account currently does not expose a stable enough follower_count series for post-level attribution.'
+                methodology: 'Estimated follower lift needs believable daily follower snapshots from Meta. This account currently does not expose a stable enough follower_count series for post-level attribution.'
             };
         }
 
         const { endStr } = this.clampDateWindow(startDate, endDate);
-        const dailyGainRows = [];
-        for (let index = 1; index < snapshots.length; index += 1) {
-            const previous = Number(snapshots[index - 1]?.follower_count || 0);
-            const current = Number(snapshots[index]?.follower_count || 0);
-            const gain = current - previous;
-            dailyGainRows.push({
-                date: snapshots[index].date,
-                gain: gain > 0 ? gain : 0,
-                rawDelta: gain
-            });
-        }
+        const dailyGainRows = looksLikeAbsoluteFollowerBase
+            ? snapshots.slice(1).map((snapshot, index) => {
+                const previous = Number(snapshots[index]?.follower_count || 0);
+                const current = Number(snapshot?.follower_count || 0);
+                const gain = current - previous;
+                return {
+                    date: snapshot.date,
+                    gain: gain > 0 ? gain : 0,
+                    rawDelta: gain
+                };
+            })
+            : snapshots.map((snapshot) => ({
+                date: snapshot.date,
+                gain: Math.max(Number(snapshot.follower_count || 0), 0),
+                rawDelta: Number(snapshot.follower_count || 0)
+            }));
 
         const posts = media
             .map((post) => {
@@ -495,8 +507,11 @@ class AnalyticsService {
 
         return {
             available: estimatedPosts.length > 0,
-            methodology: 'Estimated from positive day-over-day follower-count gains in the 1-3 days after publish. Each gain day is allocated across eligible posts using profile activity, reach, engagement, and save-rate weighting.',
+            methodology: looksLikeAbsoluteFollowerBase
+                ? 'Estimated from positive day-over-day follower-count gains in the 1-3 days after publish. Each gain day is allocated across eligible posts using profile activity, reach, engagement, and save-rate weighting.'
+                : 'Estimated from Meta daily follower-gain rows in the 1-3 days after publish. Each gain day is allocated across eligible posts using profile activity, reach, engagement, and save-rate weighting.',
             totalEstimatedLift: Number(totalEstimatedLift.toFixed(1)),
+            source: looksLikeAbsoluteFollowerBase ? 'absolute_follower_snapshots' : 'daily_follower_gain_series',
             posts: estimatedPosts.slice(0, 12)
         };
     }
@@ -944,6 +959,7 @@ class AnalyticsService {
             currentFollowers: profile.followers_count,
             currentFollowing: profile.follows_count,
             totalPosts: profile.media_count,
+            postsInRange: totalPostsInWindow,
             growthData,
             accountMetrics,
             accountSummary: {

@@ -192,11 +192,11 @@ export default function GrowthPage() {
                     tooltip="Total number of accounts following you"
                 />
                 <MetricCard
-                    label="Posts This Week"
-                    value={weeklyStats.postsThisWeek || 0}
+                    label="Posts In Selected Period"
+                    value={growth.postsInRange || 0}
                     icon={Activity}
                     color="#0ea5e9"
-                    tooltip="Number of posts published in the last 7 days"
+                    tooltip="Number of posts published inside the currently selected date range"
                 />
                 <MetricCard
                     label="Following"
