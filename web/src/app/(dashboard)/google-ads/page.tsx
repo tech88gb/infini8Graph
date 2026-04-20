@@ -176,6 +176,32 @@ function AlertCard({ alert }: { alert: any }) {
     );
 }
 
+function HealthSignalCard({ item }: { item: any }) {
+    const tones: Record<string, { color: string; bg: string; border: string; icon: any }> = {
+        success: { color: '#10b981', bg: '#10b98112', border: '#10b98133', icon: CheckCircle },
+        info: { color: '#6366f1', bg: '#6366f112', border: '#6366f133', icon: Info },
+        warning: { color: '#f59e0b', bg: '#f59e0b12', border: '#f59e0b33', icon: AlertTriangle },
+        danger: { color: '#ef4444', bg: '#ef444412', border: '#ef444433', icon: AlertCircle }
+    };
+    const tone = tones[item.tone] || tones.info;
+    const Icon = tone.icon;
+
+    return (
+        <div className="card" style={{ padding: 16, background: tone.bg, border: `1px solid ${tone.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${tone.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={14} style={{ color: tone.color }} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{item.title}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: tone.color }}>{item.value}</div>
+                </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--muted)' }}>{item.description}</p>
+        </div>
+    );
+}
+
 // ==================== TAB BUTTON ====================
 
 function Tab({ label, icon: Icon, active, onClick, badge }: { label: string; icon: any; active: boolean; onClick: () => void; badge?: number }) {
@@ -313,22 +339,131 @@ function OverviewTab({ preset }: { preset: string }) {
     }
 
     const m = perf.metrics || {};
+    const focus = perf.accountFocus || {};
+    const valueTracking = perf.valueTracking || {};
+    const showRevenueMetrics = !!valueTracking.trustedRevenueMetrics;
+    const budgetCampaigns = budgetData?.campaigns || [];
+    const activeBudgetCount = budgetCampaigns.filter((campaign: any) => Number(campaign.spent || 0) > 0).length;
+    const highestBudgetPressure = budgetCampaigns[0] || null;
+    const metricCards = [
+        { label: 'Total Spend', value: fmtINR(m.spend), icon: DollarSign, color: '#6366f1' },
+        { label: 'Conversions', value: fmt(m.conversions, 0), icon: Target, color: '#f59e0b' },
+        { label: 'Cost / Conv.', value: fmtINR(m.costPerConversion), icon: Zap, color: '#0ea5e9' },
+        { label: 'Conversion Rate', value: fmtPct(m.conversionRate), icon: TrendingUp, color: '#10b981' },
+        { label: 'Avg CPC', value: fmtINR(m.avgCpc), icon: MousePointer, color: '#ec4899' },
+        { label: 'CTR', value: fmtPct(m.ctr), icon: Activity, color: '#14b8a6' },
+        ...(showRevenueMetrics
+            ? [
+                { label: 'Conv. Value', value: fmtINR(m.conversionValue), icon: BarChart2, color: '#8b5cf6' },
+                { label: 'ROAS', value: m.roas ? `${m.roas.toFixed(2)}x` : '—', icon: TrendingUp, color: m.roas >= 4 ? '#10b981' : m.roas >= 2 ? '#f59e0b' : '#ef4444' },
+            ]
+            : [
+                { label: 'Clicks', value: fmt(m.clicks, 0), icon: MousePointer, color: '#ec4899' },
+                { label: 'Impressions', value: fmt(m.impressions, 0), icon: Eye, color: '#0ea5e9' },
+            ])
+    ];
+    const healthSignals = [
+        {
+            tone: m.conversionRate >= 8 ? 'success' : m.conversionRate >= 3 ? 'info' : 'warning',
+            title: 'Conversion Efficiency',
+            value: fmtPct(m.conversionRate),
+            description: m.conversionRate >= 8
+                ? 'Paid clicks are converting well for this account, so cost-per-conversion is a credible steering metric.'
+                : m.conversionRate >= 3
+                    ? 'Conversion rate is serviceable, but still worth watching alongside CPC and query quality.'
+                    : 'Clicks are not turning into conversions efficiently enough yet, so landing page fit or query quality likely needs work.'
+        },
+        {
+            tone: m.avgCpc <= 10 ? 'success' : m.avgCpc <= 25 ? 'info' : 'warning',
+            title: 'Click Cost',
+            value: fmtINR(m.avgCpc),
+            description: m.avgCpc <= 10
+                ? 'Click costs look disciplined right now, which gives the account more room to scale profitable traffic.'
+                : m.avgCpc <= 25
+                    ? 'Average CPC is manageable, but efficiency will depend on whether conversions stay healthy.'
+                    : 'Traffic is getting expensive, so CPC pressure should be balanced against conversion quality before scaling spend.'
+        },
+        {
+            tone: valueTracking.quality === 'strong' ? 'success' : valueTracking.quality === 'partial' ? 'info' : 'warning',
+            title: 'Value Tracking',
+            value: valueTracking.quality === 'strong'
+                ? 'Revenue-ready'
+                : valueTracking.quality === 'partial'
+                    ? 'Thin value data'
+                    : valueTracking.quality === 'weak'
+                        ? 'Weak revenue signal'
+                        : 'No clear value signal',
+            description: valueTracking.reason
+        },
+        {
+            tone: highestBudgetPressure?.utilization >= 90 ? 'warning' : activeBudgetCount > 0 ? 'info' : 'warning',
+            title: 'Budget Pacing',
+            value: highestBudgetPressure
+                ? `${highestBudgetPressure.utilization}% top utilization`
+                : 'No active pacing',
+            description: highestBudgetPressure?.utilization >= 90
+                ? `${highestBudgetPressure.name} is close to tapping out today, so delivery may slow before the day ends.`
+                : activeBudgetCount > 0
+                    ? `${activeBudgetCount} campaign${activeBudgetCount > 1 ? 's are' : ' is'} actively spending today, which gives you real pacing feedback right now.`
+                    : 'No campaign has meaningfully spent against today’s budget yet, so pacing signals are still quiet.'
+        }
+    ];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)', gap: 16 }}>
+                <div className="card" style={{ padding: 18 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                        <div>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>
+                                Account Focus
+                            </div>
+                            <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{focus.label || 'Mixed'}</h3>
+                        </div>
+                        <span className="badge badge-info">{focus.primaryMix || 'Mixed campaign distribution'}</span>
+                    </div>
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.65 }}>
+                        {focus.description || 'This account uses a blended Google Ads setup, so the overview balances efficiency and scale signals.'}
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+                        <div style={{ padding: 12, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Primary Mix</div>
+                            <div style={{ fontSize: 14, fontWeight: 600 }}>{focus.primaryMix || 'Mixed campaign distribution'}</div>
+                        </div>
+                        <div style={{ padding: 12, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Overview Mode</div>
+                            <div style={{ fontSize: 14, fontWeight: 600 }}>{showRevenueMetrics ? 'Revenue-aware' : 'Efficiency-first'}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card" style={{ padding: 18 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 8 }}>
+                        Revenue Signal
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
+                        {showRevenueMetrics ? 'ROAS is usable' : 'ROAS is secondary'}
+                    </div>
+                    <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+                        {valueTracking.reason}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>Value per conversion</span>
+                        <strong style={{ fontSize: 15 }}>{m.valuePerConversion ? fmtINR(m.valuePerConversion) : '—'}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
+                {healthSignals.map((item, index) => (
+                    <HealthSignalCard key={index} item={item} />
+                ))}
+            </div>
+
             {/* Top Metrics */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-                {[
-                    { label: 'Total Spend', value: fmtINR(m.spend), icon: DollarSign, color: '#6366f1' },
-                    { label: 'Impressions', value: fmt(m.impressions, 0), icon: Eye, color: '#0ea5e9' },
-                    { label: 'Clicks', value: fmt(m.clicks, 0), icon: MousePointer, color: '#ec4899' },
-                    { label: 'CTR', value: fmtPct(m.ctr), icon: Activity, color: '#10b981' },
-                    { label: 'Conversions', value: fmt(m.conversions, 0), icon: Target, color: '#f59e0b' },
-                    { label: 'Conv. Value', value: fmtINR(m.conversionValue), icon: TrendingUp, color: '#8b5cf6' },
-                    { label: 'ROAS', value: m.roas ? `${m.roas.toFixed(2)}x` : '—', icon: BarChart2, color: m.roas >= 4 ? '#10b981' : m.roas >= 2 ? '#f59e0b' : '#ef4444' },
-                    { label: 'Cost / Conv.', value: fmtINR(m.costPerConversion), icon: Zap, color: '#0ea5e9' },
-                ].map((stat, i) => (
+                {metricCards.map((stat, i) => (
                     <div key={i} className="card" style={{ padding: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <div style={{ padding: 6, borderRadius: 6, background: `${stat.color}22` }}>
