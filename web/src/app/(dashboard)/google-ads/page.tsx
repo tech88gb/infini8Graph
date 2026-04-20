@@ -1516,7 +1516,7 @@ export default function GoogleAdsPage() {
     const tabs = [
         { key: 'overview', label: 'Overview', icon: BarChart2 },
         { key: 'true-roas', label: 'Conversion Integrity', icon: Activity },
-        { key: 'local', label: 'Local Impact', icon: MapPin },
+        { key: 'local', label: 'Geo Performance', icon: MapPin },
         { key: 'local-search', label: 'Local Search Dominance', icon: Globe },
         { key: 'bidding-intel', label: 'Bidding Intelligence', icon: ShieldAlert },
         { key: 'competitors', label: 'Threats', icon: Crosshair },

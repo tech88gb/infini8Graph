@@ -279,6 +279,62 @@ function mapServedAssetFieldType(value) {
     return labels[value] || String(value || 'UNKNOWN');
 }
 
+function mapGeoTargetingType(value) {
+    const labels = {
+        0: 'UNSPECIFIED',
+        1: 'UNKNOWN',
+        2: 'AREA_OF_INTEREST',
+        3: 'LOCATION_OF_PRESENCE',
+        UNSPECIFIED: 'UNSPECIFIED',
+        UNKNOWN: 'UNKNOWN',
+        AREA_OF_INTEREST: 'AREA_OF_INTEREST',
+        LOCATION_OF_PRESENCE: 'LOCATION_OF_PRESENCE',
+    };
+    return labels[value] || String(value || 'UNKNOWN');
+}
+
+async function resolveGeoTargetDetails(customer, ids = []) {
+    const uniqueIds = [...new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (!uniqueIds.length) return {};
+
+    const batches = [];
+    for (let i = 0; i < uniqueIds.length; i += 50) {
+        batches.push(uniqueIds.slice(i, i + 50));
+    }
+
+    const details = {};
+
+    for (const batch of batches) {
+        try {
+            const resourceNames = batch.map((id) => `'geoTargetConstants/${id}'`).join(',');
+            const rows = await customer.query(`
+                SELECT
+                    geo_target_constant.resource_name,
+                    geo_target_constant.id,
+                    geo_target_constant.name,
+                    geo_target_constant.target_type,
+                    geo_target_constant.country_code
+                FROM geo_target_constant
+                WHERE geo_target_constant.resource_name IN (${resourceNames})
+            `);
+
+            (rows || []).forEach((row) => {
+                const id = String(row.geo_target_constant?.id || '').trim();
+                if (!id) return;
+                details[id] = {
+                    name: row.geo_target_constant?.name || `Geo ${id}`,
+                    targetType: row.geo_target_constant?.target_type || '',
+                    countryCode: row.geo_target_constant?.country_code || ''
+                };
+            });
+        } catch (error) {
+            console.warn('⚠️ Geo target name lookup failed:', error.message);
+        }
+    }
+
+    return details;
+}
+
 function summarizeGoogleChannelMix(campaigns = []) {
     const totals = {
         search: 0,
@@ -1266,22 +1322,78 @@ export async function getGeoPerformance(userId, preset = '30d') {
             LIMIT 50
         `);
 
-        // Note: country_criterion_id needs mapping but we can use resource_name parts for now
-        // or just aggregate broadly.
-        const locations = (rows || []).map(r => {
-            const spend = Number(r.metrics?.cost_micros || 0) / 1_000_000;
-            return {
-                id: r.geographic_view?.country_criterion_id,
-                type: r.geographic_view?.location_type || '',
-                spend: parseFloat(spend.toFixed(2)),
-                impressions: Number(r.metrics?.impressions || 0),
-                clicks: Number(r.metrics?.clicks || 0),
-                conversions: Number(r.metrics?.conversions || 0),
-                campaign: r.campaign?.name || ''
-            };
+        const geoIds = (rows || []).map((row) => row.geographic_view?.country_criterion_id).filter(Boolean);
+        const geoDetails = await resolveGeoTargetDetails(customer, geoIds);
+        const locationMap = {};
+
+        (rows || []).forEach((row) => {
+            const geoId = String(row.geographic_view?.country_criterion_id || '').trim();
+            const locationType = mapGeoTargetingType(row.geographic_view?.location_type);
+            const geoMeta = geoDetails[geoId] || {};
+            const key = `${geoId}:${locationType}`;
+            if (!locationMap[key]) {
+                locationMap[key] = {
+                    id: geoId || 'unknown',
+                    location: geoMeta.name || (geoId ? `Geo ${geoId}` : 'Unknown location'),
+                    targetType: geoMeta.targetType || 'Unknown',
+                    countryCode: geoMeta.countryCode || '',
+                    matchType: locationType.replace(/_/g, ' '),
+                    spend: 0,
+                    impressions: 0,
+                    clicks: 0,
+                    conversions: 0,
+                };
+            }
+
+            locationMap[key].spend += Number(row.metrics?.cost_micros || 0) / 1_000_000;
+            locationMap[key].impressions += Number(row.metrics?.impressions || 0);
+            locationMap[key].clicks += Number(row.metrics?.clicks || 0);
+            locationMap[key].conversions += Number(row.metrics?.conversions || 0);
         });
 
-        return { connected: true, locations };
+        const locations = Object.values(locationMap).map((location) => {
+            const cpc = location.clicks > 0 ? location.spend / location.clicks : 0;
+            const conversionRate = location.clicks > 0 ? (location.conversions / location.clicks) * 100 : 0;
+            const costPerConversion = location.conversions > 0 ? location.spend / location.conversions : null;
+            return {
+                ...location,
+                spend: parseFloat(location.spend.toFixed(2)),
+                conversions: parseFloat(location.conversions.toFixed(1)),
+                cpc: parseFloat(cpc.toFixed(2)),
+                conversionRate: parseFloat(conversionRate.toFixed(2)),
+                costPerConversion: costPerConversion !== null ? parseFloat(costPerConversion.toFixed(2)) : null,
+            };
+        }).sort((a, b) => b.spend - a.spend);
+
+        const totalSpend = locations.reduce((sum, location) => sum + location.spend, 0);
+        const totalClicks = locations.reduce((sum, location) => sum + location.clicks, 0);
+        const totalConversions = locations.reduce((sum, location) => sum + location.conversions, 0);
+        const enrichedLocations = locations.map((location) => ({
+            ...location,
+            spendShare: totalSpend > 0 ? parseFloat(((location.spend / totalSpend) * 100).toFixed(1)) : 0,
+        }));
+        const locationsWithConversion = enrichedLocations.filter((location) => location.conversions > 0);
+
+        const summary = {
+            totalSpend: parseFloat(totalSpend.toFixed(2)),
+            totalClicks,
+            totalConversions: parseFloat(totalConversions.toFixed(1)),
+            averageCpc: totalClicks > 0 ? parseFloat((totalSpend / totalClicks).toFixed(2)) : 0,
+            averageConversionRate: totalClicks > 0 ? parseFloat(((totalConversions / totalClicks) * 100).toFixed(2)) : 0,
+            averageCostPerConversion: totalConversions > 0 ? parseFloat((totalSpend / totalConversions).toFixed(2)) : null,
+            topLocationBySpend: enrichedLocations[0] || null,
+            topLocationByEfficiency: [...locationsWithConversion].sort((a, b) => {
+                const aCost = a.costPerConversion ?? Number.MAX_SAFE_INTEGER;
+                const bCost = b.costPerConversion ?? Number.MAX_SAFE_INTEGER;
+                return aCost - bCost;
+            })[0] || null,
+            lowEfficiencyLocations: [...locationsWithConversion]
+                .filter((location) => location.costPerConversion !== null)
+                .sort((a, b) => (b.costPerConversion || 0) - (a.costPerConversion || 0))
+                .slice(0, 3)
+        };
+
+        return { connected: true, locations: enrichedLocations, summary, period: preset };
     } catch (error) {
         console.error('❌ Geo performance error:', error.message);
         return { connected: true, locations: [], error: error.message };

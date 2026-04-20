@@ -82,12 +82,13 @@ function InfoTooltip({ text }: { text: string }) {
     );
 }
 
-function CompactMetric({ label, value, tone = 'default', tooltip }: { label: string; value: string; tone?: 'default' | 'success' | 'warning' | 'danger'; tooltip?: string }) {
+function CompactMetric({ label, value, tone = 'default', tooltip }: { label: string; value: string; tone?: 'default' | 'success' | 'warning' | 'danger' | 'info'; tooltip?: string }) {
     const colors = {
         default: '#e5e7eb',
         success: '#34d399',
         warning: '#fbbf24',
-        danger: '#f87171'
+        danger: '#f87171',
+        info: '#93c5fd'
     };
 
     return (
@@ -404,61 +405,133 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const locations = geoData?.locations || [];
-    const totalLocalSpend = locations.reduce((sum: number, l: any) => sum + l.spend, 0);
-    const totalLocalConversions = locations.reduce((sum: number, l: any) => sum + l.conversions, 0);
+    const summary = geoData?.summary || {};
+    const topSpend = summary?.topLocationBySpend;
+    const topEfficiency = summary?.topLocationByEfficiency;
+    const lowEfficiency = summary?.lowEfficiencyLocations || [];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
-                {/* Real Geographic Action Pipeline */}
-                <div className="card" style={{ gridColumn: '1 / -1' }}>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Geo Performance
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>Location Efficiency</div>
+                        <span className="badge badge-info">{preset} window</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Aggregated by geography, not by campaign
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
+                <CompactMetric
+                    label="Geo Spend"
+                    value={fmtCurrency(summary?.totalSpend || 0)}
+                    tooltip="Total spend across all geographic rows returned by Google Ads for the selected date window."
+                />
+                <CompactMetric
+                    label="Geo Clicks"
+                    value={fmtNumber(summary?.totalClicks || 0)}
+                    tooltip="Total clicks across the returned geographic breakdown rows."
+                />
+                <CompactMetric
+                    label="Modeled Conversions"
+                    value={fmtNumber(summary?.totalConversions || 0, 1)}
+                    tone={(summary?.totalConversions || 0) > 0 ? 'success' : 'default'}
+                    tooltip="Google Ads conversions can be fractional because attribution and modeled conversions are not always integer counts."
+                />
+                <CompactMetric
+                    label="Avg Cost / Conv."
+                    value={summary?.averageCostPerConversion !== null && summary?.averageCostPerConversion !== undefined ? fmtCurrency(summary.averageCostPerConversion) : '—'}
+                    tone={summary?.averageCostPerConversion ? 'info' : 'default'}
+                    tooltip="Total geo spend divided by modeled conversions across the selected window."
+                />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 20 }}>
+                <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <MapPin size={16} color="#10b981" />
-                            Account Geographic Ad Spend vs. Outcomes
+                            Geo Spend vs. Outcomes
+                            <InfoTooltip text="Compares spend and clicks across the top geographic rows for the selected window. This is a geography-first view, not a campaign chart." />
                         </h3>
-                        {totalLocalConversions > 0 && <span className="badge badge-success">Data Connected</span>}
                     </div>
-                    <div style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 300px' }}>
-                            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-                                We are pulling real-time geographic performance data directly from your Google Ads account to identify location-based efficiency.
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                                <span style={{ fontWeight: 500, fontSize: 13 }}>Live Account Spend</span>
-                                <span style={{ fontWeight: 700, color: '#6366f1' }}>₹{totalLocalSpend.toLocaleString()}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                                <span style={{ fontWeight: 500, fontSize: 13 }}>Geographic Clicks</span>
-                                <span style={{ fontWeight: 700, color: '#10b981' }}>{locations.reduce((sum: number, l: any) => sum + l.clicks, 0).toLocaleString()} Total</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
-                                <span style={{ fontWeight: 500, fontSize: 13 }}>Recorded Conversions</span>
-                                <span style={{ fontWeight: 700, color: '#f59e0b' }}>{totalLocalConversions.toLocaleString()}</span>
-                            </div>
-                        </div>
-                        <div style={{ flex: '1.5 1 400px', height: 200 }}>
+                    <div style={{ padding: 20 }}>
+                        <div style={{ height: 240 }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={locations.slice(0, 10).map((l: any) => ({
-                                    name: l.campaign.split(' ')[0],
-                                    spend: l.spend,
-                                    clicks: l.clicks
+                                <AreaChart data={locations.slice(0, 8).map((location: any) => ({
+                                    name: location.location,
+                                    spend: location.spend,
+                                    clicks: location.clicks
                                 }))}>
                                     <Tooltip />
-                                    <Area type="monotone" yAxisId="1" dataKey="spend" stroke="#6366f1" fill="#6366f133" name="Spend (₹)" />
-                                    <Area type="monotone" yAxisId="2" dataKey="clicks" stroke="#10b981" fill="none" strokeWidth={3} name="Clicks" />
+                                    <Area type="monotone" dataKey="spend" stroke="#6366f1" fill="#6366f133" name="Spend (₹)" />
+                                    <Area type="monotone" dataKey="clicks" stroke="#10b981" fill="none" strokeWidth={3} name="Clicks" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
 
-                {/* Performance Highlights */}
-                <div className="card" style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div className="card" style={{ padding: 18 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Top Location By Spend</div>
+                        {topSpend ? (
+                            <>
+                                <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6 }}>{topSpend.location}</div>
+                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topSpend.targetType} • {topSpend.matchType}</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+                                    <div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Spend Share</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topSpend.spendShare}%</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Spend</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{fmtCurrency(topSpend.spend)}</div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div style={{ color: 'var(--muted)', fontSize: 13 }}>No geographic spend rows available for this window.</div>
+                        )}
+                    </div>
+
+                    <div className="card" style={{ padding: 18 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Top Location By Efficiency</div>
+                        {topEfficiency ? (
+                            <>
+                                <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6 }}>{topEfficiency.location}</div>
+                                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>{topEfficiency.targetType} • {topEfficiency.matchType}</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+                                    <div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Cost / Conv.</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topEfficiency.costPerConversion !== null ? fmtCurrency(topEfficiency.costPerConversion) : '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>CVR</div>
+                                        <div style={{ fontSize: 18, fontWeight: 700 }}>{topEfficiency.conversionRate}%</div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div style={{ color: 'var(--muted)', fontSize: 13 }}>No converting geography rows were returned for this window.</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div className="card">
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Globe size={16} color="#6366f1" />
-                            Location-Wise Real Efficiency
+                            Location Efficiency Table
+                            <InfoTooltip text="Aggregated geography rows with spend share, clicks, modeled conversions, CPC, conversion rate, and cost per conversion." />
                         </h3>
                     </div>
                     <div style={{ padding: '0 20px 20px' }}>
@@ -466,24 +539,61 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
                             <table className="table" style={{ fontSize: 12 }}>
                                 <thead>
                                     <tr>
-                                        <th>Campaign Source</th>
-                                        <th>Real Spend</th>
+                                        <th>Location</th>
+                                        <th>Spend</th>
+                                        <th>Share</th>
                                         <th>Clicks</th>
-                                        <th>Efficiency (CPC)</th>
+                                        <th>Conv.</th>
+                                        <th>CPC</th>
+                                        <th>CVR</th>
+                                        <th>Cost / Conv.</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {locations.slice(0, 5).map((l: any, i: number) => (
-                                        <tr key={i}>
-                                            <td style={{ fontWeight: 600 }}>{l.campaign}</td>
-                                            <td>₹{l.spend}</td>
-                                            <td>{l.clicks}</td>
-                                            <td style={{ fontWeight: 700, color: '#6366f1' }}>₹{(l.spend / (l.clicks || 1)).toFixed(2)}</td>
+                                    {locations.slice(0, 8).map((location: any, index: number) => (
+                                        <tr key={index}>
+                                            <td>
+                                                <div style={{ fontWeight: 600 }}>{location.location}</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{location.targetType} • {location.matchType}</div>
+                                            </td>
+                                            <td>{fmtCurrency(location.spend)}</td>
+                                            <td>{location.spendShare}%</td>
+                                            <td>{fmtNumber(location.clicks)}</td>
+                                            <td>{fmtNumber(location.conversions, 1)}</td>
+                                            <td>{fmtCurrency(location.cpc)}</td>
+                                            <td>{location.conversionRate}%</td>
+                                            <td>{location.costPerConversion !== null ? fmtCurrency(location.costPerConversion) : '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertTriangle size={16} color="#f59e0b" />
+                            Low-Efficiency Locations
+                            <InfoTooltip text="Locations with modeled conversions, sorted by highest cost per conversion first. This is a watchlist, not an automatic pause recommendation." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {lowEfficiency.length > 0 ? lowEfficiency.map((location: any, index: number) => (
+                            <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: index === lowEfficiency.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: 13 }}>{location.location}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtCurrency(location.spend)} spend • {fmtNumber(location.conversions, 1)} conv.</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b' }}>{location.costPerConversion !== null ? fmtCurrency(location.costPerConversion) : '—'}</div>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{location.conversionRate}% CVR</div>
+                                </div>
+                            </div>
+                        )) : (
+                            <div style={{ color: 'var(--muted)', fontSize: 13 }}>No low-efficiency locations surfaced from the current geo rows.</div>
+                        )}
                     </div>
                 </div>
             </div>
