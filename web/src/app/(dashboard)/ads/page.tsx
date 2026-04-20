@@ -629,6 +629,10 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
     color: string;
     tooltip?: string;
 }) {
+    const formattedTrend = trend !== undefined
+        ? `${trend >= 0 ? '+' : ''}${Number.isInteger(trend) ? trend : trend.toFixed(1)}%`
+        : null;
+
     return (
         <div className="metric-card" style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -652,7 +656,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
                         fontWeight: 600,
                         color: trend >= 0 ? '#10b981' : '#ef4444'
                     }}>
-                        {trend >= 0 ? '+' : ''}{trend}%
+                        {formattedTrend}
                     </span>
                     {trendLabel && (
                         <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 2 }}>
@@ -992,15 +996,15 @@ export default function AdsPage() {
     const showDiagnosticsSection = accountProfile?.type !== 'app_promotion';
     const showVideoRetentionSection = ['awareness', 'engagement', 'mixed'].includes(accountProfile?.type) || Object.values(videoViews || {}).some((value) => Number(value || 0) > 0);
     const spendComparisonLabel = datePreset === 'last_7d'
-        ? 'This week vs last week'
+        ? 'Current 7 days vs previous 7 days'
         : datePreset === 'last_30d'
-            ? 'This month vs last month'
+            ? 'Current 30 days vs previous 30 days'
             : datePreset === 'last_14d'
                 ? 'Current 14 days vs previous 14 days'
                 : datePreset === 'last_90d'
-                    ? 'Current 90 days vs previous period'
+                    ? 'Current 90 days vs previous 90 days'
                     : datePreset === 'today'
-                        ? 'Today'
+                        ? 'Today vs yesterday'
                     : 'Selected period';
     const campaignTypeOptions = useMemo(() => {
         const options = new Map<string, string>();

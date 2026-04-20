@@ -321,10 +321,52 @@ function buildAccountProfile(campaigns = [], context = {}) {
     };
 }
 
-function getComparisonDatePreset(datePreset) {
-    if (datePreset === 'last_7d') return 'last_week_mon_sun';
-    if (datePreset === 'last_30d') return 'last_month';
-    return null;
+function shiftDate(date, days) {
+    const shifted = new Date(date);
+    shifted.setDate(shifted.getDate() + days);
+    return shifted;
+}
+
+function formatDateYmd(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getRollingComparisonRange(datePreset, referenceDate = new Date()) {
+    const normalized = String(datePreset || '').toLowerCase();
+    const presetLengths = {
+        today: 1,
+        last_7d: 7,
+        last_14d: 14,
+        last_30d: 30,
+        last_90d: 90
+    };
+    const days = presetLengths[normalized];
+    if (!days) return null;
+
+    const currentEnd = new Date(referenceDate);
+    currentEnd.setHours(0, 0, 0, 0);
+
+    const currentStart = shiftDate(currentEnd, -(days - 1));
+    const previousEnd = shiftDate(currentStart, -1);
+    const previousStart = shiftDate(previousEnd, -(days - 1));
+    const label = normalized === 'today'
+        ? 'vs yesterday'
+        : `vs previous ${days} day${days === 1 ? '' : 's'}`;
+
+    return {
+        current: {
+            since: formatDateYmd(currentStart),
+            until: formatDateYmd(currentEnd)
+        },
+        previous: {
+            since: formatDateYmd(previousStart),
+            until: formatDateYmd(previousEnd)
+        },
+        label
+    };
 }
 
 async function fetchInsightsBreakdown(accountId, accessToken, datePreset, breakdowns, fields) {
@@ -400,9 +442,9 @@ export async function getAdInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-overview', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-overview-v2', [req.user.userId, accountId, datePreset]);
         const payload = await withMetaCache(cacheKey, META_CACHE_TTL.overview, async () => {
-            const comparisonDatePreset = getComparisonDatePreset(datePreset);
+            const comparisonRange = getRollingComparisonRange(datePreset);
             const requests = [
                 axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                     params: {
@@ -451,19 +493,19 @@ export async function getAdInsights(req, res) {
                 })
             ];
 
-            if (comparisonDatePreset) {
+            if (comparisonRange) {
                 requests.push(axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,reach,clicks',
-                        date_preset: comparisonDatePreset
+                        time_range: JSON.stringify(comparisonRange.previous)
                     }
                 }));
                 requests.push(axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,reach,clicks,ctr',
-                        date_preset: comparisonDatePreset,
+                        time_range: JSON.stringify(comparisonRange.previous),
                         time_increment: 1
                     }
                 }));
@@ -573,7 +615,7 @@ export async function getAdInsights(req, res) {
                     const c = parseFloat(curr || 0);
                     const p = parseFloat(prev || 0);
                     if (p === 0) return 0;
-                    return Math.round(((c - p) / p) * 100);
+                    return Number((((c - p) / p) * 100).toFixed(1));
                 };
 
                 comparisonTrend = {
@@ -581,7 +623,7 @@ export async function getAdInsights(req, res) {
                     impressionsTrend: calculateTrend(summary?.impressions, comparisonSummary.impressions),
                     reachTrend: calculateTrend(summary?.reach, comparisonSummary.reach),
                     clicksTrend: calculateTrend(summary?.clicks, comparisonSummary.clicks),
-                    label: datePreset === 'last_7d' ? 'vs last week' : datePreset === 'last_30d' ? 'vs last month' : 'vs previous'
+                    label: comparisonRange?.label || 'vs previous period'
                 };
             }
 
