@@ -187,17 +187,19 @@ function HealthSignalCard({ item }: { item: any }) {
     const Icon = tone.icon;
 
     return (
-        <div className="card" style={{ padding: 16, background: tone.bg, border: `1px solid ${tone.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${tone.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card" style={{ padding: '14px 16px', background: tone.bg, border: `1px solid ${tone.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${tone.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Icon size={14} style={{ color: tone.color }} />
                 </div>
-                <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{item.title}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: tone.color }}>{item.value}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{item.title}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: tone.color, lineHeight: 1.1 }}>{item.value}</div>
+                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.note}
+                    </div>
                 </div>
             </div>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--muted)' }}>{item.description}</p>
         </div>
     );
 }
@@ -367,21 +369,13 @@ function OverviewTab({ preset }: { preset: string }) {
             tone: m.conversionRate >= 8 ? 'success' : m.conversionRate >= 3 ? 'info' : 'warning',
             title: 'Conversion Efficiency',
             value: fmtPct(m.conversionRate),
-            description: m.conversionRate >= 8
-                ? 'Paid clicks are converting well for this account, so cost-per-conversion is a credible steering metric.'
-                : m.conversionRate >= 3
-                    ? 'Conversion rate is serviceable, but still worth watching alongside CPC and query quality.'
-                    : 'Clicks are not turning into conversions efficiently enough yet, so landing page fit or query quality likely needs work.'
+            note: m.conversionRate >= 8 ? 'Strong click-to-conversion flow' : m.conversionRate >= 3 ? 'Usable, keep monitoring' : 'Needs landing/query cleanup'
         },
         {
             tone: m.avgCpc <= 10 ? 'success' : m.avgCpc <= 25 ? 'info' : 'warning',
             title: 'Click Cost',
             value: fmtINR(m.avgCpc),
-            description: m.avgCpc <= 10
-                ? 'Click costs look disciplined right now, which gives the account more room to scale profitable traffic.'
-                : m.avgCpc <= 25
-                    ? 'Average CPC is manageable, but efficiency will depend on whether conversions stay healthy.'
-                    : 'Traffic is getting expensive, so CPC pressure should be balanced against conversion quality before scaling spend.'
+            note: m.avgCpc <= 10 ? 'CPC looks disciplined' : m.avgCpc <= 25 ? 'Manageable cost level' : 'Traffic is getting expensive'
         },
         {
             tone: valueTracking.quality === 'strong' ? 'success' : valueTracking.quality === 'partial' ? 'info' : 'warning',
@@ -390,10 +384,10 @@ function OverviewTab({ preset }: { preset: string }) {
                 ? 'Revenue-ready'
                 : valueTracking.quality === 'partial'
                     ? 'Thin value data'
-                    : valueTracking.quality === 'weak'
+                : valueTracking.quality === 'weak'
                         ? 'Weak revenue signal'
                         : 'No clear value signal',
-            description: valueTracking.reason
+            note: showRevenueMetrics ? 'ROAS can lead the view' : 'Efficiency should lead the view'
         },
         {
             tone: highestBudgetPressure?.utilization >= 90 ? 'warning' : activeBudgetCount > 0 ? 'info' : 'warning',
@@ -401,57 +395,42 @@ function OverviewTab({ preset }: { preset: string }) {
             value: highestBudgetPressure
                 ? `${highestBudgetPressure.utilization}% top utilization`
                 : 'No active pacing',
-            description: highestBudgetPressure?.utilization >= 90
-                ? `${highestBudgetPressure.name} is close to tapping out today, so delivery may slow before the day ends.`
+            note: highestBudgetPressure?.utilization >= 90
+                ? 'One campaign is near cap'
                 : activeBudgetCount > 0
-                    ? `${activeBudgetCount} campaign${activeBudgetCount > 1 ? 's are' : ' is'} actively spending today, which gives you real pacing feedback right now.`
-                    : 'No campaign has meaningfully spent against today’s budget yet, so pacing signals are still quiet.'
+                    ? `${activeBudgetCount} campaign${activeBudgetCount > 1 ? 's' : ''} spending today`
+                    : 'No meaningful spend yet'
         }
+    ];
+    const summaryStats = [
+        { label: 'Focus', value: focus.label || 'Mixed' },
+        { label: 'Primary Mix', value: focus.primaryMix || 'Mixed distribution' },
+        { label: 'Mode', value: showRevenueMetrics ? 'Revenue-aware' : 'Efficiency-first' },
+        { label: 'Value / Conv.', value: m.valuePerConversion ? fmtINR(m.valuePerConversion) : '—' },
     ];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)', gap: 16 }}>
-                <div className="card" style={{ padding: 18 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-                        <div>
-                            <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>
-                                Account Focus
-                            </div>
-                            <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{focus.label || 'Mixed'}</h3>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Overview Read
                         </div>
-                        <span className="badge badge-info">{focus.primaryMix || 'Mixed campaign distribution'}</span>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>{focus.label || 'Mixed'}</div>
+                        <span className="badge badge-info">{showRevenueMetrics ? 'ROAS usable' : 'ROAS secondary'}</span>
                     </div>
-                    <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.65 }}>
-                        {focus.description || 'This account uses a blended Google Ads setup, so the overview balances efficiency and scale signals.'}
-                    </p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-                        <div style={{ padding: 12, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Primary Mix</div>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{focus.primaryMix || 'Mixed campaign distribution'}</div>
-                        </div>
-                        <div style={{ padding: 12, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Overview Mode</div>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{showRevenueMetrics ? 'Revenue-aware' : 'Efficiency-first'}</div>
-                        </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {showRevenueMetrics ? 'Revenue-led view' : 'Efficiency-led view'}
                     </div>
                 </div>
-
-                <div className="card" style={{ padding: 18 }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 8 }}>
-                        Revenue Signal
-                    </div>
-                    <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
-                        {showRevenueMetrics ? 'ROAS is usable' : 'ROAS is secondary'}
-                    </div>
-                    <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
-                        {valueTracking.reason}
-                    </p>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>Value per conversion</span>
-                        <strong style={{ fontSize: 15 }}>{m.valuePerConversion ? fmtINR(m.valuePerConversion) : '—'}</strong>
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+                    {summaryStats.map((item, index) => (
+                        <div key={index} style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>{item.label}</div>
+                            <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.value}</div>
+                        </div>
+                    ))}
                 </div>
             </div>
 
