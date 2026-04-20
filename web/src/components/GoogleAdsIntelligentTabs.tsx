@@ -841,37 +841,44 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
         refetchOnWindowFocus: false
     });
 
-    const { data: biddingData, isLoading: biddingLoading } = useQuery({
-        queryKey: ['google-bidding-local', preset],
+    const { data: keywordData, isLoading: keywordLoading } = useQuery({
+        queryKey: ['google-keywords-local', preset],
         queryFn: async () => {
-            const res = await googleAdsApi.getBidding(preset);
+            const res = await googleAdsApi.getKeywords(preset);
             return res.data.data;
         },
         staleTime: 300000,
         refetchOnWindowFocus: false
     });
 
-    if (geoLoading || biddingLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+    const { data: localPresenceData, isLoading: presenceLoading } = useQuery({
+        queryKey: ['google-local-presence', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getLocalPresence(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+
+    if (geoLoading || keywordLoading || presenceLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const locations = geoData?.locations || [];
-    const keywords = biddingData?.keywords || [];
+    const keywords = keywordData?.keywords || [];
 
-    // Derive GMB-style local signals from geo+keyword data
+    // Derive local intent signals from geo + keyword coverage + available ad interaction data
     const localKeywords = keywords.filter((k: any) =>
-        /near|local|nearby|store|shop|phone|call|direction|location|visit/i.test(k.text || '')
+        /near|local|nearby|store|shop|phone|call|direction|location|visit/i.test(k.keyword || '')
     );
 
     const totalClicks = locations.reduce((s: number, l: any) => s + (l.clicks || 0), 0);
-    const totalSpend  = locations.reduce((s: number, l: any) => s + (l.spend  || 0), 0);
-
-    // Simulate GMB action metrics derived from local search patterns
+    const adClicksToSite = Number(localPresenceData?.adClicksToSite ?? totalClicks ?? 0);
+    const realCallClicks = localPresenceData?.callClicks;
     const estimatedDirections  = Math.round(totalClicks * 0.18);
-    const estimatedCalls       = Math.round(totalClicks * 0.12);
-    const estimatedWebVisits   = Math.round(totalClicks * 0.70);
-    const gmBHealthScore       = Math.min(100, Math.round(
+    const localPresenceScore = Math.min(100, Math.round(
         (localKeywords.length > 0 ? 30 : 0) +
         (estimatedDirections > 50 ? 25 : estimatedDirections > 10 ? 15 : 5) +
-        (estimatedCalls > 30 ? 25 : estimatedCalls > 5 ? 12 : 3) +
+        (realCallClicks === null ? 8 : realCallClicks > 30 ? 25 : realCallClicks > 5 ? 12 : 3) +
         (locations.length > 3 ? 20 : locations.length > 0 ? 10 : 0)
     ));
 
@@ -893,19 +900,19 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                 <div>
                     <h4 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700 }}>Local Search Dominance</h4>
                     <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, maxWidth: 800 }}>
-                        Measuring the bridge between digital ads and physical store visits. This audit correlates geo-targeted spend with 
-                        <strong> high-intent local actions</strong> like direction requests and direct phone calls to quantify your local market impact.
+                        Measuring how strongly your ads show local intent. This audit combines geo coverage, local-intent keywords,
+                        estimated direction demand, and real Google Ads interaction signals where available.
                     </p>
                 </div>
             </div>
 
-            {/* GMB Action Metrics */}
+            {/* Local Presence Metrics */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 {[
-                    { label: 'Get Directions', value: estimatedDirections.toLocaleString(), icon: MapPin, color: '#10b981', tip: 'Users who clicked "Get Directions" on your Google Business Profile after seeing your ad or organic listing.' },
-                    { label: 'Phone Calls', value: estimatedCalls.toLocaleString(), icon: Crosshair, color: '#6366f1', tip: 'Users who tapped "Call" directly from your Google Business Profile or local search result.' },
-                    { label: 'Website Visits', value: estimatedWebVisits.toLocaleString(), icon: Globe, color: '#f59e0b', tip: 'Users who visited your website from local search results.' },
-                    { label: 'GMB Health Score', value: `${gmBHealthScore}/100`, icon: ShieldAlert, color: getScoreColor(gmBHealthScore), tip: 'Composite score based on local keyword presence, geo coverage, call volume, and directions volume.' },
+                    { label: 'Estimated Directions', value: estimatedDirections.toLocaleString(), icon: MapPin, color: '#10b981', tip: 'Estimated from geo-attributed ad clicks in the selected window. This is a directional proxy until Google Business Profile data is integrated.' },
+                    { label: 'Call Interactions', value: realCallClicks === null ? '—' : realCallClicks.toLocaleString(), icon: Crosshair, color: '#6366f1', tip: realCallClicks === null ? 'Google Ads did not return a call-related click metric for this account/query, so no call number is shown.' : 'Real call-related Google Ads click interactions returned from click-type reporting in the selected window.' },
+                    { label: 'Ad Clicks to Site', value: adClicksToSite.toLocaleString(), icon: Globe, color: '#f59e0b', tip: 'Real Google Ads clicks in the selected window. This is ad traffic to site, not Business Profile website clicks.' },
+                    { label: 'Local Presence Score', value: `${localPresenceScore}/100`, icon: ShieldAlert, color: getScoreColor(localPresenceScore), tip: 'Composite score based on local keyword presence, geo coverage, estimated direction demand, and real call interaction data when Google Ads returns it.' },
                 ].map((m, i) => (
                     <div key={i} className="card" style={{ textAlign: 'center', padding: 20 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 10, background: `${m.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
@@ -917,26 +924,26 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                 ))}
             </div>
 
-            {/* GMB Health Audit & Action Plan */}
-            <div className="card" style={{ border: `1px solid ${getScoreColor(gmBHealthScore)}33` }}>
+            {/* Local Presence Audit & Action Plan */}
+            <div className="card" style={{ border: `1px solid ${getScoreColor(localPresenceScore)}33` }}>
                 <div className="card-header" style={{ paddingBottom: 12 }}>
                     <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Activity size={16} color={getScoreColor(gmBHealthScore)} />
-                        Local Health Audit & Action Plan
+                        <Activity size={16} color={getScoreColor(localPresenceScore)} />
+                        Local Presence Audit & Action Plan
                     </h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: getScoreColor(gmBHealthScore) }}>
-                            {gmBHealthScore >= 70 ? 'Optimal Performance' : gmBHealthScore >= 40 ? 'Needs Attention' : 'Critical Deficit'}
+                        <span style={{ fontSize: 13, fontWeight: 700, color: getScoreColor(localPresenceScore) }}>
+                            {localPresenceScore >= 70 ? 'Strong Presence' : localPresenceScore >= 40 ? 'Needs Attention' : 'Weak Local Signal'}
                         </span>
-                        <span className="badge" style={{ background: `${getScoreColor(gmBHealthScore)}15`, color: getScoreColor(gmBHealthScore), borderRadius: 6, padding: '4px 8px' }}>
-                            {gmBHealthScore}/100
+                        <span className="badge" style={{ background: `${getScoreColor(localPresenceScore)}15`, color: getScoreColor(localPresenceScore), borderRadius: 6, padding: '4px 8px' }}>
+                            {localPresenceScore}/100
                         </span>
                     </div>
                 </div>
                 <div style={{ padding: '0 24px 24px' }}>
                     <div style={{ marginBottom: 24, position: 'relative' }}>
                         <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${gmBHealthScore}%`, height: '100%', background: getScoreColor(gmBHealthScore), transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} />
+                            <div style={{ width: `${localPresenceScore}%`, height: '100%', background: getScoreColor(localPresenceScore), transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} />
                         </div>
                     </div>
                     
@@ -957,18 +964,20 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                                 fix: 'Expand geo-targeting to adjacent high-traffic areas to increase physical reach.'
                             },
                             { 
-                                label: 'Conversion Velocity (Directions)', 
+                                label: 'Direction Demand', 
                                 pass: estimatedDirections > 10, 
-                                value: `~${estimatedDirections} directions`,
-                                why: 'Low direction request volume suggests your ads/GMB lack a "visit" hook.',
-                                fix: 'Update GMB profile with fresh photos and ensure "Offer" posts are active.'
+                                value: `~${estimatedDirections} est. directions`,
+                                why: 'Estimated direction demand is soft relative to the amount of local click traffic.',
+                                fix: 'Use stronger visit-oriented language in ads and make location intent clearer in your landing pages.'
                             },
                             { 
-                                label: 'Direct Response (Calls)', 
-                                pass: estimatedCalls > 5, 
-                                value: `~${estimatedCalls} calls`,
-                                why: 'Minimal phone call volume indicates a lack of immediate urgency in creative.',
-                                fix: 'Enable Call Assets and ensure your business phone is visible in ad extensions.'
+                                label: 'Call Response', 
+                                pass: realCallClicks === null ? false : realCallClicks > 5, 
+                                value: realCallClicks === null ? 'No Ads call metric' : `${realCallClicks} call clicks`,
+                                why: realCallClicks === null
+                                    ? 'Google Ads did not surface call interaction clicks for this account or query shape.'
+                                    : 'Minimal call interaction volume indicates weak call intent or missing call assets.',
+                                fix: 'Enable or strengthen call assets and ensure call reporting is configured in Google Ads.'
                             },
                         ].map((item, i) => (
                             <div key={i} style={{ 
@@ -985,7 +994,7 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>
                                         {item.pass ? (
-                                            <span style={{ color: '#10b981' }}>✓ Audit passed. This metric is contributing positively to your local ranking.</span>
+                                            <span style={{ color: '#10b981' }}>✓ Audit passed. This metric is contributing positively to your local presence signal.</span>
                                         ) : (
                                             <>
                                                 <span style={{ color: '#ef4444', fontWeight: 600 }}>Deficit:</span> {item.why} 
@@ -1025,7 +1034,7 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                             <tbody>
                                 {localKeywords.slice(0, 8).map((k: any, i: number) => (
                                     <tr key={i}>
-                                        <td style={{ fontWeight: 600 }}>{k.text}</td>
+                                        <td style={{ fontWeight: 600 }}>{k.keyword}</td>
                                         <td><StatusBadge status={k.status} /></td>
                                         <td>{(k.impressions || 0).toLocaleString()}</td>
                                         <td>{(k.clicks || 0).toLocaleString()}</td>
@@ -1043,7 +1052,7 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                     )}
                 </div>
                 <div style={{ padding: '12px 24px', fontSize: 11, color: 'var(--muted)', background: 'rgba(0,0,0,0.02)', borderTop: '1px solid var(--border)', fontStyle: 'italic' }}>
-                    Metrics are high-confidence estimates based on search intent modeling and geographic interaction signals.
+                    Estimated Directions is modeled from geo-attributed click behavior. Call Interactions and Ad Clicks to Site come from Google Ads when available.
                 </div>
             </div>
 
@@ -1060,22 +1069,25 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
                     <table className="table" style={{ fontSize: 13 }}>
                         <thead>
                             <tr>
-                                <th>Location / Campaign</th>
+                                <th>Location</th>
                                 <th>Spend</th>
                                 <th>Clicks</th>
                                 <th>Est. Directions</th>
-                                <th>Est. Calls</th>
+                                <th>Call Clicks</th>
                                 <th>CPC</th>
                             </tr>
                         </thead>
                         <tbody>
                             {locations.slice(0, 8).map((l: any, i: number) => (
                                 <tr key={i}>
-                                    <td style={{ fontWeight: 600 }}>{l.campaign}</td>
+                                    <td>
+                                        <div style={{ fontWeight: 600 }}>{l.location}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{l.geoLevel} • {l.countryCode || l.targetType}</div>
+                                    </td>
                                     <td>₹{(l.spend || 0).toLocaleString()}</td>
                                     <td>{(l.clicks || 0).toLocaleString()}</td>
                                     <td style={{ color: '#10b981', fontWeight: 600 }}>~{Math.round((l.clicks || 0) * 0.18)}</td>
-                                    <td style={{ color: '#6366f1', fontWeight: 600 }}>~{Math.round((l.clicks || 0) * 0.12)}</td>
+                                    <td style={{ color: '#6366f1', fontWeight: 600 }}>{realCallClicks === null ? '—' : 'See top card'}</td>
                                     <td>₹{l.clicks > 0 ? (l.spend / l.clicks).toFixed(2) : '—'}</td>
                                 </tr>
                             ))}

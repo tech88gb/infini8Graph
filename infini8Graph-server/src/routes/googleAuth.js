@@ -24,6 +24,7 @@ router.get('/quality-score', authenticate, googleAuthController.getQualityScore)
 router.get('/assets', authenticate, googleAuthController.getAssetData);
 router.get('/bidding', authenticate, googleAuthController.getBiddingData);
 router.get('/geo', authenticate, googleAuthController.getGeoData);
+router.get('/local-presence', authenticate, googleAuthController.getLocalPresenceData);
 router.get('/accounts', authenticate, googleAuthController.getAccounts);
 router.post('/update-account', authenticate, googleAuthController.updateAccount);
 

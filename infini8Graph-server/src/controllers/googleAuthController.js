@@ -20,6 +20,7 @@ import {
     getAssetPerformance,
     getBiddingInsights,
     getGeoPerformance,
+    getLocalPresenceSignals,
     getCustomerId,
     invalidateUserGoogleAdsCache,
 } from '../services/googleAdsService.js';
@@ -247,6 +248,18 @@ export async function getGeoData(req, res) {
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Geo performance controller error:', error.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+}
+
+export async function getLocalPresenceData(req, res) {
+    try {
+        const userId = req.user?.userId;
+        const { preset = '30d' } = req.query;
+        const data = await getLocalPresenceSignals(userId, preset);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Local presence controller error:', error.message);
         return res.status(500).json({ success: false, error: 'Failed' });
     }
 }
