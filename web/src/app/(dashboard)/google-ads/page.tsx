@@ -39,6 +39,7 @@ const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'
 const fmt = (n: number, dec = 2) => n?.toLocaleString('en-US', { maximumFractionDigits: dec }) ?? '—';
 const fmtINR = (n: number) => `₹${fmt(n, 2)}`;
 const fmtPct = (n: number) => `${fmt(n, 2)}%`;
+const humanizeEnum = (value: any) => String(value ?? '—').replace(/_/g, ' ');
 
 function buildGoogleAdsExportTables({
     preset,
@@ -849,7 +850,7 @@ function CampaignsTab({ preset }: { preset: string }) {
                         {channels.map((channel) => (
                             <FilterPill
                                 key={channel}
-                                label={channel === 'all' ? 'All channels' : channel.replaceAll('_', ' ')}
+                                label={channel === 'all' ? 'All channels' : humanizeEnum(channel)}
                                 active={channelFilter === channel}
                                 onClick={() => setChannelFilter(channel)}
                                 tone="info"
@@ -913,7 +914,7 @@ function CampaignsTab({ preset }: { preset: string }) {
                                     <td style={{ minWidth: 230 }}>
                                         <div style={{ fontWeight: 600, fontSize: 13 }}>{campaign.name}</div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{campaign.channelType?.replaceAll('_', ' ') || 'Unknown'}</span>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{humanizeEnum(campaign.channelType || 'Unknown')}</span>
                                             <StatusBadge status={campaign.status} />
                                         </div>
                                     </td>
@@ -1157,7 +1158,7 @@ function KeywordsTab({ preset }: { preset: string }) {
                     <select value={matchFilter} onChange={(e) => setMatchFilter(e.target.value)} style={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'var(--foreground)' }}>
                         <option value="all">All matches</option>
                         {matchTypes.filter((match) => match !== 'all').map((match) => (
-                            <option key={match} value={match}>{match.replace('MATCH_TYPE_', '').replaceAll('_', ' ')}</option>
+                            <option key={match} value={match}>{humanizeEnum(String(match).replace('MATCH_TYPE_', ''))}</option>
                         ))}
                     </select>
                     <select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value)} style={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'var(--foreground)' }}>
@@ -1233,9 +1234,9 @@ function KeywordsTab({ preset }: { preset: string }) {
                                     </td>
                                     <td><QualityScore score={k.qualityScore} /></td>
                                     <td style={{ minWidth: 180 }}>
-                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Pred. CTR: {String(k.searchPredictedCtr || '—').replaceAll('_', ' ')}</div>
-                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Ad rel.: {String(k.creativeQualityScore || '—').replaceAll('_', ' ')}</div>
-                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Landing: {String(k.postClickQualityScore || '—').replaceAll('_', ' ')}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Pred. CTR: {humanizeEnum(k.searchPredictedCtr || '—')}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Ad rel.: {humanizeEnum(k.creativeQualityScore || '—')}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Landing: {humanizeEnum(k.postClickQualityScore || '—')}</div>
                                     </td>
                                     <td>
                                         <div style={{ fontWeight: 700 }}>{fmt(k.clicks, 0)}</div>
