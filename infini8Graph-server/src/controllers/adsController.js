@@ -135,6 +135,23 @@ function extractCreativePreview(creative = {}) {
     };
 }
 
+function extractCreativeImageHashes(creative = {}) {
+    const hashes = [
+        creative?.image_hash,
+        creative?.object_story_spec?.link_data?.image_hash,
+        creative?.object_story_spec?.photo_data?.image_hash,
+        creative?.object_story_spec?.template_data?.image_hash,
+        creative?.object_story_spec?.link_data?.child_attachments?.find((item) => item?.image_hash)?.image_hash,
+        ...(Array.isArray(creative?.asset_feed_spec?.images)
+            ? creative.asset_feed_spec.images.map((image) => image?.hash || image?.image_hash)
+            : [])
+    ]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+    return Array.from(new Set(hashes));
+}
+
 function getCreativeAssetCount(creative = {}) {
     const childAssets = creative?.object_story_spec?.link_data?.child_attachments;
     if (Array.isArray(childAssets) && childAssets.length > 0) return childAssets.length;
@@ -169,6 +186,39 @@ function buildSpendSeries(currentRows = [], previousRows = []) {
         previousDateStart: previousSeries[index]?.date_start || null,
         previousDateStop: previousSeries[index]?.date_stop || null
     }));
+}
+
+function getMetricTimestamp(record = {}) {
+    return new Date(record?.updated_time || record?.created_time || 0).getTime();
+}
+
+function upsertCampaignPreview(previewMap, campaignId, record = {}) {
+    const preview = extractCreativePreview(record?.creative || {});
+    if (!preview.thumbnail || !campaignId) return;
+
+    const spend = parseMetricNumber(record?.insights?.data?.[0]?.spend);
+    const freshness = getMetricTimestamp(record);
+    const existing = previewMap.get(campaignId);
+
+    if (!existing || spend > existing.spend || (spend === existing.spend && freshness > existing.freshness)) {
+        previewMap.set(campaignId, {
+            spend,
+            freshness,
+            thumbnail: preview.thumbnail,
+            previewSource: preview.previewSource
+        });
+    }
+}
+
+function normalizeAdImageRows(payload = {}) {
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (payload?.data && typeof payload.data === 'object') {
+        return Object.entries(payload.data).map(([hash, value]) => ({
+            hash,
+            ...value
+        }));
+    }
+    return [];
 }
 
 function mapGeoPerformanceRow(row, keyName) {
@@ -874,32 +924,26 @@ export async function getCampaigns(req, res) {
                     axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                         params: {
                             access_token: accessToken,
-                            fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_url,thumbnail_url,object_story_spec,asset_feed_spec},insights.date_preset(' + datePreset + '){spend}',
+                            fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_hash,image_url,thumbnail_url,object_story_spec,asset_feed_spec},insights.date_preset(' + datePreset + '){spend}',
                             limit: 500
                         }
                     })
                 ]);
 
                 const previewByCampaign = new Map();
+                const imageHashesByCampaign = new Map();
                 if (adsPreviewRes.status === 'fulfilled') {
                     (adsPreviewRes.value.data.data || []).forEach((ad) => {
                         const campaignId = String(ad?.campaign_id || '');
                         if (!campaignId) return;
-
-                        const spend = parseMetricNumber(ad?.insights?.data?.[0]?.spend);
-                        const preview = extractCreativePreview(ad?.creative || {});
-                        const existing = previewByCampaign.get(campaignId);
-                        const freshness = new Date(ad?.updated_time || ad?.created_time || 0).getTime();
-                        if (!preview.thumbnail) return;
-
-                        if (!existing || spend > existing.spend || (spend === existing.spend && freshness > existing.freshness)) {
-                            previewByCampaign.set(campaignId, {
-                                spend,
-                                freshness,
-                                thumbnail: preview.thumbnail,
-                                previewSource: preview.previewSource
-                            });
-                        }
+                        upsertCampaignPreview(previewByCampaign, campaignId, ad);
+                        imageHashesByCampaign.set(
+                            campaignId,
+                            Array.from(new Set([
+                                ...(imageHashesByCampaign.get(campaignId) || []),
+                                ...extractCreativeImageHashes(ad?.creative || {})
+                            ]))
+                        );
                     });
                 }
 
@@ -907,7 +951,89 @@ export async function getCampaigns(req, res) {
                     throw campaignsRes.reason;
                 }
 
-                const campaigns = (campaignsRes.value.data.data || []).map((campaign) => {
+                const rawCampaigns = campaignsRes.value.data.data || [];
+                const missingPreviewCampaignIds = rawCampaigns
+                    .map((campaign) => String(campaign?.id || ''))
+                    .filter((campaignId) => campaignId && !previewByCampaign.has(campaignId))
+                    .slice(0, 60);
+
+                if (missingPreviewCampaignIds.length > 0) {
+                    const previewRequests = await Promise.allSettled(
+                        missingPreviewCampaignIds.map((campaignId) =>
+                            axios.get(`${GRAPH_API_BASE}/${campaignId}/ads`, {
+                                params: {
+                                    access_token: accessToken,
+                                    fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_hash,image_url,thumbnail_url,object_story_spec,asset_feed_spec},insights.date_preset(' + datePreset + '){spend}',
+                                    limit: 12
+                                }
+                            })
+                        )
+                    );
+
+                    previewRequests.forEach((result, index) => {
+                        if (result.status !== 'fulfilled') return;
+                        const campaignId = missingPreviewCampaignIds[index];
+                        (result.value.data.data || []).forEach((ad) => {
+                            upsertCampaignPreview(previewByCampaign, campaignId, ad);
+                            imageHashesByCampaign.set(
+                                campaignId,
+                                Array.from(new Set([
+                                    ...(imageHashesByCampaign.get(campaignId) || []),
+                                    ...extractCreativeImageHashes(ad?.creative || {})
+                                ]))
+                            );
+                        });
+                    });
+                }
+
+                const unresolvedCampaignIds = rawCampaigns
+                    .map((campaign) => String(campaign?.id || ''))
+                    .filter((campaignId) => campaignId && !previewByCampaign.has(campaignId));
+
+                const unresolvedHashes = Array.from(new Set(
+                    unresolvedCampaignIds.flatMap((campaignId) => imageHashesByCampaign.get(campaignId) || [])
+                )).slice(0, 200);
+
+                if (unresolvedCampaignIds.length > 0 && unresolvedHashes.length > 0) {
+                    const adImagesRes = await axios.get(`${GRAPH_API_BASE}/${accountId}/adimages`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: 'hash,url,permalink_url',
+                            hashes: JSON.stringify(unresolvedHashes)
+                        }
+                    });
+
+                    const adImageRows = normalizeAdImageRows(adImagesRes.data || {});
+                    const adImageByHash = new Map(
+                        adImageRows.map((row) => [
+                            String(row?.hash || '').trim(),
+                            row?.url || row?.permalink_url || null
+                        ]).filter(([hash, url]) => hash && url)
+                    );
+
+                    unresolvedCampaignIds.forEach((campaignId) => {
+                        const existing = previewByCampaign.get(campaignId);
+                        if (existing) return;
+
+                        const hashMatch = (imageHashesByCampaign.get(campaignId) || [])
+                            .map((hash) => ({
+                                hash,
+                                url: adImageByHash.get(hash)
+                            }))
+                            .find((entry) => entry.url);
+
+                        if (hashMatch?.url) {
+                            previewByCampaign.set(campaignId, {
+                                spend: 0,
+                                freshness: 0,
+                                thumbnail: hashMatch.url,
+                                previewSource: 'image_hash'
+                            });
+                        }
+                    });
+                }
+
+                const campaigns = rawCampaigns.map((campaign) => {
                     const insights = campaign?.insights?.data?.[0] || {};
                     const profileGroup = mapObjectiveGroup(campaign?.objective);
                     const actions = insights.actions || [];

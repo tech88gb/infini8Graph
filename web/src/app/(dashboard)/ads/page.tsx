@@ -2539,9 +2539,6 @@ export default function AdsPage() {
                                                                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                                                                         {daysLive !== null ? `${daysLive}d live` : 'Start unknown'} • Updated {formatShortDate(campaign.updated_time)}
                                                                     </div>
-                                                                    <div style={{ fontSize: 11, color: '#2563eb', marginTop: 6, fontWeight: 600 }}>
-                                                                        Click thumbnail or name to open creative drilldown
-                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </button>
