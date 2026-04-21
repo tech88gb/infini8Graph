@@ -841,11 +841,13 @@ export function WastedSpendTab({ preset }: { preset: string }) {
         .filter((asset: any) =>
             asset.impressions >= 1000
             && !['BEST', 'GOOD'].includes(asset.performance)
-            && asset.ctr <= averageAssetCtr
+            && asset.ctr <= Math.max(averageAssetCtr * 0.95, averageAssetCtr - 0.15)
         )
         .sort((a: any, b: any) => {
-            const aScore = a.impressions * Math.max(0.1, averageAssetCtr - a.ctr + 0.5);
-            const bScore = b.impressions * Math.max(0.1, averageAssetCtr - b.ctr + 0.5);
+            const aCtrGap = Math.max(0.1, averageAssetCtr - a.ctr);
+            const bCtrGap = Math.max(0.1, averageAssetCtr - b.ctr);
+            const aScore = (aCtrGap * 0.7) + ((a.impressions / 10000) * 0.3);
+            const bScore = (bCtrGap * 0.7) + ((b.impressions / 10000) * 0.3);
             return bScore - aScore;
         })
         .slice(0, 6)
@@ -857,6 +859,13 @@ export function WastedSpendTab({ preset }: { preset: string }) {
                     ? 'CTR is materially below current asset average'
                     : 'High impression volume without strong label support'
         }));
+    const topCtrAssets = [...allAssets]
+        .filter((asset: any) => asset.impressions >= 1000)
+        .sort((a: any, b: any) => {
+            if (b.ctr !== a.ctr) return b.ctr - a.ctr;
+            return b.impressions - a.impressions;
+        })
+        .slice(0, 4);
     const fatigueAssets = allAssets
         .filter((asset: any) =>
             asset.impressions >= 5000
@@ -1170,7 +1179,7 @@ export function WastedSpendTab({ preset }: { preset: string }) {
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Target size={16} color="#6366f1" />
                             Asset Watchlist
-                            <InfoTooltip text="Assets most worth reviewing because they have meaningful impression volume but weak label support or soft CTR." />
+                            <InfoTooltip text="Assets most worth reviewing because their CTR trails the current asset average and impression load is high. Google labels still appear, but ranking leans more on behavior than labels." />
                         </h3>
                         <span className="badge badge-warning">{fmtNumber(watchlistAssets.length)} review</span>
                     </div>
@@ -1206,6 +1215,9 @@ export function WastedSpendTab({ preset }: { preset: string }) {
                         <span className="badge badge-info">{averageAssetCtr.toFixed(2)}% avg CTR</span>
                     </div>
                     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+                            `NOT APPLICABLE` means Google served the asset in this range, but did not assign a quality label like `GOOD` or `BEST`.
+                        </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
                             <div style={{ padding: 12, borderRadius: 10, background: '#10b98112', border: '1px solid #10b98133' }}>
                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Strong</div>
@@ -1216,13 +1228,40 @@ export function WastedSpendTab({ preset }: { preset: string }) {
                                 <div style={{ fontSize: 22, fontWeight: 800, color: '#93c5fd' }}>{fmtNumber(stableAssets.length)}</div>
                             </div>
                             <div style={{ padding: 12, borderRadius: 10, background: '#f59e0b12', border: '1px solid #f59e0b33' }}>
-                                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Unlabeled</div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Google Unlabeled</div>
                                 <div style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b' }}>{fmtNumber(unlabeledAssets.length)}</div>
                             </div>
                             <div style={{ padding: 12, borderRadius: 10, background: '#ef444412', border: '1px solid #ef444433' }}>
                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Fatigue</div>
                                 <div style={{ fontSize: 22, fontWeight: 800, color: '#ef4444' }}>{fmtNumber(fatigueAssets.length)}</div>
                             </div>
+                        </div>
+
+                        <div style={{ padding: 14, borderRadius: 12, background: 'var(--card-raised)', border: '1px solid var(--border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                                <div style={{ fontWeight: 700 }}>Top CTR Assets</div>
+                                <span className="badge badge-success">{fmtNumber(topCtrAssets.length)} surfaced</span>
+                            </div>
+                            {topCtrAssets.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    {topCtrAssets.map((asset: any, index: number) => (
+                                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, paddingBottom: index === topCtrAssets.length - 1 ? 0 : 10, borderBottom: index === topCtrAssets.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
+                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.type.replace(/_/g, ' ')} • {fmtNumber(asset.impressions)} impressions</div>
+                                            </div>
+                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{asset.ctr.toFixed(2)}% CTR</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{asset.performance.replace(/_/g, ' ')}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                                    No high-confidence CTR leaders surfaced with enough impression volume yet.
+                                </div>
+                            )}
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
