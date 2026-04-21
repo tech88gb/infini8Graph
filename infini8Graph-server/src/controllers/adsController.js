@@ -90,11 +90,80 @@ function parseMetricNumber(value) {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function calculateTrendPercent(currentValue, previousValue) {
+    const current = parseMetricNumber(currentValue);
+    const previous = parseMetricNumber(previousValue);
+    if (previous <= 0) return null;
+    return Number((((current - previous) / previous) * 100).toFixed(1));
+}
+
 function findActionMetric(entries = [], candidates = []) {
     return entries.find((entry) => {
         const type = String(entry?.type || entry?.action_type || '').toLowerCase();
         return candidates.some((candidate) => type.includes(candidate));
     }) || null;
+}
+
+function getActionTotal(actions = [], candidates = []) {
+    return actions.reduce((sum, action) => {
+        const type = String(action?.action_type || '').toLowerCase();
+        if (candidates.some((candidate) => type.includes(candidate))) {
+            return sum + parseMetricNumber(action?.value);
+        }
+        return sum;
+    }, 0);
+}
+
+function extractCreativePreview(creative = {}) {
+    const primaryImage = creative?.image_url
+        || creative?.object_story_spec?.video_data?.image_url
+        || creative?.object_story_spec?.photo_data?.image_url
+        || creative?.object_story_spec?.link_data?.child_attachments?.find((item) => item?.picture)?.picture
+        || creative?.object_story_spec?.link_data?.picture
+        || null;
+    const thumbnail = primaryImage || creative?.thumbnail_url || null;
+    const previewSource = primaryImage ? 'creative' : creative?.thumbnail_url ? 'thumbnail' : 'none';
+
+    return {
+        thumbnail,
+        previewSource
+    };
+}
+
+function getCreativeAssetCount(creative = {}) {
+    const childAssets = creative?.object_story_spec?.link_data?.child_attachments;
+    if (Array.isArray(childAssets) && childAssets.length > 0) return childAssets.length;
+
+    const hasVisual = Boolean(
+        creative?.image_url
+        || creative?.thumbnail_url
+        || creative?.object_story_spec?.video_data?.image_url
+        || creative?.object_story_spec?.photo_data?.image_url
+        || creative?.object_story_spec?.link_data?.picture
+    );
+    return hasVisual ? 1 : 0;
+}
+
+function sortInsightsByDate(rows = []) {
+    return [...rows].sort((a, b) => {
+        const aTime = new Date(a?.date_start || a?.date_stop || 0).getTime();
+        const bTime = new Date(b?.date_start || b?.date_stop || 0).getTime();
+        return aTime - bTime;
+    });
+}
+
+function buildSpendSeries(currentRows = [], previousRows = []) {
+    const currentSeries = sortInsightsByDate(currentRows);
+    const previousSeries = sortInsightsByDate(previousRows);
+
+    return currentSeries.map((row, index) => ({
+        dateStart: row?.date_start || null,
+        dateStop: row?.date_stop || null,
+        spend: parseMetricNumber(row?.spend),
+        previousSpend: parseMetricNumber(previousSeries[index]?.spend),
+        previousDateStart: previousSeries[index]?.date_start || null,
+        previousDateStop: previousSeries[index]?.date_stop || null
+    }));
 }
 
 function mapGeoPerformanceRow(row, keyName) {
@@ -786,18 +855,52 @@ export async function getCampaigns(req, res) {
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
         const campaignsPayload = await withMetaCache(
-            buildMetaCacheKey('meta-campaigns-v2', [req.user.userId, accountId, datePreset]),
+            buildMetaCacheKey('meta-campaigns-v3', [req.user.userId, accountId, datePreset]),
             META_CACHE_TTL.campaigns,
             async () => {
-                const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
-                    params: {
-                        access_token: accessToken,
-                        fields: 'id,name,status,effective_status,configured_status,objective,buying_type,smart_promotion_type,special_ad_categories,bid_strategy,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas}',
-                        limit: 500
-                    }
-                });
+                const [campaignsRes, adsPreviewRes] = await Promise.allSettled([
+                    axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: 'id,name,status,effective_status,configured_status,objective,buying_type,smart_promotion_type,special_ad_categories,bid_strategy,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas}',
+                            limit: 500
+                        }
+                    }),
+                    axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: 'id,name,campaign_id,creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){spend}',
+                            limit: 500
+                        }
+                    })
+                ]);
 
-                const campaigns = (response.data.data || []).map((campaign) => {
+                const previewByCampaign = new Map();
+                if (adsPreviewRes.status === 'fulfilled') {
+                    (adsPreviewRes.value.data.data || []).forEach((ad) => {
+                        const campaignId = String(ad?.campaign_id || '');
+                        if (!campaignId) return;
+
+                        const spend = parseMetricNumber(ad?.insights?.data?.[0]?.spend);
+                        const preview = extractCreativePreview(ad?.creative || {});
+                        const existing = previewByCampaign.get(campaignId);
+                        if (!preview.thumbnail) return;
+
+                        if (!existing || spend > existing.spend) {
+                            previewByCampaign.set(campaignId, {
+                                spend,
+                                thumbnail: preview.thumbnail,
+                                previewSource: preview.previewSource
+                            });
+                        }
+                    });
+                }
+
+                if (campaignsRes.status !== 'fulfilled') {
+                    throw campaignsRes.reason;
+                }
+
+                const campaigns = (campaignsRes.value.data.data || []).map((campaign) => {
                     const insights = campaign?.insights?.data?.[0] || {};
                     const profileGroup = mapObjectiveGroup(campaign?.objective);
                     const actions = insights.actions || [];
@@ -822,6 +925,7 @@ export async function getCampaigns(req, res) {
                         : parseMetricNumber(campaign?.lifetime_budget) > 0
                             ? 'Lifetime'
                             : 'No budget';
+                    const preview = previewByCampaign.get(String(campaign?.id || ''));
 
                     return {
                         ...campaign,
@@ -832,6 +936,8 @@ export async function getCampaigns(req, res) {
                         configuredStatus,
                         budgetMode,
                         budgetAmount: parseMetricNumber(campaign?.daily_budget) || parseMetricNumber(campaign?.lifetime_budget),
+                        thumbnail: preview?.thumbnail || null,
+                        previewSource: preview?.previewSource || 'none',
                         metrics: {
                             spend: parseMetricNumber(insights.spend),
                             impressions: parseMetricNumber(insights.impressions),
@@ -882,6 +988,382 @@ export async function getCampaigns(req, res) {
     } catch (error) {
         console.error('Campaigns error:', error.response?.data || error.message);
         res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch campaigns' });
+    }
+}
+
+/**
+ * Get drill-down analytics for a specific campaign
+ */
+export async function getCampaignDrilldown(req, res) {
+    try {
+        const { adAccountId, campaignId } = req.params;
+        const { datePreset = 'last_30d' } = req.query;
+        const accessToken = await authService.getAccessToken(req.user.userId);
+
+        if (!accessToken) {
+            return res.status(401).json({ success: false, error: 'Access token not found' });
+        }
+
+        const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+        const cacheKey = buildMetaCacheKey('meta-campaign-drilldown-v1', [req.user.userId, accountId, campaignId, datePreset]);
+        const payload = await withMetaCache(cacheKey, META_CACHE_TTL.deep, async () => {
+            const comparisonRange = getRollingComparisonRange(datePreset);
+            const currentRange = comparisonRange?.current || null;
+            const previousRange = comparisonRange?.previous || null;
+            const currentPeriodLabel = String(datePreset || '').toLowerCase() === 'today'
+                ? 'Today'
+                : `Current ${String(datePreset || '').replace('last_', '').replace('d', '-day').replace('maximum', 'full').toLowerCase()}`;
+            const campaignFiltering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
+            const aggregateFields = 'spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas,video_play_actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions';
+
+            const [campaignMetaRes, campaignCurrentRes, campaignDailyCurrentRes, adsMetaRes, adCurrentRes, adDailyCurrentRes, campaignPreviousRes, campaignDailyPreviousRes, adPreviousRes, adDailyPreviousRes] = await Promise.allSettled([
+                axios.get(`${GRAPH_API_BASE}/${campaignId}`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,status,effective_status,configured_status,objective,buying_type,smart_promotion_type,special_ad_categories,bid_strategy,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget'
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: aggregateFields,
+                        filtering: campaignFiltering,
+                        level: 'campaign',
+                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                        limit: 1
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend',
+                        filtering: campaignFiltering,
+                        level: 'campaign',
+                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                        time_increment: 1,
+                        limit: 500
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${campaignId}/ads`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,status,effective_status,updated_time,created_time,adset{id,name},creative{id,name,image_url,thumbnail_url,object_story_spec}',
+                        limit: 500
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: aggregateFields,
+                        filtering: campaignFiltering,
+                        level: 'ad',
+                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                        limit: 5000
+                    }
+                }),
+                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend',
+                        filtering: campaignFiltering,
+                        level: 'ad',
+                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                        time_increment: 1,
+                        limit: 5000
+                    }
+                }),
+                previousRange
+                    ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: aggregateFields,
+                            filtering: campaignFiltering,
+                            level: 'campaign',
+                            time_range: JSON.stringify(previousRange),
+                            limit: 1
+                        }
+                    })
+                    : Promise.resolve({ data: { data: [] } }),
+                previousRange
+                    ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: 'spend',
+                            filtering: campaignFiltering,
+                            level: 'campaign',
+                            time_range: JSON.stringify(previousRange),
+                            time_increment: 1,
+                            limit: 500
+                        }
+                    })
+                    : Promise.resolve({ data: { data: [] } }),
+                previousRange
+                    ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: aggregateFields,
+                            filtering: campaignFiltering,
+                            level: 'ad',
+                            time_range: JSON.stringify(previousRange),
+                            limit: 5000
+                        }
+                    })
+                    : Promise.resolve({ data: { data: [] } }),
+                previousRange
+                    ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: 'spend',
+                            filtering: campaignFiltering,
+                            level: 'ad',
+                            time_range: JSON.stringify(previousRange),
+                            time_increment: 1,
+                            limit: 5000
+                        }
+                    })
+                    : Promise.resolve({ data: { data: [] } })
+            ]);
+
+            const campaignMeta = campaignMetaRes.status === 'fulfilled' ? campaignMetaRes.value.data || {} : {};
+            const currentCampaignInsights = campaignCurrentRes.status === 'fulfilled' ? campaignCurrentRes.value.data.data?.[0] || {} : {};
+            const previousCampaignInsights = campaignPreviousRes.status === 'fulfilled' ? campaignPreviousRes.value.data.data?.[0] || {} : {};
+            const currentCampaignDaily = campaignDailyCurrentRes.status === 'fulfilled' ? campaignDailyCurrentRes.value.data.data || [] : [];
+            const previousCampaignDaily = campaignDailyPreviousRes.status === 'fulfilled' ? campaignDailyPreviousRes.value.data.data || [] : [];
+            const adsMeta = adsMetaRes.status === 'fulfilled' ? adsMetaRes.value.data.data || [] : [];
+            const currentAdRows = adCurrentRes.status === 'fulfilled' ? adCurrentRes.value.data.data || [] : [];
+            const previousAdRows = adPreviousRes.status === 'fulfilled' ? adPreviousRes.value.data.data || [] : [];
+            const currentAdDailyRows = adDailyCurrentRes.status === 'fulfilled' ? adDailyCurrentRes.value.data.data || [] : [];
+            const previousAdDailyRows = adDailyPreviousRes.status === 'fulfilled' ? adDailyPreviousRes.value.data.data || [] : [];
+
+            const profileGroup = mapObjectiveGroup(campaignMeta?.objective);
+            const currentActions = currentCampaignInsights.actions || [];
+            const currentActionValues = currentCampaignInsights.action_values || [];
+            const currentCostPerAction = currentCampaignInsights.cost_per_action_type || [];
+            const currentPurchaseMetric = findActionMetric(currentActions, ACTION_CANDIDATES.purchases);
+            const currentPurchaseValueMetric = findActionMetric(currentActionValues, ACTION_CANDIDATES.purchases);
+            const currentPurchaseCostMetric = findActionMetric(currentCostPerAction, ACTION_CANDIDATES.purchases);
+            const currentLeadMetric = findActionMetric(currentActions, ACTION_CANDIDATES.leads);
+            const currentLeadCostMetric = findActionMetric(currentCostPerAction, ACTION_CANDIDATES.leads);
+            const currentInlineLinkClicks = parseMetricNumber(currentCampaignInsights.inline_link_clicks);
+            const currentOutboundClicks = parseMetricNumber(currentCampaignInsights.outbound_clicks?.[0]?.value || currentCampaignInsights.outbound_clicks);
+            const currentClickCount = currentOutboundClicks || currentInlineLinkClicks || parseMetricNumber(currentCampaignInsights.clicks);
+            const currentPurchaseRoas = Array.isArray(currentCampaignInsights.purchase_roas)
+                ? parseMetricNumber(currentCampaignInsights.purchase_roas[0]?.value)
+                : parseMetricNumber(currentCampaignInsights.purchase_roas);
+            const currentPrimaryMetric = pickPrimaryCampaignMetric(profileGroup, {
+                ...currentCampaignInsights,
+                outbound_clicks: currentOutboundClicks,
+                inline_link_clicks: currentInlineLinkClicks
+            });
+
+            const previousInlineLinkClicks = parseMetricNumber(previousCampaignInsights.inline_link_clicks);
+            const previousOutboundClicks = parseMetricNumber(previousCampaignInsights.outbound_clicks?.[0]?.value || previousCampaignInsights.outbound_clicks);
+            const previousPrimaryMetric = pickPrimaryCampaignMetric(profileGroup, {
+                ...previousCampaignInsights,
+                outbound_clicks: previousOutboundClicks,
+                inline_link_clicks: previousInlineLinkClicks
+            });
+
+            const budgetMode = parseMetricNumber(campaignMeta?.daily_budget) > 0
+                ? 'Daily'
+                : parseMetricNumber(campaignMeta?.lifetime_budget) > 0
+                    ? 'Lifetime'
+                    : 'No budget';
+
+            const currentAdById = new Map(currentAdRows.map((row) => [String(row?.ad_id || ''), row]));
+            const previousAdById = new Map(previousAdRows.map((row) => [String(row?.ad_id || ''), row]));
+            const currentAdDailyById = currentAdDailyRows.reduce((acc, row) => {
+                const adId = String(row?.ad_id || '');
+                if (!adId) return acc;
+                if (!acc.has(adId)) acc.set(adId, []);
+                acc.get(adId).push(row);
+                return acc;
+            }, new Map());
+            const previousAdDailyById = previousAdDailyRows.reduce((acc, row) => {
+                const adId = String(row?.ad_id || '');
+                if (!adId) return acc;
+                if (!acc.has(adId)) acc.set(adId, []);
+                acc.get(adId).push(row);
+                return acc;
+            }, new Map());
+
+            const adMetaById = new Map(adsMeta.map((ad) => [String(ad?.id || ''), ad]));
+            const adIds = new Set([
+                ...Array.from(adMetaById.keys()),
+                ...Array.from(currentAdById.keys())
+            ]);
+
+            const creatives = Array.from(adIds).map((adId) => {
+                const adMeta = adMetaById.get(adId) || {};
+                const currentRow = currentAdById.get(adId) || {};
+                const previousRow = previousAdById.get(adId) || {};
+                const creative = adMeta?.creative || {};
+                const preview = extractCreativePreview(creative);
+                const assetCount = getCreativeAssetCount(creative);
+                const insightsActions = currentRow.actions || [];
+                const insightsActionValues = currentRow.action_values || [];
+                const insightsCostPerAction = currentRow.cost_per_action_type || [];
+                const purchases = findActionMetric(insightsActions, ACTION_CANDIDATES.purchases);
+                const purchaseValue = findActionMetric(insightsActionValues, ACTION_CANDIDATES.purchases);
+                const purchaseCost = findActionMetric(insightsCostPerAction, ACTION_CANDIDATES.purchases);
+                const leads = findActionMetric(insightsActions, ACTION_CANDIDATES.leads);
+                const leadCost = findActionMetric(insightsCostPerAction, ACTION_CANDIDATES.leads);
+                const outboundClicks = parseMetricNumber(currentRow.outbound_clicks?.[0]?.value || currentRow.outbound_clicks);
+                const inlineLinkClicks = parseMetricNumber(currentRow.inline_link_clicks);
+                const clicks = outboundClicks || inlineLinkClicks || parseMetricNumber(currentRow.clicks);
+                const spend = parseMetricNumber(currentRow.spend);
+                const purchaseRoas = Array.isArray(currentRow.purchase_roas)
+                    ? parseMetricNumber(currentRow.purchase_roas[0]?.value)
+                    : parseMetricNumber(currentRow.purchase_roas);
+                const primaryMetric = pickPrimaryCampaignMetric(profileGroup, {
+                    ...currentRow,
+                    outbound_clicks: outboundClicks,
+                    inline_link_clicks: inlineLinkClicks
+                });
+                const videoPlays = parseMetricNumber(currentRow.video_play_actions?.[0]?.value || currentRow.video_play_actions || currentRow.impressions);
+                const p25 = parseMetricNumber(currentRow.video_p25_watched_actions?.[0]?.value || currentRow.video_p25_watched_actions);
+                const p50 = parseMetricNumber(currentRow.video_p50_watched_actions?.[0]?.value || currentRow.video_p50_watched_actions);
+                const p75 = parseMetricNumber(currentRow.video_p75_watched_actions?.[0]?.value || currentRow.video_p75_watched_actions);
+                const p100 = parseMetricNumber(currentRow.video_p100_watched_actions?.[0]?.value || currentRow.video_p100_watched_actions);
+                const completionRate = videoPlays > 0 ? (p100 / videoPlays) * 100 : 0;
+                const hookRate = videoPlays > 0 ? (p25 / videoPlays) * 100 : 0;
+                const holdRate = p25 > 0 ? (p75 / p25) * 100 : 0;
+                const currentSpend = spend;
+                const previousSpend = parseMetricNumber(previousRow.spend);
+                const currentDaily = currentAdDailyById.get(adId) || [];
+                const previousDaily = previousAdDailyById.get(adId) || [];
+                const adsetMeta = adMeta?.adset || {};
+                const hasVideo = Boolean(
+                    p25 > 0
+                    || creative?.object_story_spec?.video_data
+                    || currentRow.video_play_actions
+                );
+
+                return {
+                    adId,
+                    adName: adMeta?.name || currentRow?.ad_name || 'Unnamed ad',
+                    status: adMeta?.effective_status || adMeta?.status || 'UNKNOWN',
+                    updatedTime: adMeta?.updated_time || null,
+                    createdTime: adMeta?.created_time || null,
+                    adsetId: adsetMeta?.id || currentRow?.adset_id || null,
+                    adsetName: adsetMeta?.name || currentRow?.adset_name || null,
+                    creativeId: creative?.id || null,
+                    creativeName: creative?.name || null,
+                    assetCount,
+                    hasVideo,
+                    thumbnail: preview.thumbnail,
+                    previewSource: preview.previewSource,
+                    primaryMetric,
+                    metrics: {
+                        spend: currentSpend,
+                        previousSpend,
+                        spendDeltaPct: calculateTrendPercent(currentSpend, previousSpend),
+                        impressions: parseMetricNumber(currentRow.impressions),
+                        reach: parseMetricNumber(currentRow.reach),
+                        clicks: parseMetricNumber(currentRow.clicks),
+                        linkClicks: clicks,
+                        ctr: parseMetricNumber(currentRow.ctr),
+                        cpc: parseMetricNumber(currentRow.cpc),
+                        cpm: parseMetricNumber(currentRow.cpm),
+                        frequency: parseMetricNumber(currentRow.frequency),
+                        purchases: parseMetricNumber(purchases?.value),
+                        purchaseValue: parseMetricNumber(purchaseValue?.value),
+                        purchaseRoas,
+                        costPerPurchase: parseMetricNumber(purchaseCost?.value),
+                        leads: parseMetricNumber(leads?.value),
+                        costPerLead: parseMetricNumber(leadCost?.value)
+                    },
+                    retention: hasVideo ? {
+                        videoPlays,
+                        p25,
+                        p50,
+                        p75,
+                        p100,
+                        hookRate: Number(hookRate.toFixed(1)),
+                        holdRate: Number(holdRate.toFixed(1)),
+                        completionRate: Number(completionRate.toFixed(1))
+                    } : null,
+                    comparison: comparisonRange ? {
+                        label: comparisonRange.label,
+                        currentSpend,
+                        previousSpend,
+                        spendDeltaPct: calculateTrendPercent(currentSpend, previousSpend)
+                    } : null,
+                    spendTrend: buildSpendSeries(currentDaily, previousDaily)
+                };
+            }).filter((ad) => ad.metrics.spend > 0 || ad.metrics.impressions > 0 || ad.thumbnail);
+
+            creatives.sort((a, b) => b.metrics.spend - a.metrics.spend);
+
+            const topCreativePreview = creatives.find((ad) => ad.thumbnail) || null;
+            const uniqueCreativeIds = new Set(creatives.map((ad) => String(ad.creativeId || ad.adId)));
+            const creativeSummary = {
+                adsCount: creatives.length,
+                activeAdsCount: creatives.filter((ad) => String(ad.status || '').toUpperCase() === 'ACTIVE').length,
+                creativesCount: uniqueCreativeIds.size,
+                videoCreativesCount: creatives.filter((ad) => ad.hasVideo).length,
+                multiAssetCreativesCount: creatives.filter((ad) => ad.assetCount > 1).length
+            };
+
+            return {
+                campaign: {
+                    id: campaignMeta?.id || campaignId,
+                    name: campaignMeta?.name || 'Unnamed campaign',
+                    objective: campaignMeta?.objective || null,
+                    objectiveLabel: campaignMeta?.objective ? toTitleFromSnake(campaignMeta.objective) : 'General',
+                    type: profileGroup,
+                    typeLabel: getCampaignTypeLabel(campaignMeta?.objective),
+                    status: campaignMeta?.effective_status || campaignMeta?.status || 'UNKNOWN',
+                    configuredStatus: campaignMeta?.configured_status || campaignMeta?.status || 'UNKNOWN',
+                    buyingType: campaignMeta?.buying_type || 'Auction',
+                    budgetMode,
+                    budgetAmount: parseMetricNumber(campaignMeta?.daily_budget) || parseMetricNumber(campaignMeta?.lifetime_budget),
+                    startTime: campaignMeta?.start_time || campaignMeta?.created_time || null,
+                    updatedTime: campaignMeta?.updated_time || null,
+                    thumbnail: topCreativePreview?.thumbnail || null,
+                    previewSource: topCreativePreview?.previewSource || 'none',
+                    metrics: {
+                        spend: parseMetricNumber(currentCampaignInsights.spend),
+                        impressions: parseMetricNumber(currentCampaignInsights.impressions),
+                        reach: parseMetricNumber(currentCampaignInsights.reach),
+                        clicks: parseMetricNumber(currentCampaignInsights.clicks),
+                        linkClicks: currentClickCount,
+                        ctr: parseMetricNumber(currentCampaignInsights.ctr),
+                        cpc: parseMetricNumber(currentCampaignInsights.cpc),
+                        cpm: parseMetricNumber(currentCampaignInsights.cpm),
+                        frequency: parseMetricNumber(currentCampaignInsights.frequency),
+                        purchases: parseMetricNumber(currentPurchaseMetric?.value),
+                        purchaseValue: parseMetricNumber(currentPurchaseValueMetric?.value),
+                        purchaseRoas: currentPurchaseRoas,
+                        costPerPurchase: parseMetricNumber(currentPurchaseCostMetric?.value),
+                        leads: parseMetricNumber(currentLeadMetric?.value),
+                        costPerLead: parseMetricNumber(currentLeadCostMetric?.value)
+                    },
+                    primaryMetric: currentPrimaryMetric,
+                    comparison: comparisonRange ? {
+                        label: comparisonRange.label,
+                        currentSpend: parseMetricNumber(currentCampaignInsights.spend),
+                        previousSpend: parseMetricNumber(previousCampaignInsights.spend),
+                        spendDeltaPct: calculateTrendPercent(currentCampaignInsights.spend, previousCampaignInsights.spend),
+                        currentResults: parseMetricNumber(currentPrimaryMetric?.value),
+                        previousResults: parseMetricNumber(previousPrimaryMetric?.value)
+                    } : null
+                },
+                creativeSummary,
+                spendTrend: {
+                    currentLabel: currentPeriodLabel,
+                    comparisonLabel: comparisonRange?.label || null,
+                    points: buildSpendSeries(currentCampaignDaily, previousCampaignDaily)
+                },
+                creatives,
+                datePreset
+            };
+        });
+
+        res.json({ success: true, data: payload });
+    } catch (error) {
+        console.error('Campaign drilldown error:', error.response?.data || error.message);
+        res.status(500).json({ success: false, error: error.response?.data?.error?.message || 'Failed to fetch campaign drilldown' });
     }
 }
 
