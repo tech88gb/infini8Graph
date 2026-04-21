@@ -177,8 +177,14 @@ export const adsApi = {
     getGeography: (adAccountId: string, datePreset = 'last_90d') =>
         api.get(`/ads/accounts/${adAccountId}/geography?datePreset=${datePreset}`),
     getCampaigns: (adAccountId: string, datePreset = 'last_30d') => api.get(`/ads/accounts/${adAccountId}/campaigns?datePreset=${datePreset}`),
-    getCampaignDrilldown: (adAccountId: string, campaignId: string, datePreset = 'last_30d') =>
-        api.get(`/ads/accounts/${adAccountId}/campaigns/${campaignId}/drilldown?datePreset=${datePreset}`),
+    getCampaignDrilldown: (
+        adAccountId: string,
+        campaignId: string,
+        datePreset = 'last_30d',
+        creativeOffset = 0,
+        creativeLimit = 4
+    ) =>
+        api.get(`/ads/accounts/${adAccountId}/campaigns/${campaignId}/drilldown?datePreset=${datePreset}&creativeOffset=${creativeOffset}&creativeLimit=${creativeLimit}`),
     getAdSets: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/adsets`),
     getAds: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/ads`),
     getPageInsights: () => api.get('/ads/page-insights'),

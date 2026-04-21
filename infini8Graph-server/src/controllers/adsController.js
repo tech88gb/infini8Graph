@@ -117,9 +117,14 @@ function getActionTotal(actions = [], candidates = []) {
 function extractCreativePreview(creative = {}) {
     const primaryImage = creative?.image_url
         || creative?.object_story_spec?.video_data?.image_url
+        || creative?.object_story_spec?.video_data?.picture
         || creative?.object_story_spec?.photo_data?.image_url
+        || creative?.object_story_spec?.photo_data?.url
+        || creative?.object_story_spec?.template_data?.picture
+        || creative?.object_story_spec?.link_data?.child_attachments?.find((item) => item?.image_url)?.image_url
         || creative?.object_story_spec?.link_data?.child_attachments?.find((item) => item?.picture)?.picture
         || creative?.object_story_spec?.link_data?.picture
+        || creative?.asset_feed_spec?.images?.[0]?.url
         || null;
     const thumbnail = primaryImage || creative?.thumbnail_url || null;
     const previewSource = primaryImage ? 'creative' : creative?.thumbnail_url ? 'thumbnail' : 'none';
@@ -869,7 +874,7 @@ export async function getCampaigns(req, res) {
                     axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                         params: {
                             access_token: accessToken,
-                            fields: 'id,name,campaign_id,creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){spend}',
+                            fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_url,thumbnail_url,object_story_spec,asset_feed_spec},insights.date_preset(' + datePreset + '){spend}',
                             limit: 500
                         }
                     })
@@ -884,11 +889,13 @@ export async function getCampaigns(req, res) {
                         const spend = parseMetricNumber(ad?.insights?.data?.[0]?.spend);
                         const preview = extractCreativePreview(ad?.creative || {});
                         const existing = previewByCampaign.get(campaignId);
+                        const freshness = new Date(ad?.updated_time || ad?.created_time || 0).getTime();
                         if (!preview.thumbnail) return;
 
-                        if (!existing || spend > existing.spend) {
+                        if (!existing || spend > existing.spend || (spend === existing.spend && freshness > existing.freshness)) {
                             previewByCampaign.set(campaignId, {
                                 spend,
+                                freshness,
                                 thumbnail: preview.thumbnail,
                                 previewSource: preview.previewSource
                             });
@@ -997,7 +1004,11 @@ export async function getCampaigns(req, res) {
 export async function getCampaignDrilldown(req, res) {
     try {
         const { adAccountId, campaignId } = req.params;
-        const { datePreset = 'last_30d' } = req.query;
+        const {
+            datePreset = 'last_30d',
+            creativeOffset = '0',
+            creativeLimit = '4'
+        } = req.query;
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -1005,7 +1016,9 @@ export async function getCampaignDrilldown(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-campaign-drilldown-v1', [req.user.userId, accountId, campaignId, datePreset]);
+        const offset = Math.max(0, parseInt(String(creativeOffset || '0'), 10) || 0);
+        const limit = Math.min(12, Math.max(1, parseInt(String(creativeLimit || '4'), 10) || 4));
+        const cacheKey = buildMetaCacheKey('meta-campaign-drilldown-v2', [req.user.userId, accountId, campaignId, datePreset, offset, limit]);
         const payload = await withMetaCache(cacheKey, META_CACHE_TTL.deep, async () => {
             const comparisonRange = getRollingComparisonRange(datePreset);
             const currentRange = comparisonRange?.current || null;
@@ -1013,10 +1026,10 @@ export async function getCampaignDrilldown(req, res) {
             const currentPeriodLabel = String(datePreset || '').toLowerCase() === 'today'
                 ? 'Today'
                 : `Current ${String(datePreset || '').replace('last_', '').replace('d', '-day').replace('maximum', 'full').toLowerCase()}`;
-            const campaignFiltering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
             const aggregateFields = 'spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas,video_play_actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions';
+            const campaignFiltering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
 
-            const [campaignMetaRes, campaignCurrentRes, campaignDailyCurrentRes, adsMetaRes, adCurrentRes, adDailyCurrentRes, campaignPreviousRes, campaignDailyPreviousRes, adPreviousRes, adDailyPreviousRes] = await Promise.allSettled([
+            const [campaignMetaRes, campaignCurrentRes, campaignDailyCurrentRes, adsMetaRes, campaignPreviousRes, campaignDailyPreviousRes] = await Promise.allSettled([
                 axios.get(`${GRAPH_API_BASE}/${campaignId}`, {
                     params: {
                         access_token: accessToken,
@@ -1047,29 +1060,8 @@ export async function getCampaignDrilldown(req, res) {
                 axios.get(`${GRAPH_API_BASE}/${campaignId}/ads`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'id,name,status,effective_status,updated_time,created_time,adset{id,name},creative{id,name,image_url,thumbnail_url,object_story_spec}',
+                        fields: 'id,name,status,effective_status,updated_time,created_time,adset{id,name},creative{id,name,image_url,thumbnail_url,object_story_spec,asset_feed_spec}',
                         limit: 500
-                    }
-                }),
-                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                    params: {
-                        access_token: accessToken,
-                        fields: aggregateFields,
-                        filtering: campaignFiltering,
-                        level: 'ad',
-                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
-                        limit: 5000
-                    }
-                }),
-                axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                    params: {
-                        access_token: accessToken,
-                        fields: 'spend',
-                        filtering: campaignFiltering,
-                        level: 'ad',
-                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
-                        time_increment: 1,
-                        limit: 5000
                     }
                 }),
                 previousRange
@@ -1096,31 +1088,6 @@ export async function getCampaignDrilldown(req, res) {
                             limit: 500
                         }
                     })
-                    : Promise.resolve({ data: { data: [] } }),
-                previousRange
-                    ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                        params: {
-                            access_token: accessToken,
-                            fields: aggregateFields,
-                            filtering: campaignFiltering,
-                            level: 'ad',
-                            time_range: JSON.stringify(previousRange),
-                            limit: 5000
-                        }
-                    })
-                    : Promise.resolve({ data: { data: [] } }),
-                previousRange
-                    ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                        params: {
-                            access_token: accessToken,
-                            fields: 'spend',
-                            filtering: campaignFiltering,
-                            level: 'ad',
-                            time_range: JSON.stringify(previousRange),
-                            time_increment: 1,
-                            limit: 5000
-                        }
-                    })
                     : Promise.resolve({ data: { data: [] } })
             ]);
 
@@ -1130,10 +1097,6 @@ export async function getCampaignDrilldown(req, res) {
             const currentCampaignDaily = campaignDailyCurrentRes.status === 'fulfilled' ? campaignDailyCurrentRes.value.data.data || [] : [];
             const previousCampaignDaily = campaignDailyPreviousRes.status === 'fulfilled' ? campaignDailyPreviousRes.value.data.data || [] : [];
             const adsMeta = adsMetaRes.status === 'fulfilled' ? adsMetaRes.value.data.data || [] : [];
-            const currentAdRows = adCurrentRes.status === 'fulfilled' ? adCurrentRes.value.data.data || [] : [];
-            const previousAdRows = adPreviousRes.status === 'fulfilled' ? adPreviousRes.value.data.data || [] : [];
-            const currentAdDailyRows = adDailyCurrentRes.status === 'fulfilled' ? adDailyCurrentRes.value.data.data || [] : [];
-            const previousAdDailyRows = adDailyPreviousRes.status === 'fulfilled' ? adDailyPreviousRes.value.data.data || [] : [];
 
             const profileGroup = mapObjectiveGroup(campaignMeta?.objective);
             const currentActions = currentCampaignInsights.actions || [];
@@ -1169,34 +1132,66 @@ export async function getCampaignDrilldown(req, res) {
                 : parseMetricNumber(campaignMeta?.lifetime_budget) > 0
                     ? 'Lifetime'
                     : 'No budget';
+            const orderedAdsMeta = [...adsMeta].sort((a, b) => {
+                const aTime = new Date(a?.updated_time || a?.created_time || 0).getTime();
+                const bTime = new Date(b?.updated_time || b?.created_time || 0).getTime();
+                return bTime - aTime;
+            });
+            const visibleAdsMeta = orderedAdsMeta.slice(offset, offset + limit);
+            const topCreativePreviewSource = orderedAdsMeta
+                .map((ad) => ({ ...extractCreativePreview(ad?.creative || {}), ad }))
+                .find((item) => item.thumbnail) || null;
 
-            const currentAdById = new Map(currentAdRows.map((row) => [String(row?.ad_id || ''), row]));
-            const previousAdById = new Map(previousAdRows.map((row) => [String(row?.ad_id || ''), row]));
-            const currentAdDailyById = currentAdDailyRows.reduce((acc, row) => {
-                const adId = String(row?.ad_id || '');
-                if (!adId) return acc;
-                if (!acc.has(adId)) acc.set(adId, []);
-                acc.get(adId).push(row);
-                return acc;
-            }, new Map());
-            const previousAdDailyById = previousAdDailyRows.reduce((acc, row) => {
-                const adId = String(row?.ad_id || '');
-                if (!adId) return acc;
-                if (!acc.has(adId)) acc.set(adId, []);
-                acc.get(adId).push(row);
-                return acc;
-            }, new Map());
+            const detailBundles = await Promise.all(visibleAdsMeta.map(async (adMeta) => {
+                const adId = String(adMeta?.id || '');
+                const [currentAdRes, currentAdDailyRes, previousAdRes, previousAdDailyRes] = await Promise.allSettled([
+                    axios.get(`${GRAPH_API_BASE}/${adId}/insights`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: aggregateFields,
+                            ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset })
+                        }
+                    }),
+                    axios.get(`${GRAPH_API_BASE}/${adId}/insights`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: 'spend',
+                            ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                            time_increment: 1
+                        }
+                    }),
+                    previousRange
+                        ? axios.get(`${GRAPH_API_BASE}/${adId}/insights`, {
+                            params: {
+                                access_token: accessToken,
+                                fields: aggregateFields,
+                                time_range: JSON.stringify(previousRange)
+                            }
+                        })
+                        : Promise.resolve({ data: { data: [] } }),
+                    previousRange
+                        ? axios.get(`${GRAPH_API_BASE}/${adId}/insights`, {
+                            params: {
+                                access_token: accessToken,
+                                fields: 'spend',
+                                time_range: JSON.stringify(previousRange),
+                                time_increment: 1
+                            }
+                        })
+                        : Promise.resolve({ data: { data: [] } })
+                ]);
 
-            const adMetaById = new Map(adsMeta.map((ad) => [String(ad?.id || ''), ad]));
-            const adIds = new Set([
-                ...Array.from(adMetaById.keys()),
-                ...Array.from(currentAdById.keys())
-            ]);
+                return {
+                    adMeta,
+                    currentRow: currentAdRes.status === 'fulfilled' ? currentAdRes.value.data.data?.[0] || {} : {},
+                    currentDaily: currentAdDailyRes.status === 'fulfilled' ? currentAdDailyRes.value.data.data || [] : [],
+                    previousRow: previousAdRes.status === 'fulfilled' ? previousAdRes.value.data.data?.[0] || {} : {},
+                    previousDaily: previousAdDailyRes.status === 'fulfilled' ? previousAdDailyRes.value.data.data || [] : []
+                };
+            }));
 
-            const creatives = Array.from(adIds).map((adId) => {
-                const adMeta = adMetaById.get(adId) || {};
-                const currentRow = currentAdById.get(adId) || {};
-                const previousRow = previousAdById.get(adId) || {};
+            const creatives = detailBundles.map(({ adMeta, currentRow, currentDaily, previousRow, previousDaily }) => {
+                const adId = String(adMeta?.id || '');
                 const creative = adMeta?.creative || {};
                 const preview = extractCreativePreview(creative);
                 const assetCount = getCreativeAssetCount(creative);
@@ -1230,8 +1225,6 @@ export async function getCampaignDrilldown(req, res) {
                 const holdRate = p25 > 0 ? (p75 / p25) * 100 : 0;
                 const currentSpend = spend;
                 const previousSpend = parseMetricNumber(previousRow.spend);
-                const currentDaily = currentAdDailyById.get(adId) || [];
-                const previousDaily = previousAdDailyById.get(adId) || [];
                 const adsetMeta = adMeta?.adset || {};
                 const hasVideo = Boolean(
                     p25 > 0
@@ -1293,16 +1286,13 @@ export async function getCampaignDrilldown(req, res) {
                 };
             }).filter((ad) => ad.metrics.spend > 0 || ad.metrics.impressions > 0 || ad.thumbnail);
 
-            creatives.sort((a, b) => b.metrics.spend - a.metrics.spend);
-
-            const topCreativePreview = creatives.find((ad) => ad.thumbnail) || null;
-            const uniqueCreativeIds = new Set(creatives.map((ad) => String(ad.creativeId || ad.adId)));
+            const uniqueCreativeIds = new Set(orderedAdsMeta.map((ad) => String(ad?.creative?.id || ad?.id || '')));
             const creativeSummary = {
-                adsCount: creatives.length,
-                activeAdsCount: creatives.filter((ad) => String(ad.status || '').toUpperCase() === 'ACTIVE').length,
+                adsCount: orderedAdsMeta.length,
+                activeAdsCount: orderedAdsMeta.filter((ad) => String(ad?.effective_status || ad?.status || '').toUpperCase() === 'ACTIVE').length,
                 creativesCount: uniqueCreativeIds.size,
-                videoCreativesCount: creatives.filter((ad) => ad.hasVideo).length,
-                multiAssetCreativesCount: creatives.filter((ad) => ad.assetCount > 1).length
+                videoCreativesCount: orderedAdsMeta.filter((ad) => Boolean(ad?.creative?.object_story_spec?.video_data)).length,
+                multiAssetCreativesCount: orderedAdsMeta.filter((ad) => getCreativeAssetCount(ad?.creative || {}) > 1).length
             };
 
             return {
@@ -1320,8 +1310,8 @@ export async function getCampaignDrilldown(req, res) {
                     budgetAmount: parseMetricNumber(campaignMeta?.daily_budget) || parseMetricNumber(campaignMeta?.lifetime_budget),
                     startTime: campaignMeta?.start_time || campaignMeta?.created_time || null,
                     updatedTime: campaignMeta?.updated_time || null,
-                    thumbnail: topCreativePreview?.thumbnail || null,
-                    previewSource: topCreativePreview?.previewSource || 'none',
+                    thumbnail: topCreativePreviewSource?.thumbnail || null,
+                    previewSource: topCreativePreviewSource?.previewSource || 'none',
                     metrics: {
                         spend: parseMetricNumber(currentCampaignInsights.spend),
                         impressions: parseMetricNumber(currentCampaignInsights.impressions),
@@ -1356,6 +1346,14 @@ export async function getCampaignDrilldown(req, res) {
                     points: buildSpendSeries(currentCampaignDaily, previousCampaignDaily)
                 },
                 creatives,
+                pagination: {
+                    offset,
+                    limit,
+                    total: orderedAdsMeta.length,
+                    returned: creatives.length,
+                    hasMore: offset + limit < orderedAdsMeta.length,
+                    nextOffset: offset + limit < orderedAdsMeta.length ? offset + limit : null
+                },
                 datePreset
             };
         });
