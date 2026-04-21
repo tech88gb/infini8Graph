@@ -21,10 +21,10 @@ import {
     Zap, AlertTriangle, CheckCircle, Info, AlertCircle, RefreshCw,
     ExternalLink, Tag, ChevronRight, Activity, Target, ListChecks,
     Layers, LogOut, BarChart, Search, Users, Globe, Cpu, Clock, MapPin,
-    Crosshair, UserCheck, ShieldAlert, X, Sparkles, HelpCircle
+    Crosshair, ShieldAlert, X, Sparkles, HelpCircle
 } from 'lucide-react';
 import {
-    ConversionIntegrityTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab, PersonaBuilderTab,
+    ConversionIntegrityTab, LocalImpactTab, CompetitorThreatTab, WastedSpendTab,
     LocalSearchDominanceTab, BiddingIntelligenceTab
 } from '@/components/GoogleAdsIntelligentTabs';
 import {
@@ -572,7 +572,109 @@ function OverviewTab({ preset }: { preset: string }) {
 
 // ==================== CAMPAIGNS TAB ====================
 
+function FilterPill({
+    label,
+    active,
+    onClick,
+    tone = 'default'
+}: {
+    label: string;
+    active: boolean;
+    onClick: () => void;
+    tone?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+}) {
+    const tones: Record<string, { color: string; bg: string; border: string }> = {
+        default: { color: 'var(--muted)', bg: 'transparent', border: 'var(--border)' },
+        success: { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.28)' },
+        warning: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.28)' },
+        danger: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.28)' },
+        info: { color: '#6366f1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.28)' },
+    };
+    const styleTone = active ? tones[tone] || tones.default : tones.default;
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            style={{
+                padding: '6px 10px',
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: `1px solid ${styleTone.border}`,
+                background: styleTone.bg,
+                color: styleTone.color,
+                transition: 'all 0.15s ease'
+            }}
+        >
+            {label}
+        </button>
+    );
+}
+
+function getCampaignHealth(campaign: any, accountMetrics: any, wasteSpend = 0) {
+    const accountCostPerConversion = Number(accountMetrics?.costPerConversion || 0);
+    const accountCtr = Number(accountMetrics?.ctr || 0);
+    const costPerConversion = Number(campaign?.costPerConversion || 0);
+    const ctr = Number(campaign?.ctr || 0);
+    const conversions = Number(campaign?.conversions || 0);
+    const spend = Number(campaign?.spend || 0);
+    const roas = Number(campaign?.roas || 0);
+
+    if ((conversions >= 8 && costPerConversion > 0 && accountCostPerConversion > 0 && costPerConversion <= accountCostPerConversion * 0.8) || roas >= 3) {
+        return { key: 'scale', label: 'Scale', tone: 'success', note: 'Efficiency is beating account baseline.' };
+    }
+    if ((spend >= 50 && conversions === 0) || wasteSpend >= 50 || (campaign?.impressions > 1500 && ctr < Math.max(accountCtr * 0.55, 1))) {
+        return { key: 'fix', label: 'Fix now', tone: 'danger', note: 'Spend is leaking or engagement is too weak.' };
+    }
+    if (conversions > 0 || spend > 0) {
+        return { key: 'watch', label: 'Watch', tone: 'warning', note: 'Active, but not yet a scale signal.' };
+    }
+    return { key: 'idle', label: 'Idle', tone: 'default', note: 'No meaningful delivery in this window.' };
+}
+
+function classifyKeywordIntent(text: string) {
+    const value = String(text || '').toLowerCase();
+    if (/\bnear me|near|location|coimbatore|saravanampatti|pune|chennai|maps|visit\b/.test(value)) {
+        return { key: 'local', label: 'Local', tone: 'success' as const };
+    }
+    if (/\bbrand|aaranya|cresendo|cinco\b/.test(value)) {
+        return { key: 'brand', label: 'Brand', tone: 'info' as const };
+    }
+    if (/\bprice|cost|budget|affordable|luxury|best|top|review|compare\b/.test(value)) {
+        return { key: 'comparison', label: 'Compare', tone: 'warning' as const };
+    }
+    return { key: 'category', label: 'Category', tone: 'default' as const };
+}
+
+function getKeywordHealth(keyword: any, accountMetrics: any) {
+    const qs = Number(keyword?.qualityScore || 0);
+    const spend = Number(keyword?.spend || 0);
+    const conversions = Number(keyword?.conversions || 0);
+    const ctr = Number(keyword?.ctr || 0);
+    const accountCtr = Number(accountMetrics?.ctr || 0);
+    const accountCostPerConversion = Number(accountMetrics?.costPerConversion || 0);
+    const costPerConversion = Number(keyword?.costPerConversion || 0);
+
+    if (conversions >= 5 && qs >= 7 && costPerConversion > 0 && accountCostPerConversion > 0 && costPerConversion <= accountCostPerConversion * 0.85) {
+        return { key: 'scale', label: 'Scale', tone: 'success', note: 'Qualified and converting efficiently.' };
+    }
+    if ((spend >= 20 && conversions === 0) || qs > 0 && qs < 5 || (keyword?.impressions > 500 && ctr < Math.max(accountCtr * 0.6, 1))) {
+        return { key: 'fix', label: 'Fix now', tone: 'danger', note: 'Quality or conversion efficiency is weak.' };
+    }
+    if (keyword?.clicks > 0 || spend > 0) {
+        return { key: 'watch', label: 'Watch', tone: 'warning', note: 'Needs more proof before scaling.' };
+    }
+    return { key: 'idle', label: 'Idle', tone: 'default', note: 'Not contributing enough data yet.' };
+}
+
 function CampaignsTab({ preset }: { preset: string }) {
+    const [search, setSearch] = useState('');
+    const [channelFilter, setChannelFilter] = useState('all');
+    const [healthFilter, setHealthFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
+
     const { data, isLoading } = useQuery({
         queryKey: ['google-campaigns', preset],
         queryFn: async () => {
@@ -584,9 +686,89 @@ function CampaignsTab({ preset }: { preset: string }) {
         retry: false
     });
 
+    const { data: budgetData } = useQuery({
+        queryKey: ['google-budget-campaign-ops'],
+        queryFn: async () => {
+            const res = await googleAdsApi.getBudget();
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
+    });
+
+    const { data: perfData } = useQuery({
+        queryKey: ['google-perf-campaign-ops', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getPerformance(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
+    });
+
+    const { data: searchTermData } = useQuery({
+        queryKey: ['google-search-terms-campaign-ops', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getSearchTerms(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
+    });
+
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const campaigns = data?.campaigns || [];
+    const metrics = perfData?.metrics || {};
+    const budgetById = new Map((budgetData?.campaigns || []).map((campaign: any) => [String(campaign.id), campaign]));
+    const wasteByCampaign = new Map<string, { spend: number; clicks: number; count: number }>();
+    (searchTermData?.wastedSpend || []).forEach((term: any) => {
+        const key = String(term.campaign || '').trim();
+        const current = wasteByCampaign.get(key) || { spend: 0, clicks: 0, count: 0 };
+        current.spend += Number(term.spend || 0);
+        current.clicks += Number(term.clicks || 0);
+        current.count += 1;
+        wasteByCampaign.set(key, current);
+    });
+    const totalSpend = campaigns.reduce((sum: number, campaign: any) => sum + Number(campaign.spend || 0), 0);
+    const channels: string[] = ['all', ...Array.from(new Set<string>(campaigns.map((campaign: any) => String(campaign.channelType || 'Unknown')).filter(Boolean)))];
+
+    const enrichedCampaigns = campaigns.map((campaign: any) => {
+        const budget = budgetById.get(String(campaign.id));
+        const waste = wasteByCampaign.get(String(campaign.name || '').trim()) || { spend: 0, clicks: 0, count: 0 };
+        const health = getCampaignHealth(campaign, metrics, waste.spend);
+        const spendShare = totalSpend > 0 ? (Number(campaign.spend || 0) / totalSpend) * 100 : 0;
+        return {
+            ...campaign,
+            budget,
+            waste,
+            health,
+            spendShare,
+            action: health.key === 'scale'
+                ? 'Scale carefully'
+                : health.key === 'fix'
+                    ? 'Tighten or pause'
+                    : health.key === 'watch'
+                        ? 'Monitor efficiency'
+                        : 'Low activity',
+        };
+    });
+
+    const filteredCampaigns = enrichedCampaigns.filter((campaign: any) => {
+        const matchesSearch = !search || String(campaign.name || '').toLowerCase().includes(search.toLowerCase());
+        const matchesChannel = channelFilter === 'all' || String(campaign.channelType || '') === channelFilter;
+        const matchesHealth = healthFilter === 'all' || campaign.health.key === healthFilter;
+        const matchesStatus = statusFilter === 'all' || String(campaign.status || '').toLowerCase() === statusFilter;
+        return matchesSearch && matchesChannel && matchesHealth && matchesStatus;
+    });
+
+    const scaleCount = enrichedCampaigns.filter((campaign: any) => campaign.health.key === 'scale').length;
+    const fixCount = enrichedCampaigns.filter((campaign: any) => campaign.health.key === 'fix').length;
+    const topConcentration = enrichedCampaigns.slice(0, 3).reduce((sum: number, campaign: any) => sum + campaign.spendShare, 0);
+    const hotBudgets = enrichedCampaigns.filter((campaign: any) => Number(campaign.budget?.utilization || 0) >= 85).length;
 
     if (!campaigns.length) {
         return (
@@ -598,49 +780,202 @@ function CampaignsTab({ preset }: { preset: string }) {
     }
 
     return (
-        <div className="card">
-            <div className="card-header">
-                <h3 className="card-title">Campaign Breakdown</h3>
-                <span className="badge badge-info">{campaigns.length} campaigns</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Campaign Operator View
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>Scale, fix, or watch</div>
+                        <span className="badge badge-info">{preset} window</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Built for decisions: spend share, efficiency, pacing, and leak risk by campaign
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+                    <HealthSignalCard item={{
+                        tone: scaleCount > 0 ? 'success' : 'info',
+                        title: 'Scale Candidates',
+                        value: String(scaleCount),
+                        note: scaleCount > 0 ? 'Campaigns beating account efficiency' : 'No obvious scale campaigns yet',
+                        tooltip: 'Campaigns with enough conversion volume and efficiency to justify cautious budget expansion.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: fixCount > 0 ? 'danger' : 'success',
+                        title: 'Fix Now',
+                        value: String(fixCount),
+                        note: fixCount > 0 ? 'Spend leakage or weak engagement' : 'No major campaign leaks surfaced',
+                        tooltip: 'Campaigns with poor conversion efficiency, weak CTR, or obvious waste that should be tightened before more spend is added.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: topConcentration >= 70 ? 'warning' : 'info',
+                        title: 'Spend Concentration',
+                        value: `${topConcentration.toFixed(0)}%`,
+                        note: 'Top 3 campaigns share of spend',
+                        tooltip: 'How much of total campaign spend is concentrated in the top three campaigns. High concentration raises dependency risk.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: hotBudgets > 0 ? 'warning' : 'info',
+                        title: 'Hot Budgets Today',
+                        value: String(hotBudgets),
+                        note: hotBudgets > 0 ? 'Campaigns close to daily caps' : 'No campaign close to cap',
+                        tooltip: 'Today-only pacing read. These campaigns are nearing their daily budget limit and may stop serving before the day ends.'
+                    }} />
+                </div>
             </div>
-            <div style={{ overflowX: 'auto' }}>
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Campaign</th>
-                            <th>Status</th>
-                            <th>Spend</th>
-                            <th>Impressions</th>
-                            <th>Clicks</th>
-                            <th>CTR</th>
-                            <th>CPC</th>
-                            <th>Conversions</th>
-                            <th>ROAS</th>
-                            <th>Cost/Conv.</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {campaigns.map((c: any, i: number) => (
-                            <tr key={i}>
-                                <td style={{ maxWidth: 200 }}>
-                                    <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {c.name}
-                                    </div>
-                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.channelType}</div>
-                                </td>
-                                <td><StatusBadge status={c.status} /></td>
-                                <td style={{ fontWeight: 600 }}>{fmtINR(c.spend)}</td>
-                                <td>{fmt(c.impressions, 0)}</td>
-                                <td>{fmt(c.clicks, 0)}</td>
-                                <td>{fmtPct(c.ctr)}</td>
-                                <td>{fmtINR(c.cpc)}</td>
-                                <td>{fmt(c.conversions, 0)}</td>
-                                <td><ROAS value={c.roas} /></td>
-                                <td>{c.costPerConversion > 0 ? fmtINR(c.costPerConversion) : '—'}</td>
-                            </tr>
+
+            <div className="card" style={{ padding: 16 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                            <input
+                                placeholder="Find campaign..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                style={{
+                                    background: 'var(--background)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 8,
+                                    padding: '7px 10px 7px 30px',
+                                    fontSize: 13,
+                                    color: 'var(--foreground)',
+                                    width: 190
+                                }}
+                            />
+                        </div>
+                        {channels.map((channel) => (
+                            <FilterPill
+                                key={channel}
+                                label={channel === 'all' ? 'All channels' : channel.replaceAll('_', ' ')}
+                                active={channelFilter === channel}
+                                onClick={() => setChannelFilter(channel)}
+                                tone="info"
+                            />
                         ))}
-                    </tbody>
-                </table>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {[
+                            { key: 'all', label: 'All health', tone: 'default' },
+                            { key: 'scale', label: 'Scale', tone: 'success' },
+                            { key: 'watch', label: 'Watch', tone: 'warning' },
+                            { key: 'fix', label: 'Fix now', tone: 'danger' }
+                        ].map((item) => (
+                            <FilterPill
+                                key={item.key}
+                                label={item.label}
+                                active={healthFilter === item.key}
+                                onClick={() => setHealthFilter(item.key)}
+                                tone={item.tone as any}
+                            />
+                        ))}
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            style={{
+                                background: 'var(--background)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 8,
+                                padding: '7px 10px',
+                                fontSize: 12,
+                                color: 'var(--foreground)'
+                            }}
+                        >
+                            <option value="all">All statuses</option>
+                            <option value="enabled">Enabled</option>
+                            <option value="paused">Paused</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Campaign</th>
+                                <th>Health</th>
+                                <th>Spend Share</th>
+                                <th>Conv.</th>
+                                <th>CVR</th>
+                                <th>Cost / Conv.</th>
+                                <th>Avg CPC</th>
+                                <th>Search IS</th>
+                                <th>Budget Today</th>
+                                <th>Waste Risk</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredCampaigns.map((campaign: any, i: number) => (
+                                <tr key={i}>
+                                    <td style={{ minWidth: 230 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 13 }}>{campaign.name}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{campaign.channelType?.replaceAll('_', ' ') || 'Unknown'}</span>
+                                            <StatusBadge status={campaign.status} />
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style={{
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            padding: '3px 8px',
+                                            borderRadius: 999,
+                                            background: campaign.health.tone === 'success' ? 'rgba(16,185,129,0.15)' : campaign.health.tone === 'danger' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
+                                            color: campaign.health.tone === 'success' ? '#10b981' : campaign.health.tone === 'danger' ? '#ef4444' : '#f59e0b'
+                                        }}>
+                                            {campaign.health.label}
+                                        </span>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{campaign.health.note}</div>
+                                    </td>
+                                    <td>
+                                        <div style={{ fontWeight: 700 }}>{campaign.spendShare.toFixed(1)}%</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtINR(campaign.spend)}</div>
+                                    </td>
+                                    <td>{fmt(campaign.conversions, 1)}</td>
+                                    <td>{fmtPct(campaign.conversionRate)}</td>
+                                    <td>{campaign.costPerConversion > 0 ? fmtINR(campaign.costPerConversion) : '—'}</td>
+                                    <td>{fmtINR(campaign.cpc)}</td>
+                                    <td>{campaign.searchImpressionShare > 0 ? `${campaign.searchImpressionShare.toFixed(1)}%` : '—'}</td>
+                                    <td>
+                                        {campaign.budget ? (
+                                            <>
+                                                <div style={{ fontWeight: 700 }}>{campaign.budget.utilization}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtINR(campaign.budget.spent)} / {fmtINR(campaign.budget.budgetAmount)}</div>
+                                            </>
+                                        ) : '—'}
+                                    </td>
+                                    <td>
+                                        {campaign.waste.count > 0 ? (
+                                            <>
+                                                <div style={{ fontWeight: 700, color: campaign.waste.spend >= 50 ? '#ef4444' : '#f59e0b' }}>{fmtINR(campaign.waste.spend)}</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{campaign.waste.count} zero-conv terms</div>
+                                            </>
+                                        ) : 'Clean'}
+                                    </td>
+                                    <td style={{ minWidth: 150 }}>
+                                        <div style={{ fontWeight: 700 }}>{campaign.action}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+                                            {campaign.health.key === 'scale'
+                                                ? 'Protect query quality before adding budget.'
+                                                : campaign.health.key === 'fix'
+                                                    ? 'Narrow targeting, review search terms, or pause leakage.'
+                                                    : 'Track until efficiency proves out.'}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {!filteredCampaigns.length && (
+                    <div style={{ padding: '32px 12px', textAlign: 'center', color: 'var(--muted)' }}>
+                        No campaigns match the current filters.
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -649,7 +984,11 @@ function CampaignsTab({ preset }: { preset: string }) {
 // ==================== KEYWORDS TAB ====================
 
 function KeywordsTab({ preset }: { preset: string }) {
-    const [filter, setFilter] = useState('');
+    const [search, setSearch] = useState('');
+    const [matchFilter, setMatchFilter] = useState('all');
+    const [healthFilter, setHealthFilter] = useState('all');
+    const [qualityFilter, setQualityFilter] = useState('all');
+    const [intentFilter, setIntentFilter] = useState('all');
 
     const { data, isLoading } = useQuery({
         queryKey: ['google-keywords', preset],
@@ -662,17 +1001,109 @@ function KeywordsTab({ preset }: { preset: string }) {
         retry: false
     });
 
+    const { data: perfData } = useQuery({
+        queryKey: ['google-perf-keyword-ops', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getPerformance(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
+    });
+
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const allKeywords = data?.keywords || [];
     const lowQuality = data?.lowQuality || [];
-    const keywords = filter
-        ? allKeywords.filter((k: any) => String(k.keyword || '').toLowerCase().includes(filter.toLowerCase()))
-        : allKeywords;
+    const metrics = perfData?.metrics || {};
+    const totalKeywordSpend = allKeywords.reduce((sum: number, keyword: any) => sum + Number(keyword.spend || 0), 0);
+    const matchTypes: string[] = ['all', ...Array.from(new Set<string>(allKeywords.map((keyword: any) => String(keyword.matchType || 'UNKNOWN')).filter(Boolean)))];
+
+    const enrichedKeywords = allKeywords.map((keyword: any) => {
+        const health = getKeywordHealth(keyword, metrics);
+        const intent = classifyKeywordIntent(keyword.keyword);
+        const spendShare = totalKeywordSpend > 0 ? (Number(keyword.spend || 0) / totalKeywordSpend) * 100 : 0;
+        const campaignFootprint = Array.isArray(keyword.campaignNames) ? keyword.campaignNames.length : (keyword.campaignName ? 1 : 0);
+        return {
+            ...keyword,
+            health,
+            intent,
+            spendShare,
+            campaignFootprint,
+            qualityBucket: keyword.qualityScore === null || keyword.qualityScore === undefined
+                ? 'unknown'
+                : keyword.qualityScore >= 7
+                    ? 'strong'
+                    : keyword.qualityScore >= 5
+                        ? 'mid'
+                        : 'weak'
+        };
+    });
+
+    const keywords = enrichedKeywords.filter((keyword: any) => {
+        const matchesSearch = !search || String(keyword.keyword || '').toLowerCase().includes(search.toLowerCase());
+        const matchesMatch = matchFilter === 'all' || String(keyword.matchType || '') === matchFilter;
+        const matchesHealth = healthFilter === 'all' || keyword.health.key === healthFilter;
+        const matchesQuality = qualityFilter === 'all' || keyword.qualityBucket === qualityFilter;
+        const matchesIntent = intentFilter === 'all' || keyword.intent.key === intentFilter;
+        return matchesSearch && matchesMatch && matchesHealth && matchesQuality && matchesIntent;
+    });
+
+    const scaleKeywords = enrichedKeywords.filter((keyword: any) => keyword.health.key === 'scale').length;
+    const fixKeywords = enrichedKeywords.filter((keyword: any) => keyword.health.key === 'fix').length;
+    const exactPhraseShare = allKeywords.length > 0
+        ? (allKeywords.filter((keyword: any) => /EXACT|PHRASE/i.test(String(keyword.matchType || ''))).length / allKeywords.length) * 100
+        : 0;
+    const lowQualitySpend = lowQuality.reduce((sum: number, keyword: any) => sum + Number(keyword.spend || 0), 0);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Low Quality Alert */}
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Keyword Operating View
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>Quality, intent, and scale fit</div>
+                        <span className="badge badge-info">{preset} window</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Built to separate scalable search intent from quality drag and loose traffic
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+                    <HealthSignalCard item={{
+                        tone: scaleKeywords > 0 ? 'success' : 'info',
+                        title: 'Scale Keywords',
+                        value: String(scaleKeywords),
+                        note: scaleKeywords > 0 ? 'Qualified terms beating account baseline' : 'No clear scale keywords yet',
+                        tooltip: 'Keywords with strong quality and conversion efficiency relative to the account average.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: fixKeywords > 0 ? 'danger' : 'success',
+                        title: 'Fix Keywords',
+                        value: String(fixKeywords),
+                        note: fixKeywords > 0 ? 'Weak quality or poor conversion fit' : 'No major keyword leaks surfaced',
+                        tooltip: 'Keywords that should be tightened because of low quality, high spend without return, or weak click-through rate.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: exactPhraseShare >= 45 ? 'success' : 'warning',
+                        title: 'Exact / Phrase Share',
+                        value: `${exactPhraseShare.toFixed(0)}%`,
+                        note: exactPhraseShare >= 45 ? 'Query mix is fairly disciplined' : 'Query mix still leans broad',
+                        tooltip: 'Share of tracked keywords using exact or phrase match. Higher shares usually mean stronger query control.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: lowQualitySpend > 0 ? 'warning' : 'success',
+                        title: 'Spend In Low QS',
+                        value: fmtINR(lowQualitySpend),
+                        note: lowQuality.length > 0 ? `${lowQuality.length} keywords need relevance work` : 'No low-QS keywords surfaced',
+                        tooltip: 'Total spend attached to keywords with low Quality Score. This is expensive traffic that deserves relevance cleanup.'
+                    }} />
+                </div>
+            </div>
+
             {lowQuality.length > 0 && (
                 <div style={{
                     padding: 14, borderRadius: 10, background: '#f59e0b11', border: '1px solid #f59e0b33',
@@ -681,10 +1112,10 @@ function KeywordsTab({ preset }: { preset: string }) {
                     <AlertTriangle size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
                     <div>
                         <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                            {lowQuality.length} keyword{lowQuality.length > 1 ? 's' : ''} with Low Quality Score
+                            {lowQuality.length} keyword{lowQuality.length > 1 ? 's' : ''} are dragging quality
                         </p>
                         <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-                            Low quality scores increase your CPCs. Review landing page relevance and ad copy alignment.
+                            This tab is centered on operator actions, so use the filters below to isolate weak query themes, low Quality Score spend, or scalable exact-match clusters.
                         </p>
                     </div>
                 </div>
@@ -692,13 +1123,16 @@ function KeywordsTab({ preset }: { preset: string }) {
 
             <div className="card">
                 <div className="card-header">
-                    <h3 className="card-title">Keyword Performance</h3>
+                    <h3 className="card-title">Keyword Workbench</h3>
+                    <span className="badge badge-info">{keywords.length} shown</span>
+                </div>
+                <div style={{ padding: '0 20px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                     <div style={{ position: 'relative' }}>
                         <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
                         <input
-                            placeholder="Filter keywords..."
-                            value={filter}
-                            onChange={(e) => setFilter(e.target.value)}
+                            placeholder="Find keyword..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
                             style={{
                                 background: 'var(--background)', border: '1px solid var(--border)',
                                 borderRadius: 8, padding: '6px 10px 6px 30px', fontSize: 13,
@@ -706,43 +1140,129 @@ function KeywordsTab({ preset }: { preset: string }) {
                             }}
                         />
                     </div>
+                    {[
+                        { key: 'all', label: 'All health', tone: 'default' },
+                        { key: 'scale', label: 'Scale', tone: 'success' },
+                        { key: 'watch', label: 'Watch', tone: 'warning' },
+                        { key: 'fix', label: 'Fix now', tone: 'danger' }
+                    ].map((item) => (
+                        <FilterPill
+                            key={item.key}
+                            label={item.label}
+                            active={healthFilter === item.key}
+                            onClick={() => setHealthFilter(item.key)}
+                            tone={item.tone as any}
+                        />
+                    ))}
+                    <select value={matchFilter} onChange={(e) => setMatchFilter(e.target.value)} style={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'var(--foreground)' }}>
+                        <option value="all">All matches</option>
+                        {matchTypes.filter((match) => match !== 'all').map((match) => (
+                            <option key={match} value={match}>{match.replace('MATCH_TYPE_', '').replaceAll('_', ' ')}</option>
+                        ))}
+                    </select>
+                    <select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value)} style={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'var(--foreground)' }}>
+                        <option value="all">All quality</option>
+                        <option value="strong">Strong QS</option>
+                        <option value="mid">Mid QS</option>
+                        <option value="weak">Weak QS</option>
+                        <option value="unknown">Unknown QS</option>
+                    </select>
+                    <select value={intentFilter} onChange={(e) => setIntentFilter(e.target.value)} style={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'var(--foreground)' }}>
+                        <option value="all">All intent</option>
+                        <option value="brand">Brand</option>
+                        <option value="local">Local</option>
+                        <option value="comparison">Compare</option>
+                        <option value="category">Category</option>
+                    </select>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table className="table">
                         <thead>
                             <tr>
                                 <th>Keyword</th>
+                                <th>Intent</th>
+                                <th>Health</th>
                                 <th>Match</th>
                                 <th>Quality Score</th>
-                                <th>Impressions</th>
+                                <th>Diagnostics</th>
                                 <th>Clicks</th>
-                                <th>CTR</th>
-                                <th>CPC</th>
-                                <th>Spend</th>
-                                <th>Conversions</th>
+                                <th>Conv.</th>
+                                <th>CVR</th>
+                                <th>Cost / Conv.</th>
+                                <th>Spend Share</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {keywords.slice(0, 30).map((k: any, i: number) => (
+                            {keywords.map((k: any, i: number) => (
                                 <tr key={i}>
-                                    <td style={{ fontWeight: 500, fontSize: 13 }}>{k.keyword}</td>
+                                    <td style={{ minWidth: 230 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 13 }}>{k.keyword}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+                                            {k.campaignFootprint > 1 ? `${k.campaignFootprint} campaigns` : (k.campaignName || 'Campaign not surfaced')}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style={{
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            padding: '3px 8px',
+                                            borderRadius: 999,
+                                            background: k.intent.tone === 'success' ? 'rgba(16,185,129,0.15)' : k.intent.tone === 'warning' ? 'rgba(245,158,11,0.15)' : k.intent.tone === 'info' ? 'rgba(99,102,241,0.15)' : 'rgba(148,163,184,0.15)',
+                                            color: k.intent.tone === 'success' ? '#10b981' : k.intent.tone === 'warning' ? '#f59e0b' : k.intent.tone === 'info' ? '#6366f1' : 'var(--muted)'
+                                        }}>
+                                            {k.intent.label}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span style={{
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            padding: '3px 8px',
+                                            borderRadius: 999,
+                                            background: k.health.tone === 'success' ? 'rgba(16,185,129,0.15)' : k.health.tone === 'danger' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
+                                            color: k.health.tone === 'success' ? '#10b981' : k.health.tone === 'danger' ? '#ef4444' : '#f59e0b'
+                                        }}>
+                                            {k.health.label}
+                                        </span>
+                                    </td>
                                     <td>
                                         <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--card-hover)', color: 'var(--muted)' }}>
                                             {String(k.matchType || '').replace('MATCH_TYPE_', '') || '—'}
                                         </span>
                                     </td>
                                     <td><QualityScore score={k.qualityScore} /></td>
-                                    <td>{fmt(k.impressions, 0)}</td>
-                                    <td>{fmt(k.clicks, 0)}</td>
-                                    <td>{fmtPct(k.ctr)}</td>
-                                    <td>{fmtINR(k.cpc)}</td>
-                                    <td style={{ fontWeight: 600 }}>{fmtINR(k.spend)}</td>
-                                    <td>{fmt(k.conversions, 0)}</td>
+                                    <td style={{ minWidth: 180 }}>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Pred. CTR: {String(k.searchPredictedCtr || '—').replaceAll('_', ' ')}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Ad rel.: {String(k.creativeQualityScore || '—').replaceAll('_', ' ')}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Landing: {String(k.postClickQualityScore || '—').replaceAll('_', ' ')}</div>
+                                    </td>
+                                    <td>
+                                        <div style={{ fontWeight: 700 }}>{fmt(k.clicks, 0)}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtPct(k.ctr)} CTR</div>
+                                    </td>
+                                    <td>{fmt(k.conversions, 1)}</td>
+                                    <td>{fmtPct(k.conversionRate)}</td>
+                                    <td>{k.costPerConversion > 0 ? fmtINR(k.costPerConversion) : '—'}</td>
+                                    <td>
+                                        <div style={{ fontWeight: 700 }}>{k.spendShare.toFixed(1)}%</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtINR(k.spend)}</div>
+                                    </td>
+                                    <td style={{ minWidth: 150 }}>
+                                        <div style={{ fontWeight: 700 }}>{k.health.key === 'scale' ? 'Lean in' : k.health.key === 'fix' ? 'Tighten relevance' : 'Keep observing'}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{k.health.note}</div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
+
+                {!keywords.length && (
+                    <div style={{ padding: '32px 12px', textAlign: 'center', color: 'var(--muted)' }}>
+                        No keywords match the current filters.
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1207,22 +1727,35 @@ function GeoTab({ preset }: { preset: string }) {
 
 // ==================== ALERTS TAB ====================
 
-function AlertsTab() {
+function AlertsTab({ preset }: { preset: string }) {
+    const [severityFilter, setSeverityFilter] = useState('all');
+    const [categoryFilter, setCategoryFilter] = useState('all');
+
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['google-alerts'],
+        queryKey: ['google-alerts', preset],
         queryFn: async () => {
-            const res = await googleAdsApi.getAlerts();
+            const res = await googleAdsApi.getAlerts(preset);
             return res.data.data;
-        }
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false,
+        retry: false
     });
 
     if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
     const alerts = data?.alerts || [];
+    const summary = data?.summary || {};
     const danger = alerts.filter((a: any) => a.type === 'danger');
     const warning = alerts.filter((a: any) => a.type === 'warning');
     const success = alerts.filter((a: any) => a.type === 'success');
     const info = alerts.filter((a: any) => a.type === 'info');
+    const categories: string[] = ['all', ...Array.from(new Set<string>(alerts.map((alert: any) => String(alert.category || 'Other'))))];
+    const filteredAlerts = alerts.filter((alert: any) => {
+        const matchesSeverity = severityFilter === 'all' || alert.type === severityFilter;
+        const matchesCategory = categoryFilter === 'all' || alert.category === categoryFilter;
+        return matchesSeverity && matchesCategory;
+    });
 
     if (!alerts.length) {
         return (
@@ -1236,40 +1769,185 @@ function AlertsTab() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                {[
-                    { label: 'Urgent', count: danger.length, color: '#ef4444' },
-                    { label: 'Warnings', count: warning.length, color: '#f59e0b' },
-                    { label: 'Wins', count: success.length, color: '#10b981' },
-                    { label: 'Info', count: info.length, color: '#6366f1' },
-                ].map((s, i) => (
-                    <div key={i} style={{
-                        padding: '12px 16px', borderRadius: 10,
-                        background: `${s.color}11`, border: `1px solid ${s.color}33`,
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: s.color }}>{s.count}</div>
-                        <div style={{ fontSize: 12, color: s.color, fontWeight: 600 }}>{s.label}</div>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Action Center
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>What needs operator attention now</div>
+                        <span className="badge badge-info">{preset} window</span>
                     </div>
-                ))}
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        This tab is the command center: what to fix now, what to watch, and what is ready to scale
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+                    <HealthSignalCard item={{
+                        tone: danger.length > 0 ? 'danger' : 'success',
+                        title: 'Urgent Actions',
+                        value: String(summary.urgent ?? danger.length),
+                        note: danger.length > 0 ? 'Campaign or query leaks need action' : 'No urgent blockers surfaced',
+                        tooltip: 'Critical issues that can waste spend or hide conversion problems if left alone.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: (summary.spendAtRisk || 0) > 0 ? 'warning' : 'success',
+                        title: 'Spend At Risk',
+                        value: fmtINR(summary.spendAtRisk || 0),
+                        note: `${summary.zeroConvTerms || 0} zero-conversion terms surfaced`,
+                        tooltip: 'Search-term spend currently sitting in obvious waste candidates.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: (summary.pacingRisks || 0) > 0 ? 'warning' : 'info',
+                        title: 'Budget Pacing Risks',
+                        value: String(summary.pacingRisks || 0),
+                        note: (summary.pacingRisks || 0) > 0 ? 'Campaigns near daily cap today' : 'No pacing pressure right now',
+                        tooltip: 'Today-only budget warnings for campaigns that may stop delivering before the day ends.'
+                    }} />
+                    <HealthSignalCard item={{
+                        tone: success.length > 0 ? 'success' : 'info',
+                        title: 'Scale Signals',
+                        value: String(success.length),
+                        note: success.length > 0 ? 'Positive pockets worth protecting' : 'No clear scale wins surfaced',
+                        tooltip: 'Opportunities where campaign efficiency is strong enough to consider more budget or broader reach.'
+                    }} />
+                </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                    onClick={() => refetch()}
-                    disabled={isFetching}
-                    className="btn btn-secondary btn-sm"
-                >
-                    <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
-                    Refresh
-                </button>
+            <div className="card" style={{ padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {[
+                            { key: 'all', label: 'All', tone: 'default' },
+                            { key: 'danger', label: 'Urgent', tone: 'danger' },
+                            { key: 'warning', label: 'Watch', tone: 'warning' },
+                            { key: 'success', label: 'Scale', tone: 'success' },
+                            { key: 'info', label: 'Info', tone: 'info' }
+                        ].map((item) => (
+                            <FilterPill
+                                key={item.key}
+                                label={item.label}
+                                active={severityFilter === item.key}
+                                onClick={() => setSeverityFilter(item.key)}
+                                tone={item.tone as any}
+                            />
+                        ))}
+                        <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            style={{
+                                background: 'var(--background)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 8,
+                                padding: '7px 10px',
+                                fontSize: 12,
+                                color: 'var(--foreground)'
+                            }}
+                        >
+                            <option value="all">All categories</option>
+                            {categories.filter((category) => category !== 'all').map((category) => (
+                                <option key={category} value={category}>{category}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        onClick={() => refetch()}
+                        disabled={isFetching}
+                        className="btn btn-secondary btn-sm"
+                    >
+                        <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {alerts.map((alert: any, i: number) => (
-                    <AlertCard key={i} alert={alert} />
-                ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 20 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {filteredAlerts.map((alert: any, i: number) => (
+                        <div key={i} style={{
+                            padding: '14px 16px',
+                            borderRadius: 12,
+                            background: alert.type === 'danger' ? 'rgba(239,68,68,0.10)' : alert.type === 'warning' ? 'rgba(245,158,11,0.10)' : alert.type === 'success' ? 'rgba(16,185,129,0.10)' : 'rgba(99,102,241,0.10)',
+                            border: alert.type === 'danger' ? '1px solid rgba(239,68,68,0.25)' : alert.type === 'warning' ? '1px solid rgba(245,158,11,0.25)' : alert.type === 'success' ? '1px solid rgba(16,185,129,0.25)' : '1px solid rgba(99,102,241,0.25)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                                <div style={{ minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: 'rgba(15,23,42,0.18)', color: 'var(--foreground)' }}>
+                                            {alert.category}
+                                        </span>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: alert.type === 'danger' ? '#ef4444' : alert.type === 'warning' ? '#f59e0b' : alert.type === 'success' ? '#10b981' : '#6366f1' }}>
+                                            {alert.type.toUpperCase()}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{alert.title}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{alert.message}</div>
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{alert.metric}</div>
+                            </div>
+                            {alert.nextStep && (
+                                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(148,163,184,0.16)' }}>
+                                    <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Next move</div>
+                                    <div style={{ fontSize: 12 }}>{alert.nextStep}</div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+
+                    {!filteredAlerts.length && (
+                        <div style={{ padding: '32px 12px', textAlign: 'center', color: 'var(--muted)' }}>
+                            No alerts match the current filters.
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="card" style={{ padding: 16 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Action Stack</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div>
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>Fix first</div>
+                                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                    {danger[0]?.title || warning[0]?.title || 'No urgent blocker surfaced.'}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>Watch next</div>
+                                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                    {warning[0]?.title || info[0]?.title || 'No watchlist issue surfaced.'}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>Scale signal</div>
+                                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                    {success[0]?.title || 'No scale signal surfaced yet.'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card" style={{ padding: 16 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Alert Mix</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {[
+                                { label: 'Urgent', count: danger.length, color: '#ef4444' },
+                                { label: 'Warning', count: warning.length, color: '#f59e0b' },
+                                { label: 'Scale', count: success.length, color: '#10b981' },
+                                { label: 'Info', count: info.length, color: '#6366f1' },
+                            ].map((item, index) => (
+                                <div key={index}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <span style={{ fontSize: 12 }}>{item.label}</span>
+                                        <span style={{ fontSize: 12, fontWeight: 700, color: item.color }}>{item.count}</span>
+                                    </div>
+                                    <div style={{ height: 6, borderRadius: 999, background: 'var(--border)', overflow: 'hidden' }}>
+                                        <div style={{ width: `${alerts.length ? (item.count / alerts.length) * 100 : 0}%`, height: '100%', background: item.color }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -1439,9 +2117,9 @@ export default function GoogleAdsPage() {
     // getRecommendations runs 3 sub-queries (campaigns+keywords+budget) inside
     // it — we do NOT want those hitting Google on every page load.
     const { data: alertsData } = useQuery({
-        queryKey: ['google-alerts'],
+        queryKey: ['google-alerts', preset],
         queryFn: async () => {
-            const res = await googleAdsApi.getAlerts();
+            const res = await googleAdsApi.getAlerts(preset);
             return res.data.data;
         },
         enabled: !!status?.connected && activeTab === 'alerts',
@@ -1511,8 +2189,6 @@ export default function GoogleAdsPage() {
         );
     }
 
-    const urgentCount = alertsData?.alerts?.filter((a: any) => a.type === 'danger' || a.type === 'warning').length || 0;
-
     const tabs = [
         { key: 'overview', label: 'Overview', icon: BarChart2 },
         { key: 'true-roas', label: 'Conversion Integrity', icon: Activity },
@@ -1520,10 +2196,9 @@ export default function GoogleAdsPage() {
         { key: 'local-search', label: 'Local Search Dominance', icon: Globe },
         { key: 'bidding-intel', label: 'Bidding Intelligence', icon: ShieldAlert },
         { key: 'search-terms', label: 'Wasted Spend', icon: Zap },
-        { key: 'persona', label: 'Customer Persona', icon: UserCheck },
         { key: 'campaigns', label: 'Campaigns', icon: Target },
         { key: 'keywords', label: 'Keywords', icon: Search },
-        { key: 'alerts', label: 'Alerts', icon: AlertTriangle, badge: urgentCount },
+        { key: 'alerts', label: 'Alerts', icon: AlertTriangle },
     ];
 
     const handlePageExport = async (format: SectionExportFormat) => {
@@ -1551,7 +2226,7 @@ export default function GoogleAdsPage() {
             googleAdsApi.getAuctionInsights(preset).then((res) => res.data.data).catch(() => null),
             googleAdsApi.getSearchTerms(preset).then((res) => res.data.data).catch(() => null),
             googleAdsApi.getGeo(preset).then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getAlerts().then((res) => res.data.data).catch(() => alertsData),
+            googleAdsApi.getAlerts(preset).then((res) => res.data.data).catch(() => alertsData),
             googleAdsApi.getBidding(preset).then((res) => res.data.data).catch(() => null),
             googleAdsApi.getQualityScore().then((res) => res.data.data).catch(() => null),
             googleAdsApi.getAssetData(preset).then((res) => res.data.data).catch(() => null)
@@ -1606,7 +2281,7 @@ export default function GoogleAdsPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* Date Range Picker */}
-                    {['overview', 'campaigns', 'keywords', 'competitors', 'search-terms', 'geo', 'true-roas', 'local-search', 'bidding-intel'].includes(activeTab) && (
+                    {['overview', 'campaigns', 'keywords', 'search-terms', 'local', 'true-roas', 'local-search', 'bidding-intel', 'alerts'].includes(activeTab) && (
                         <div style={{ display: 'flex', gap: 4, background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
                             {PRESETS.map((p) => (
                                 <button
@@ -1655,7 +2330,6 @@ export default function GoogleAdsPage() {
                         icon={t.icon}
                         active={activeTab === t.key}
                         onClick={() => setActiveTab(t.key)}
-                        badge={t.badge}
                     />
                 ))}
             </div>
@@ -1668,11 +2342,10 @@ export default function GoogleAdsPage() {
                 {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} />}
                 {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} />}
                 {activeTab === 'competitors' && <BiddingIntelligenceTab preset={preset} />}
-{activeTab === 'persona' && <PersonaBuilderTab preset={preset} />}
                 {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
                 {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
                 {activeTab === 'search-terms' && <WastedSpendTab preset={preset} />}
-                {activeTab === 'alerts' && <AlertsTab />}
+                {activeTab === 'alerts' && <AlertsTab preset={preset} />}
             </div>
         </div>
     );

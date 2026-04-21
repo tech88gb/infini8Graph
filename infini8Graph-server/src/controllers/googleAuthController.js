@@ -173,7 +173,8 @@ export async function getCrossPlatform(req, res) {
 export async function getAlerts(req, res) {
     try {
         const userId = req.user?.userId;
-        const data = await getRecommendations(userId);
+        const { preset = '30d' } = req.query;
+        const data = await getRecommendations(userId, preset);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Google recommendations error:', error.message);

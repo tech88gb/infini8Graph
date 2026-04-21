@@ -619,7 +619,8 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
                 campaign.name,
                 campaign.status,
                 campaign.advertising_channel_type,
-                campaign.campaign_budget,
+                campaign.bidding_strategy_type,
+                campaign_budget.amount_micros,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -643,11 +644,14 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
                     name: r.campaign?.name || 'Unknown',
                     status: r.campaign?.status || 'UNKNOWN',
                     channelType: r.campaign?.advertising_channel_type || '',
+                    biddingStrategyType: r.campaign?.bidding_strategy_type || '',
+                    budgetMicros: Number(r.campaign_budget?.amount_micros || 0),
                     impressions: 0,
                     clicks: 0,
                     costMicros: 0,
                     conversions: 0,
                     convValue: 0,
+                    searchImpressionShareWeighted: 0,
                 };
             }
             const m = r.metrics;
@@ -656,6 +660,10 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
             map[id].costMicros   += Number(m?.cost_micros || 0);
             map[id].conversions  += Number(m?.conversions || 0);
             map[id].convValue    += Number(m?.conversions_value || 0);
+            const impressionShare = Number(m?.search_impression_share || 0);
+            if (impressionShare > 0) {
+                map[id].searchImpressionShareWeighted += impressionShare * Number(m?.impressions || 0);
+            }
         });
 
         const campaigns = Object.values(map).map((c) => {
@@ -664,6 +672,12 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
             const cpc   = c.clicks > 0 ? spend / c.clicks : 0;
             const ctr   = c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
             const costPerConversion = c.conversions > 0 ? spend / c.conversions : 0;
+            const conversionRate = c.clicks > 0 ? (c.conversions / c.clicks) * 100 : 0;
+            const valuePerConversion = c.conversions > 0 ? c.convValue / c.conversions : 0;
+            const searchImpressionShare = c.impressions > 0 && c.searchImpressionShareWeighted > 0
+                ? (c.searchImpressionShareWeighted / c.impressions) * 100
+                : 0;
+            const budgetAmount = c.budgetMicros / 1_000_000;
 
             return {
                 ...c,
@@ -672,6 +686,11 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
                 cpc: parseFloat(cpc.toFixed(2)),
                 roas: parseFloat(roas.toFixed(2)),
                 costPerConversion: parseFloat(costPerConversion.toFixed(2)),
+                conversionRate: parseFloat(conversionRate.toFixed(2)),
+                conversionValue: parseFloat(c.convValue.toFixed(2)),
+                valuePerConversion: parseFloat(valuePerConversion.toFixed(2)),
+                searchImpressionShare: parseFloat(searchImpressionShare.toFixed(2)),
+                budgetAmount: parseFloat(budgetAmount.toFixed(2)),
                 // budget utilization: daily_budget * days_in_period vs actual spend
             };
         }).sort((a, b) => b.spend - a.spend);
@@ -789,13 +808,19 @@ export async function getKeywordPerformance(userId, preset = '30d') {
                     keyword: text,
                     matchType: r.ad_group_criterion?.keyword?.match_type || '',
                     qualityScore: r.ad_group_criterion?.quality_info?.quality_score || null,
+                    creativeQualityScore: mapQsLabel(r.ad_group_criterion?.quality_info?.creative_quality_score),
+                    postClickQualityScore: mapQsLabel(r.ad_group_criterion?.quality_info?.post_click_quality_score),
+                    searchPredictedCtr: mapQsLabel(r.ad_group_criterion?.quality_info?.search_predicted_ctr),
                     status: r.ad_group_criterion?.status || '',
-                    campaignName: r.campaign?.name || '',
+                    campaignNames: r.campaign?.name ? [r.campaign.name] : [],
                     impressions: 0,
                     clicks: 0,
                     costMicros: 0,
                     conversions: 0,
                 };
+            }
+            if (r.campaign?.name && !map[key].campaignNames.includes(r.campaign.name)) {
+                map[key].campaignNames.push(r.campaign.name);
             }
             const m = r.metrics;
             map[key].impressions += Number(m?.impressions || 0);
@@ -808,11 +833,16 @@ export async function getKeywordPerformance(userId, preset = '30d') {
             const spend = k.costMicros / 1_000_000;
             const cpc   = k.clicks > 0 ? spend / k.clicks : 0;
             const ctr   = k.impressions > 0 ? (k.clicks / k.impressions) * 100 : 0;
+            const conversionRate = k.clicks > 0 ? (k.conversions / k.clicks) * 100 : 0;
+            const costPerConversion = k.conversions > 0 ? spend / k.conversions : 0;
             return {
                 ...k,
+                campaignName: k.campaignNames?.[0] || '',
                 spend: parseFloat(spend.toFixed(2)),
                 cpc: parseFloat(cpc.toFixed(2)),
                 ctr: parseFloat(ctr.toFixed(2)),
+                conversionRate: parseFloat(conversionRate.toFixed(2)),
+                costPerConversion: parseFloat(costPerConversion.toFixed(2)),
             };
         }).sort((a, b) => b.spend - a.spend);
 
@@ -968,19 +998,26 @@ export async function getCrossPlatformSummary(userId, metaSpend = 0, metaImpress
 
 // ===================== RECOMMENDATIONS / ALERTS =====================
 
-export async function getRecommendations(userId) {
+export async function getRecommendations(userId, preset = '30d') {
     try {
-        const [campaigns, keywords, budget] = await Promise.all([
-            getCampaignBreakdown(userId, '30d'),
-            getKeywordPerformance(userId, '30d'),
+        const [campaigns, keywords, budget, searchTerms, performance] = await Promise.all([
+            getCampaignBreakdown(userId, preset),
+            getKeywordPerformance(userId, preset),
             getBudgetUtilization(userId),
+            getSearchTermInsights(userId, preset),
+            getAdsPerformance(userId, preset),
         ]);
 
         const alerts = [];
+        const metrics = performance?.metrics || {};
+        const wastedTerms = searchTerms?.wastedSpend || [];
+        const totalWastedSpend = wastedTerms.reduce((sum, term) => sum + Number(term.spend || 0), 0);
+        const totalWastedClicks = wastedTerms.reduce((sum, term) => sum + Number(term.clicks || 0), 0);
 
         // --- Campaign-level alerts ---
         if (campaigns.campaigns) {
             campaigns.campaigns.forEach((c) => {
+                const actionBase = { campaignId: c.id, campaignName: c.name };
                 // Low CTR
                 if (c.impressions > 1000 && c.ctr < 1.0) {
                     alerts.push({
@@ -989,6 +1026,8 @@ export async function getRecommendations(userId) {
                         title: `Low CTR: ${c.name}`,
                         message: `CTR of ${c.ctr}% is below the 1% benchmark. Review ad copy and targeting.`,
                         metric: `${c.ctr}% CTR`,
+                        nextStep: 'Tighten ad-group relevance, rewrite headlines, and review query intent.',
+                        ...actionBase,
                     });
                 }
                 // Zero conversions with significant spend
@@ -999,6 +1038,8 @@ export async function getRecommendations(userId) {
                         title: `No conversions: ${c.name}`,
                         message: `₹${c.spend} spent with 0 conversions. Check conversion tracking or landing page.`,
                         metric: `₹${c.spend} wasted`,
+                        nextStep: 'Pause or narrow the campaign until the query mix or landing page is fixed.',
+                        ...actionBase,
                     });
                 }
                 // Negative ROAS (spent more than earned)
@@ -1009,16 +1050,22 @@ export async function getRecommendations(userId) {
                         title: `Negative ROAS: ${c.name}`,
                         message: `ROAS of ${c.roas}x means you're spending more than you're earning. Pause or restructure.`,
                         metric: `${c.roas}x ROAS`,
+                        nextStep: 'Shift budget toward stronger campaigns or switch this campaign to efficiency-first management.',
+                        ...actionBase,
                     });
                 }
-                // Great ROAS
-                if (c.roas >= 4.0 && c.spend > 10) {
+                // Scale signal
+                if ((c.roas >= 4.0 && c.spend > 10) || (c.conversions >= 10 && c.costPerConversion > 0 && c.costPerConversion <= Math.max(metrics.costPerConversion || 0, 1) * 0.8)) {
                     alerts.push({
                         type: 'success',
                         category: 'Campaign',
                         title: `High performer: ${c.name}`,
-                        message: `ROAS of ${c.roas}x is excellent. Consider scaling this campaign's budget.`,
-                        metric: `${c.roas}x ROAS`,
+                        message: c.roas >= 4.0
+                            ? `ROAS of ${c.roas}x is excellent. Consider scaling this campaign's budget.`
+                            : `Cost / conv. of ₹${c.costPerConversion} is materially better than account average. This is a scale candidate.`,
+                        metric: c.roas >= 4.0 ? `${c.roas}x ROAS` : `₹${c.costPerConversion} cost / conv.`,
+                        nextStep: 'Protect query quality, then test incremental budget.',
+                        ...actionBase,
                     });
                 }
             });
@@ -1034,6 +1081,7 @@ export async function getRecommendations(userId) {
                         title: `Budget nearly exhausted: ${c.name}`,
                         message: `${c.utilization}% of daily budget used. Ads may stop showing before end of day.`,
                         metric: `₹${c.remaining} remaining`,
+                        nextStep: 'Move budget only if the campaign is still efficient; otherwise let it cap.',
                     });
                 }
                 if (c.utilization < 20 && c.budgetAmount > 5) {
@@ -1043,6 +1091,7 @@ export async function getRecommendations(userId) {
                         title: `Underspending: ${c.name}`,
                         message: `Only ${c.utilization}% of daily budget used. Ads may have limited reach or targeting issues.`,
                         metric: `₹${c.spent} / ₹${c.budgetAmount}`,
+                        nextStep: 'Check eligibility, bid competitiveness, and geo/query constraints before increasing budget.',
                     });
                 }
             });
@@ -1055,10 +1104,33 @@ export async function getRecommendations(userId) {
                 alerts.push({
                     type: 'warning',
                     category: 'Keywords',
-                    title: `Low quality score: "${k.keyword}"`,
-                    message: `Quality Score ${k.qualityScore}/10. Improve ad relevance or landing page to lower CPC.`,
-                    metric: `QS ${k.qualityScore}/10 · ₹${k.cpc} CPC`,
+                        title: `Low quality score: "${k.keyword}"`,
+                        message: `Quality Score ${k.qualityScore}/10. Improve ad relevance or landing page to lower CPC.`,
+                        metric: `QS ${k.qualityScore}/10 · ₹${k.cpc} CPC`,
+                        nextStep: 'Tighten ad-to-keyword message match and review landing page relevance.',
                 });
+            });
+        }
+
+        if (wastedTerms.length > 0) {
+            alerts.push({
+                type: totalWastedSpend >= 100 ? 'danger' : 'warning',
+                category: 'Search Terms',
+                title: 'Negative keyword pressure is building',
+                message: `${wastedTerms.length} search terms spent money without conversions in the ${preset} window.`,
+                metric: `₹${totalWastedSpend.toFixed(2)} at risk · ${totalWastedClicks} clicks`,
+                nextStep: 'Review zero-conversion terms and add the clearest exclusions before broadening budget.',
+            });
+        }
+
+        if ((performance?.valueTracking?.quality || 'unavailable') === 'weak') {
+            alerts.push({
+                type: 'warning',
+                category: 'Measurement',
+                title: 'Revenue tracking is too weak to headline ROAS',
+                message: 'Conversion value is present, but not strong enough to trust ROAS as the primary control metric.',
+                metric: `${metrics.roas || 0}x ROAS`,
+                nextStep: 'Use cost / conv. and conversion rate as steering metrics until value tracking is cleaner.',
             });
         }
 
@@ -1066,7 +1138,17 @@ export async function getRecommendations(userId) {
         const order = { danger: 0, warning: 1, success: 2, info: 3 };
         alerts.sort((a, b) => (order[a.type] || 3) - (order[b.type] || 3));
 
-        return { connected: true, alerts };
+        const summary = {
+            urgent: alerts.filter((a) => a.type === 'danger').length,
+            warning: alerts.filter((a) => a.type === 'warning').length,
+            success: alerts.filter((a) => a.type === 'success').length,
+            info: alerts.filter((a) => a.type === 'info').length,
+            spendAtRisk: parseFloat(totalWastedSpend.toFixed(2)),
+            zeroConvTerms: wastedTerms.length,
+            pacingRisks: (budget.campaigns || []).filter((c) => c.utilization > 90).length,
+        };
+
+        return { connected: true, alerts, summary, period: preset };
     } catch (error) {
         console.error('❌ Recommendations error:', error.message);
         return { connected: true, alerts: [], error: error.message };
