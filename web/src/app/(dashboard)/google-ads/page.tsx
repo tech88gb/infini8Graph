@@ -1668,7 +1668,7 @@ export default function GoogleAdsPage() {
                 {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} />}
                 {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} />}
                 {activeTab === 'competitors' && <BiddingIntelligenceTab preset={preset} />}
-                {activeTab === 'persona' && <PersonaBuilderTab />}
+{activeTab === 'persona' && <PersonaBuilderTab preset={preset} />}
                 {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
                 {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
                 {activeTab === 'search-terms' && <WastedSpendTab preset={preset} />}

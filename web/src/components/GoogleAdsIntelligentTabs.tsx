@@ -2150,68 +2150,397 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
 
 // ==================== PERSONA BUILDER (ANALYTICS + ADS) ====================
 
-export function PersonaBuilderTab() {
-    const { data: perf, isLoading } = useQuery({
-        queryKey: ['google-perf', '30d'],
+export function PersonaBuilderTab({ preset = '30d' }: { preset?: string }) {
+    const { data: perf, isLoading: perfLoading } = useQuery({
+        queryKey: ['google-perf-persona', preset],
         queryFn: async () => {
-            const res = await googleAdsApi.getPerformance('30d');
+            const res = await googleAdsApi.getPerformance(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+    const { data: keywordData, isLoading: keywordLoading } = useQuery({
+        queryKey: ['google-keywords-persona', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getKeywords(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+    const { data: searchTermData, isLoading: termLoading } = useQuery({
+        queryKey: ['google-search-terms-persona', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getSearchTerms(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+    const { data: geoData, isLoading: geoLoading } = useQuery({
+        queryKey: ['google-geo-persona', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getGeo(preset);
+            return res.data.data;
+        },
+        staleTime: 300000,
+        refetchOnWindowFocus: false
+    });
+    const { data: localPresenceData, isLoading: presenceLoading } = useQuery({
+        queryKey: ['google-local-presence-persona', preset],
+        queryFn: async () => {
+            const res = await googleAdsApi.getLocalPresence(preset);
             return res.data.data;
         },
         staleTime: 300000,
         refetchOnWindowFocus: false
     });
 
-    if (isLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
+    if (perfLoading || keywordLoading || termLoading || geoLoading || presenceLoading) {
+        return <div className="spinner" style={{ margin: '60px auto' }} />;
+    }
 
     const m = perf?.metrics || {};
+    const keywords = keywordData?.keywords || [];
+    const terms = searchTermData?.terms || [];
+    const wasteTerms = searchTermData?.wastedSpend || [];
+    const locations = geoData?.locations || [];
+    const localSignals = localPresenceData || {};
+
+    const localRegex = /near|nearby|local|location|visit|direction|directions|call|phone|saravanampatti|coimbatore|pune|chennai/i;
+    const genericRegex = /apartment|apartments|flat|flats|home|homes|property|properties|residential|real estate|residences|2 bhk|3 bhk|house/i;
+    const comparisonRegex = /price|cost|budget|affordable|luxury|best|top|review|reviews|compare|comparison/i;
+
+    const localKeywords = keywords.filter((k: any) => localRegex.test(String(k.keyword || '')));
+    const genericKeywords = keywords.filter((k: any) => genericRegex.test(String(k.keyword || '')));
+    const comparisonKeywords = keywords.filter((k: any) => comparisonRegex.test(String(k.keyword || '')));
+    const exactishKeywords = keywords.filter((k: any) => /EXACT|PHRASE/i.test(String(k.matchType || '')));
+    const lowQualityKeywords = keywords.filter((k: any) => k.qualityScore !== null && Number(k.qualityScore || 0) < 5);
+
+    const totalKeywordClicks = keywords.reduce((sum: number, k: any) => sum + Number(k.clicks || 0), 0);
+    const localKeywordClickShare = totalKeywordClicks > 0
+        ? (localKeywords.reduce((sum: number, k: any) => sum + Number(k.clicks || 0), 0) / totalKeywordClicks) * 100
+        : 0;
+    const genericKeywordShare = keywords.length > 0 ? (genericKeywords.length / keywords.length) * 100 : 0;
+    const comparisonKeywordShare = keywords.length > 0 ? (comparisonKeywords.length / keywords.length) * 100 : 0;
+    const exactIntentShare = keywords.length > 0 ? (exactishKeywords.length / keywords.length) * 100 : 0;
+    const lowQualityShare = keywords.length > 0 ? (lowQualityKeywords.length / keywords.length) * 100 : 0;
+
+    const totalTermClicks = terms.reduce((sum: number, t: any) => sum + Number(t.clicks || 0), 0);
+    const wasteClickShare = totalTermClicks > 0
+        ? (wasteTerms.reduce((sum: number, t: any) => sum + Number(t.clicks || 0), 0) / totalTermClicks) * 100
+        : 0;
+    const convertingTerms = terms.filter((t: any) => Number(t.conversions || 0) > 0);
+    const topConversionTerm = [...convertingTerms]
+        .sort((a: any, b: any) => Number(b.conversions || 0) - Number(a.conversions || 0))[0] || null;
+
+    const geoSummary = geoData?.summary || {};
+    const topLocation = geoSummary?.topLocationBySpend || null;
+    const geoConcentration = Number(topLocation?.spendShare || 0);
+
+    const callInteractions = localSignals?.callClicks;
+    const responseMode = callInteractions && callInteractions > 0 ? 'Site + Call' : 'Site-First';
+    const valueTrust = perf?.valueTracking?.quality || 'unavailable';
+
+    const personaScore = {
+        localAction: localKeywordClickShare * 0.45 + geoConcentration * 0.35 + (callInteractions && callInteractions > 0 ? 20 : 4),
+        researchExplorer: genericKeywordShare * 0.4 + comparisonKeywordShare * 0.25 + Math.max(0, 100 - Number(m.conversionRate || 0) * 4) * 0.35,
+        highIntentCategory: exactIntentShare * 0.35 + Number(m.conversionRate || 0) * 4 + Math.max(0, 100 - wasteClickShare * 1.5) * 0.25,
+        broadDiscovery: wasteClickShare * 0.45 + genericKeywordShare * 0.3 + Math.max(0, 100 - geoConcentration) * 0.25
+    };
+
+    const personaMap = [
+        {
+            key: 'localAction',
+            label: 'Local Action Seeker',
+            color: '#10b981',
+            summary: 'Traffic is showing location-aware search behavior and is more likely to respond to proximity, visit intent, and area-specific language.'
+        },
+        {
+            key: 'highIntentCategory',
+            label: 'High-Intent Category Buyer',
+            color: '#6366f1',
+            summary: 'The account is attracting users who already know the category they want and are evaluating fit, credibility, and conversion friction.'
+        },
+        {
+            key: 'researchExplorer',
+            label: 'Research-Heavy Explorer',
+            color: '#f59e0b',
+            summary: 'Much of the audience is still comparing options and exploring broadly, so they need stronger qualification and trust cues before they convert.'
+        },
+        {
+            key: 'broadDiscovery',
+            label: 'Broad Discovery Clicker',
+            color: '#ef4444',
+            summary: 'Traffic has broad click energy, but intent is leaking before conversion, suggesting loose matching or weak message-to-landing fit.'
+        }
+    ].map((persona) => ({ ...persona, score: personaScore[persona.key as keyof typeof personaScore] || 0 }))
+        .sort((a, b) => b.score - a.score);
+
+    const primaryPersona = personaMap[0];
+    const secondaryPersona = personaMap[1];
+    const audienceModes = [
+        localKeywordClickShare >= 20 ? 'Location-aware searcher' : null,
+        exactIntentShare >= 35 ? 'Qualified query mix' : null,
+        comparisonKeywordShare >= 12 ? 'Comparison-minded traffic' : null,
+        geoConcentration >= 60 ? 'Single-market concentration' : null,
+        wasteClickShare >= 15 ? 'Broad click leakage' : null,
+        responseMode === 'Site + Call' ? 'Call-capable responder' : 'Site-first responder'
+    ].filter(Boolean).slice(0, 4);
+
+    const whyWeThinkThat = [
+        {
+            label: 'Intent Mix',
+            value: `${localKeywordClickShare.toFixed(0)}% local-intent click share`,
+            detail: localKeywordClickShare >= 20
+                ? 'A meaningful share of clicks is coming from queries with location or visit-style language.'
+                : 'Most clicks are not explicitly location-led, so the audience is likely broader than a pure local intent segment.'
+        },
+        {
+            label: 'Geo Concentration',
+            value: geoConcentration > 0 ? `${geoConcentration.toFixed(0)}% spend in top market` : 'Geo mix not surfaced strongly',
+            detail: geoConcentration >= 60
+                ? 'Audience demand is highly concentrated in one geography, which usually points to a very specific local buyer pocket.'
+                : 'Demand is less concentrated, so the account is drawing a wider geographic audience.'
+        },
+        {
+            label: 'Query Discipline',
+            value: `${exactIntentShare.toFixed(0)}% exact / phrase share`,
+            detail: exactIntentShare >= 35
+                ? 'The keyword mix is fairly qualified, which is closer to buyer intent than casual discovery.'
+                : 'The keyword mix still leans loose, which leaves more room for exploratory or mismatched traffic.'
+        },
+        {
+            label: 'Leakage Signal',
+            value: `${wasteClickShare.toFixed(0)}% waste-click share`,
+            detail: wasteClickShare >= 15
+                ? 'Too many clicks are being absorbed by non-converting search terms, which changes the audience mix toward weaker intent.'
+                : 'Waste-click share is controlled enough that the audience mix is less distorted by obvious low-intent traffic.'
+        }
+    ];
+
+    const audienceResponses = [
+        {
+            label: 'Messaging',
+            value: primaryPersona?.label === 'Local Action Seeker'
+                ? 'Location cues, site visits, and neighborhood relevance'
+                : primaryPersona?.label === 'High-Intent Category Buyer'
+                    ? 'Specific product fit, trust, and conversion reassurance'
+                    : primaryPersona?.label === 'Research-Heavy Explorer'
+                        ? 'Comparison framing, credibility, and step-down education'
+                        : 'Sharper qualification and narrower promise statements'
+        },
+        {
+            label: 'Best Response Path',
+            value: responseMode,
+            detail: responseMode === 'Site + Call'
+                ? 'This audience is willing to engage beyond the click, so call assets and direct-response paths matter.'
+                : 'The audience mostly continues through the site path, so landing-page clarity matters more than call-first behavior.'
+        },
+        {
+            label: 'Best Conversion Hook',
+            value: topConversionTerm ? topConversionTerm.term : 'No high-confidence hook surfaced',
+            detail: topConversionTerm
+                ? `Current strongest converting term is "${topConversionTerm.term}", which hints at what message frame already resonates.`
+                : 'No single term clearly stands out yet as the strongest conversion hook.'
+        }
+    ];
+
+    const mismatches = [
+        valueTrust !== 'strong'
+            ? {
+                label: 'Value signal is weak',
+                detail: 'Revenue tracking is not strong enough to confirm whether this audience is truly high value, so persona confidence should lean on intent and conversion behavior instead.'
+            }
+            : null,
+        wasteClickShare >= 15
+            ? {
+                label: 'Traffic breadth is diluting audience clarity',
+                detail: `About ${wasteClickShare.toFixed(0)}% of tracked clicks sit in hard-waste terms, which suggests looser acquisition than the ideal persona would support.`
+            }
+            : null,
+        localKeywordClickShare >= 20 && (!callInteractions || callInteractions === 0)
+            ? {
+                label: 'Local intent is stronger than response capture',
+                detail: 'The audience shows local-search behavior, but call response is not surfacing. That usually means the path is more site-led than the message implies, or call tracking is weak.'
+            }
+            : null,
+        lowQualityShare >= 20
+            ? {
+                label: 'Ad relevance is weakening the persona fit',
+                detail: `${lowQualityShare.toFixed(0)}% of tracked keywords have low Quality Score, which suggests the ad/landing experience is not matching the audience’s intent tightly enough.`
+            }
+            : null,
+        geoConcentration >= 60 && genericKeywordShare >= 50
+            ? {
+                label: 'Geography is narrow, but query intent is still broad',
+                detail: 'The account is concentrated in one market, but much of the keyword set is still generic. The audience likely wants more locally specific relevance than the current query mix provides.'
+            }
+            : null
+    ].filter(Boolean) as Array<{ label: string; detail: string }>;
+
+    const personaTone = primaryPersona?.color || '#6366f1';
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center', margin: '20px 0' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Audience Persona
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>Intent Diagnosis</div>
+                        <span className="badge badge-info">{preset} window</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Fresh audience read built from intent mix, geo concentration, and response path signals
+                    </div>
+                </div>
+            </div>
+
             <div style={{
-                maxWidth: 800, width: '100%',
-                padding: 40, borderRadius: 20,
-                background: 'var(--card)', border: '1px solid var(--border)',
-                boxShadow: '0 10px 40px -10px rgba(0,0,0,0.1)',
-                position: 'relative', overflow: 'hidden'
+                padding: 22,
+                borderRadius: 16,
+                border: `1px solid ${personaTone}33`,
+                background: `${personaTone}10`,
+                display: 'grid',
+                gridTemplateColumns: '1.1fr 0.9fr',
+                gap: 20
             }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg, #6366f1, #10b981, #f59e0b)' }} />
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                    <div style={{ width: 56, height: 56, borderRadius: 16, background: '#6366f122', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <UserCheck size={28} color="#6366f1" />
-                    </div>
-                    <div>
-                        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>Account Performance Persona</h2>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#4285F422', color: '#4285F4', fontWeight: 700 }}>Real-Time Account Insights</span>
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+                        <div style={{ width: 52, height: 52, borderRadius: 14, background: `${personaTone}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <UserCheck size={26} color={personaTone} />
                         </div>
+                        <div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Primary Persona</div>
+                            <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>{primaryPersona?.label || 'Mixed Search Audience'}</div>
+                        </div>
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 14 }}>
+                        {primaryPersona?.summary || 'Audience shape is mixed, so this tab is leaning on behavior cues rather than a single dominant persona.'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {audienceModes.map((mode, index) => (
+                            <span key={index} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: 'var(--card)', border: '1px solid var(--border)' }}>{mode}</span>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }}>
+                    <CompactMetric
+                        label="Persona Confidence"
+                        value={`${Math.round(primaryPersona?.score || 0)}/100`}
+                        tone={(primaryPersona?.score || 0) >= 70 ? 'success' : (primaryPersona?.score || 0) >= 45 ? 'warning' : 'default'}
+                        tooltip="How strongly the current account signals point to the primary audience persona."
+                    />
+                    <CompactMetric
+                        label="Secondary Persona"
+                        value={secondaryPersona?.label || 'Mixed'}
+                        tone="info"
+                        tooltip="The second-strongest audience mode showing up in the selected window."
+                    />
+                    <CompactMetric
+                        label="Response Path"
+                        value={responseMode}
+                        tone={responseMode === 'Site + Call' ? 'success' : 'info'}
+                        tooltip="Whether this audience is mostly continuing through site clicks or also surfacing direct-response call behavior."
+                    />
+                    <CompactMetric
+                        label="Audience Friction"
+                        value={`${Math.round((wasteClickShare * 0.5) + (lowQualityShare * 0.5))}/100`}
+                        tone={wasteClickShare >= 15 || lowQualityShare >= 20 ? 'warning' : 'default'}
+                        tooltip="Blended friction read from waste-click share and low-quality keyword share."
+                    />
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Users size={16} color="#6366f1" />
+                            Who We Are Attracting
+                            <InfoTooltip text="Primary and secondary audience modes inferred from query intent, geo concentration, and response behavior rather than just headline performance metrics." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {[primaryPersona, secondaryPersona].filter(Boolean).map((persona, index) => (
+                            <div key={index} style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                                    <div style={{ fontWeight: 800 }}>{index === 0 ? 'Primary' : 'Secondary'}: {persona?.label}</div>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: persona?.color }}>{Math.round(persona?.score || 0)}/100</span>
+                                </div>
+                                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>{persona?.summary}</div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                <div style={{
-                    padding: 24, borderRadius: 12, background: 'var(--background)',
-                    borderLeft: '4px solid #6366f1', fontSize: 15, lineHeight: 1.7,
-                    color: 'var(--foreground)', marginBottom: 32
-                }}>
-                    "Based on your last 30 days of data, your account has generated <b>{m.impressions?.toLocaleString()} impressions</b> resulting in <b>{m.clicks?.toLocaleString()} real clicks</b>. 
-                    Your current efficiency is <b>{m.ctr}% CTR</b> across all connected campaigns.
-                    <br/><br/>
-                    <span style={{ color: '#10b981', fontWeight: 600 }}>Growth Insight:</span> Your ROAS is sitting at <b>{m.roas}x</b>. To scale this further, we recommend analyzing the conversion path of your highest performing ads."
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Cpu size={16} color="#10b981" />
+                            Why We Think That
+                            <InfoTooltip text="Evidence signals that support the persona read. These are audience-shape clues, not just more KPI cards." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {whyWeThinkThat.map((item, index) => (
+                            <div key={index} style={{ padding: 14, borderRadius: 12, background: 'var(--card-raised)', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                                    <div style={{ fontWeight: 700 }}>{item.label}</div>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd' }}>{item.value}</div>
+                                </div>
+                                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>{item.detail}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Crosshair size={16} color="#f59e0b" />
+                            What This Audience Responds To
+                            <InfoTooltip text="Likely response levers based on current intent mix, response path, and the strongest converting term patterns." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {audienceResponses.map((item, index) => (
+                            <div key={index} style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>{item.label}</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{item.value}</div>
+                                {'detail' in item && item.detail && (
+                                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>{item.detail}</div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
-                    {[
-                        { label: 'Total Real Spend', value: `₹${m.spend?.toLocaleString()}`, icon: DollarSign },
-                        { label: 'Conv. Value', value: `₹${m.conversionValue?.toLocaleString()}`, icon: TrendingUp },
-                        { label: 'Conversions', value: m.conversions, icon: Target },
-                        { label: 'True ROAS', value: `${m.roas}x`, icon: Activity }
-                    ].map((s, i) => (
-                        <div key={i} style={{ textAlign: 'center', padding: '20px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
-                            <s.icon size={20} style={{ color: '#6366f1', margin: '0 auto 12px' }} />
-                            <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>{s.label}</div>
-                            <div style={{ fontSize: 16, fontWeight: 800 }}>{s.value}</div>
-                        </div>
-                    ))}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertTriangle size={16} color="#ef4444" />
+                            What Is Mismatched Right Now
+                            <InfoTooltip text="Cross-signal mismatches that make the audience harder to convert cleanly. This is intentionally different from the waste and local tabs: it focuses on audience fit, not just optimization defects." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {mismatches.length > 0 ? mismatches.map((item, index) => (
+                            <div key={index} style={{ padding: 14, borderRadius: 12, border: '1px solid #ef444433', background: '#ef444408' }}>
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>{item.label}</div>
+                                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>{item.detail}</div>
+                            </div>
+                        )) : (
+                            <div style={{ padding: 18, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)', fontSize: 13, color: 'var(--muted)' }}>
+                                No major audience-fit mismatch stood out in this window. The account’s current query and response signals look reasonably aligned.
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
