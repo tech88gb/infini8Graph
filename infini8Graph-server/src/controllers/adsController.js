@@ -32,7 +32,8 @@ const ACTION_CANDIDATES = {
     purchases: ['purchase', 'omni_purchase', 'onsite_web_purchase', 'offsite_conversion.fb_pixel_purchase'],
     leads: ['lead', 'onsite_conversion.lead_grouped', 'offsite_conversion.fb_pixel_lead', 'omni_lead'],
     engagement: ['post_engagement', 'page_engagement', 'post_reaction', 'comment', 'share', 'link_click'],
-    appInstalls: ['app_install', 'mobile_app_install', 'omni_app_install']
+    appInstalls: ['app_install', 'mobile_app_install', 'omni_app_install'],
+    messagingConnections: ['total_messaging_connection']
 };
 
 function getMetaCacheEntry(key) {
@@ -662,7 +663,17 @@ export async function getAdInsights(req, res) {
             let conversions = [];
             if (summary?.actions) {
                 conversions = summary.actions.filter(a =>
-                    ['purchase', 'lead', 'complete_registration', 'add_to_cart', 'initiate_checkout', 'link_click', 'post_engagement', 'page_engagement'].includes(a.action_type)
+                    [
+                        'purchase',
+                        'lead',
+                        'complete_registration',
+                        'add_to_cart',
+                        'initiate_checkout',
+                        'link_click',
+                        'post_engagement',
+                        'page_engagement'
+                    ].includes(a.action_type)
+                    || String(a.action_type || '').toLowerCase().includes('total_messaging_connection')
                 ).map(a => ({
                     type: a.action_type,
                     value: parseInt(a.value)

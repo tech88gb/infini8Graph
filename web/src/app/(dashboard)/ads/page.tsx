@@ -20,7 +20,7 @@ import {
     IndianRupee, Eye, MousePointer, Users, BarChart3,
     Play, Target, Layers, TrendingUp, HelpCircle, Smartphone, Monitor,
     Globe, MapPin, Award, Zap, DollarSign, ExternalLink, ChevronDown, ChevronUp,
-    Filter, Calendar, Clock, ArrowRight, ShoppingCart, CreditCard, Package, Brain, Activity, X
+    Filter, Calendar, Clock, ArrowRight, ShoppingCart, CreditCard, Package, Brain, Activity, X, MessageCircle
 } from 'lucide-react';
 import {
     AreaChart, Area, BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
@@ -152,6 +152,7 @@ function buildMetaAdsOverviewMetrics({
     const engagementCostMetric = findMetricEntry(costPerAction, ['post_engagement', 'page_engagement']);
     const appInstallMetric = findMetricEntry(conversions, ['app_install', 'mobile_app_install']);
     const appInstallCostMetric = findMetricEntry(costPerAction, ['app_install', 'mobile_app_install']);
+    const messagingConnectionsMetric = findMetricEntry(conversions, ['total_messaging_connection']);
 
     const configByType: Record<string, Array<any>> = {
         sales: [
@@ -464,7 +465,7 @@ function buildMetaAdsOverviewMetrics({
         ]
     };
 
-    return configByType[accountProfile?.type || 'mixed'] || [
+    const selectedMetrics = configByType[accountProfile?.type || 'mixed'] || [
         {
             label: 'Total Spend',
             value: formatCurrency(summary.spend),
@@ -502,6 +503,23 @@ function buildMetaAdsOverviewMetrics({
             tooltip: 'Number of clicks on your ads'
         }
     ];
+
+    const messagingConnectionsValue = Number(messagingConnectionsMetric?.value || 0);
+
+    if (messagingConnectionsValue > 0) {
+        return [
+            ...selectedMetrics,
+            {
+                label: 'Messaging Connections',
+                value: formatNumber(messagingConnectionsValue),
+                icon: MessageCircle,
+                color: '#22c55e',
+                tooltip: 'Unique people who messaged your business on Messenger, Instagram, or WhatsApp in the selected reporting window.'
+            }
+        ];
+    }
+
+    return selectedMetrics;
 }
 
 const FUNNEL_STAGE_EXPLANATIONS: Record<string, string> = {
