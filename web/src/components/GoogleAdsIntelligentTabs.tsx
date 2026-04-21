@@ -728,97 +728,520 @@ export function WastedSpendTab({ preset }: { preset: string }) {
 
     if (stLoading || assetLoading) return <div className="spinner" style={{ margin: '60px auto' }} />;
 
+    const allTerms = (searchTerms?.terms || []).map((term: any) => {
+        const clicks = Number(term.clicks || 0);
+        const spend = Number(term.spend || 0);
+        const conversions = Number(term.conversions || 0);
+        const impressions = Number(term.impressions || 0);
+        const cpc = clicks > 0 ? spend / clicks : 0;
+        const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
+        const costPerConversion = conversions > 0 ? spend / conversions : null;
+        return {
+            ...term,
+            clicks,
+            spend,
+            conversions,
+            impressions,
+            cpc,
+            conversionRate,
+            costPerConversion
+        };
+    });
     const wasted = searchTerms?.wastedSpend || [];
+    const totalTermSpend = allTerms.reduce((sum: number, term: any) => sum + term.spend, 0);
+    const totalTermClicks = allTerms.reduce((sum: number, term: any) => sum + term.clicks, 0);
+    const totalTermConversions = allTerms.reduce((sum: number, term: any) => sum + term.conversions, 0);
+    const accountAvgCpc = totalTermClicks > 0 ? totalTermSpend / totalTermClicks : 0;
+    const accountAvgCostPerConversion = totalTermConversions > 0 ? totalTermSpend / totalTermConversions : 0;
 
-    // Real fatigued assets: high impressions, zero conversions, meaningful spend
-    // Sourced from the Google Ads RSA Asset Performance API
-    const fatiguedAssets = (assetData?.assets || [])
-        .filter((a: any) => a.impressions > 5000 && a.conversions === 0 && a.performance !== 'BEST')
-        .sort((a: any, b: any) => b.impressions - a.impressions)
+    const trueWasteTerms = [...wasted]
+        .map((term: any) => ({
+            ...term,
+            cpc: Number(term.clicks || 0) > 0 ? Number(term.spend || 0) / Number(term.clicks || 1) : 0,
+            reason: `${fmtNumber(Number(term.clicks || 0))} clicks, ${fmtCurrency(Number(term.spend || 0))} spent, 0 conv.`
+        }))
+        .slice(0, 6);
+
+    const lowEfficiencyTerms = allTerms
+        .filter((term: any) =>
+            term.conversions > 0
+            && term.costPerConversion !== null
+            && accountAvgCostPerConversion > 0
+            && term.costPerConversion >= accountAvgCostPerConversion * 1.6
+        )
+        .sort((a: any, b: any) => {
+            const aRatio = (a.costPerConversion || 0) / accountAvgCostPerConversion;
+            const bRatio = (b.costPerConversion || 0) / accountAvgCostPerConversion;
+            if (bRatio !== aRatio) return bRatio - aRatio;
+            return b.spend - a.spend;
+        })
+        .slice(0, 6)
+        .map((term: any) => ({
+            ...term,
+            reason: `${((term.costPerConversion || 0) / accountAvgCostPerConversion).toFixed(1)}x account cost / conv.`
+        }));
+
+    const leakageTerms = allTerms
+        .filter((term: any) =>
+            term.clicks >= 8
+            && term.conversionRate > 0
+            && accountAvgCostPerConversion > 0
+            && term.costPerConversion !== null
+            && term.costPerConversion >= accountAvgCostPerConversion * 1.2
+        )
+        .sort((a: any, b: any) => {
+            const aLeak = (a.spend * (a.conversionRate / 100));
+            const bLeak = (b.spend * (b.conversionRate / 100));
+            if (aLeak !== bLeak) return aLeak - bLeak;
+            return b.clicks - a.clicks;
+        })
+        .slice(0, 6)
+        .map((term: any) => ({
+            ...term,
+            reason: `${term.conversionRate.toFixed(1)}% CVR, but ${fmtCurrency(term.costPerConversion || 0)} cost / conv.`
+        }));
+
+    const recoveryTerms = allTerms
+        .filter((term: any) =>
+            term.conversions > 0
+            && term.costPerConversion !== null
+            && (
+                accountAvgCostPerConversion === 0
+                || term.costPerConversion <= accountAvgCostPerConversion * 0.8
+            )
+        )
+        .sort((a: any, b: any) => {
+            if ((a.costPerConversion || 0) !== (b.costPerConversion || 0)) {
+                return (a.costPerConversion || 0) - (b.costPerConversion || 0);
+            }
+            return b.conversions - a.conversions;
+        })
         .slice(0, 5);
+
+    const allAssets = (assetData?.assets || []).map((asset: any) => {
+        const impressions = Number(asset.impressions || 0);
+        const clicks = Number(asset.clicks || 0);
+        const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+        const performance = String(asset.performance || 'UNKNOWN').toUpperCase();
+        return {
+            ...asset,
+            impressions,
+            clicks,
+            ctr,
+            performance
+        };
+    });
+    const averageAssetCtr = allAssets.length > 0
+        ? allAssets.reduce((sum: number, asset: any) => sum + asset.ctr, 0) / allAssets.length
+        : 0;
+    const strongAssets = allAssets.filter((asset: any) => ['BEST', 'GOOD'].includes(asset.performance));
+    const stableAssets = allAssets.filter((asset: any) => asset.performance === 'LEARNING' || asset.performance === 'PENDING');
+    const unlabeledAssets = allAssets.filter((asset: any) => asset.performance === 'NOT_APPLICABLE');
+    const watchlistAssets = allAssets
+        .filter((asset: any) =>
+            asset.impressions >= 1000
+            && !['BEST', 'GOOD'].includes(asset.performance)
+            && asset.ctr <= averageAssetCtr
+        )
+        .sort((a: any, b: any) => {
+            const aScore = a.impressions * Math.max(0.1, averageAssetCtr - a.ctr + 0.5);
+            const bScore = b.impressions * Math.max(0.1, averageAssetCtr - b.ctr + 0.5);
+            return bScore - aScore;
+        })
+        .slice(0, 6)
+        .map((asset: any) => ({
+            ...asset,
+            reason: asset.performance === 'LOW'
+                ? 'Google labeled this asset LOW'
+                : asset.ctr < averageAssetCtr * 0.6
+                    ? 'CTR is materially below current asset average'
+                    : 'High impression volume without strong label support'
+        }));
+    const fatigueAssets = allAssets
+        .filter((asset: any) =>
+            asset.impressions >= 5000
+            && !['BEST', 'GOOD'].includes(asset.performance)
+            && asset.ctr < Math.max(0.5, averageAssetCtr * 0.55)
+        )
+        .sort((a: any, b: any) => b.impressions - a.impressions)
+        .slice(0, 4);
+
+    const totalWasteSpend = trueWasteTerms.reduce((sum: number, term: any) => sum + term.spend, 0);
+    const totalWasteClicks = trueWasteTerms.reduce((sum: number, term: any) => sum + term.clicks, 0);
+    const lowEfficiencySpend = lowEfficiencyTerms.reduce((sum: number, term: any) => sum + term.spend, 0);
+    const negativeCandidateCount = trueWasteTerms.length + leakageTerms.filter((term: any) => term.conversions === 0).length;
+    const assetWatchCount = watchlistAssets.length + fatigueAssets.length;
+    const wasteRecoveryMix = recoveryTerms.slice(0, 3).map((term: any) => term.term).join(', ');
+
+    const scoreTone = (count: number) => count > 0 ? 'warning' : 'default';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20 }}>
-                {/* Wasted Search Terms */}
-                <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-                    <div className="card-header">
-                        <h3 className="card-title">Top Wasted Search Terms</h3>
-                        <span className="badge" style={{ background: '#f59e0b22', color: '#f59e0b' }}>{wasted.length} Negative KWs needed</span>
+            <div className="card" style={{ padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                            Waste & Recovery
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800 }}>Leak Detection</div>
+                        <span className="badge badge-info">{preset} window</span>
                     </div>
-                    {wasted.length > 0 ? (
-                        <div style={{ padding: '0 20px 20px', flex: 1 }}>
-                            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-                                Terms with high spend but 0 conversions. Add as negative keywords.
-                            </p>
-                            <table className="table" style={{ fontSize: 13, borderTop: '1px solid var(--border)' }}>
-                                <thead>
-                                    <tr>
-                                        <th>Term</th>
-                                        <th>Spend</th>
-                                        <th>Clicks</th>
-                                        <th>Action</th>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Search waste, recovery opportunities, and asset watchlists from the selected range
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 16 }}>
+                <CompactMetric
+                    label="Spend At Risk"
+                    value={fmtCurrency(totalWasteSpend)}
+                    tone={totalWasteSpend > 0 ? 'danger' : 'default'}
+                    tooltip="Spend tied to terms that crossed the waste rule: meaningful spend with zero conversions."
+                />
+                <CompactMetric
+                    label="Low-Efficiency Spend"
+                    value={fmtCurrency(lowEfficiencySpend)}
+                    tone={lowEfficiencySpend > 0 ? 'warning' : 'default'}
+                    tooltip="Spend on converting terms whose cost per conversion is materially worse than the account average."
+                />
+                <CompactMetric
+                    label="Waste Clicks"
+                    value={fmtNumber(totalWasteClicks)}
+                    tone={totalWasteClicks > 0 ? 'warning' : 'default'}
+                    tooltip="Clicks consumed by the current set of true waste terms."
+                />
+                <CompactMetric
+                    label="Negative KW Review"
+                    value={fmtNumber(negativeCandidateCount)}
+                    tone={scoreTone(negativeCandidateCount)}
+                    tooltip="Terms most likely to deserve negative-keyword review or tighter match control."
+                />
+                <CompactMetric
+                    label="Asset Watchlist"
+                    value={fmtNumber(assetWatchCount)}
+                    tone={scoreTone(assetWatchCount)}
+                    tooltip="Assets that deserve review because labels are weak, CTR is soft, or impression volume is high without strong support."
+                />
+            </div>
+
+            <div style={{
+                padding: 18,
+                borderRadius: 14,
+                background: 'var(--card-raised)',
+                border: '1px solid var(--border)',
+                display: 'grid',
+                gridTemplateColumns: '1.1fr 0.9fr',
+                gap: 18
+            }}>
+                <div>
+                    <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', fontWeight: 700, marginBottom: 8 }}>
+                        Waste Read
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
+                        {trueWasteTerms.length > 0
+                            ? `${fmtCurrency(totalWasteSpend)} is the clearest direct waste in this ${preset} window.`
+                            : `No search terms crossed the hard waste rule in this ${preset} window.`}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+                        {lowEfficiencyTerms.length > 0
+                            ? `${fmtCurrency(lowEfficiencySpend)} more is sitting in converting terms that are still inefficient relative to the account baseline.`
+                            : 'No major low-efficiency term bucket surfaced beyond the direct waste list.'}
+                    </div>
+                </div>
+                <div>
+                    <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', fontWeight: 700, marginBottom: 8 }}>
+                        Recovery Read
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
+                        {recoveryTerms.length > 0
+                            ? `${recoveryTerms.length} terms are efficient enough to protect or scale.`
+                            : 'No strong recovery pocket surfaced yet.'}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+                        {wasteRecoveryMix
+                            ? `Best current recovery cues: ${wasteRecoveryMix}.`
+                            : 'Once stronger converting terms surface, this area will highlight what deserves more budget instead of just what should be cut.'}
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertTriangle size={16} color="#ef4444" />
+                            True Waste
+                            <InfoTooltip text={`Terms from the selected ${preset} window that spent meaningfully and drove zero conversions. These are review candidates, not automatic negatives.`} />
+                        </h3>
+                        <span className="badge badge-danger">{fmtNumber(trueWasteTerms.length)} flagged</span>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table" style={{ fontSize: 12 }}>
+                            <thead>
+                                <tr>
+                                    <th>Term</th>
+                                    <th>Spend</th>
+                                    <th>Clicks</th>
+                                    <th>Why</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {trueWasteTerms.length > 0 ? trueWasteTerms.map((term: any, index: number) => (
+                                    <tr key={index}>
+                                        <td style={{ fontWeight: 600 }}>"{term.term}"</td>
+                                        <td style={{ color: '#ef4444', fontWeight: 700 }}>{fmtCurrency(term.spend)}</td>
+                                        <td>{fmtNumber(term.clicks)}</td>
+                                        <td style={{ color: 'var(--muted)' }}>{term.reason}</td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {wasted.slice(0, 8).map((t: any, i: number) => (
-                                        <tr key={i}>
-                                            <td style={{ fontSize: 12, fontWeight: 500 }}>"{t.term}"</td>
-                                            <td style={{ fontWeight: 600, color: '#ef4444' }}>{t.spend > 0 ? `₹${t.spend}` : '₹0'}</td>
-                                            <td style={{ color: 'var(--muted)', fontSize: 12 }}>{t.clicks}</td>
-                                            <td>
-                                                <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 10, background: '#ef444422', color: '#ef4444' }}>Exclude</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <CheckCircle size={24} style={{ color: '#10b981', margin: '0 auto 12px' }} />
-                            <p style={{ fontSize: 13 }}>No high-spend wasted terms detected yet.</p>
-                        </div>
-                    )}
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>
+                                            {`No terms matched the current waste rule in this ${preset} window.`}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                {/* Real Asset Fatigue Detector — from Google Ads RSA Asset Performance API */}
-                <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="card">
                     <div className="card-header">
-                        <h3 className="card-title">Asset Fatigue Alert</h3>
-                        {fatiguedAssets.length > 0
-                            ? <span className="badge" style={{ background: '#ef4444', color: '#fff' }}>Prune {fatiguedAssets.length} Assets</span>
-                            : <span className="badge" style={{ background: '#10b981', color: '#fff' }}>All Clear</span>
-                        }
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertCircle size={16} color="#f59e0b" />
+                            Low Efficiency
+                            <InfoTooltip text="Terms that do convert, but at a much worse cost per conversion than the account average. These are tighten-or-rework candidates." />
+                        </h3>
+                        <span className="badge badge-warning">{fmtNumber(lowEfficiencyTerms.length)} surfaced</span>
                     </div>
-                    <div style={{ padding: '0 20px 20px', flex: 1 }}>
-                        {fatiguedAssets.length > 0 ? (
-                            <>
-                                <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, fontWeight: 600 }}>
-                                    These real ad assets have 5,000+ impressions but zero conversions. They are draining budget with no returns.
-                                </p>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    {fatiguedAssets.map((a: any, i: number) => (
-                                        <div key={i} style={{ padding: 12, border: '1px dashed #ef4444', borderRadius: 8, background: '#ef444408' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>{a.type}</span>
-                                                <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b' }}>{a.performance === 'UNSPECIFIED' ? 'Learning' : a.performance} performance</span>
-                                            </div>
-                                            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8, wordBreak: 'break-word' }}>{a.text}</div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                <b>{a.impressions?.toLocaleString()}</b> impressions • <b>0</b> conversions
-                                                {a.campaignName && <span> • {a.campaignName}</span>}
-                                            </div>
-                                        </div>
-                                    ))}
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table" style={{ fontSize: 12 }}>
+                            <thead>
+                                <tr>
+                                    <th>Term</th>
+                                    <th>Cost / Conv.</th>
+                                    <th>Conv.</th>
+                                    <th>Why</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {lowEfficiencyTerms.length > 0 ? lowEfficiencyTerms.map((term: any, index: number) => (
+                                    <tr key={index}>
+                                        <td style={{ fontWeight: 600 }}>{term.term}</td>
+                                        <td style={{ color: '#f59e0b', fontWeight: 700 }}>{fmtCurrency(term.costPerConversion || 0)}</td>
+                                        <td>{fmtNumber(term.conversions, 1)}</td>
+                                        <td style={{ color: 'var(--muted)' }}>{term.reason}</td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>
+                                            No low-efficiency converting terms stood out against the current account average.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <RefreshCw size={16} color="#10b981" />
+                            Recovery Opportunities
+                            <InfoTooltip text="Terms worth protecting or scaling because they convert efficiently relative to the rest of the account." />
+                        </h3>
+                        <span className="badge badge-success">{fmtNumber(recoveryTerms.length)} surfaced</span>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table" style={{ fontSize: 12 }}>
+                            <thead>
+                                <tr>
+                                    <th>Term</th>
+                                    <th>Conv.</th>
+                                    <th>Cost / Conv.</th>
+                                    <th>CVR</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {recoveryTerms.length > 0 ? recoveryTerms.map((term: any, index: number) => (
+                                    <tr key={index}>
+                                        <td style={{ fontWeight: 600 }}>{term.term}</td>
+                                        <td style={{ color: '#10b981', fontWeight: 700 }}>{fmtNumber(term.conversions, 1)}</td>
+                                        <td>{fmtCurrency(term.costPerConversion || 0)}</td>
+                                        <td>{term.conversionRate.toFixed(1)}%</td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>
+                                            No strong recovery terms surfaced in this window yet.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Search size={16} color="#6366f1" />
+                            Leakage Terms
+                            <InfoTooltip text="Terms that are not complete waste, but still leak budget through high click volume and weak downstream efficiency." />
+                        </h3>
+                        <span className="badge badge-info">{fmtNumber(leakageTerms.length)} watchlist</span>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="table" style={{ fontSize: 12 }}>
+                            <thead>
+                                <tr>
+                                    <th>Term</th>
+                                    <th>Spend</th>
+                                    <th>CVR</th>
+                                    <th>Cost / Conv.</th>
+                                    <th>Why</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {leakageTerms.length > 0 ? leakageTerms.map((term: any, index: number) => (
+                                    <tr key={index}>
+                                        <td style={{ fontWeight: 600 }}>{term.term}</td>
+                                        <td>{fmtCurrency(term.spend)}</td>
+                                        <td>{term.conversionRate.toFixed(1)}%</td>
+                                        <td>{fmtCurrency(term.costPerConversion || 0)}</td>
+                                        <td style={{ color: 'var(--muted)' }}>{term.reason}</td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={5} style={{ textAlign: 'center', padding: 20, color: 'var(--muted)' }}>
+                                            No mid-funnel leakage pattern stood out strongly in this window.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <ListChecks size={16} color="#8b5cf6" />
+                            Action Stack
+                            <InfoTooltip text="A compact read of what to cut, tighten, refresh, and protect from the current waste and recovery signals." />
+                        </h3>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ padding: 14, borderRadius: 12, background: 'var(--card-raised)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>Cut</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                {trueWasteTerms.length > 0
+                                    ? `${fmtNumber(trueWasteTerms.length)} zero-conversion terms deserve first review for negatives or tighter match control.`
+                                    : 'No hard-cut term set surfaced from the current waste rule.'}
+                            </div>
+                        </div>
+                        <div style={{ padding: 14, borderRadius: 12, background: 'var(--card-raised)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>Tighten</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                {lowEfficiencyTerms.length > 0
+                                    ? `${fmtCurrency(lowEfficiencySpend)} is sitting in expensive converting terms. Tighten intent, copy, or landing-page fit before scaling.`
+                                    : 'No large tighten-first term bucket surfaced.'}
+                            </div>
+                        </div>
+                        <div style={{ padding: 14, borderRadius: 12, background: 'var(--card-raised)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>Scale</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                {recoveryTerms.length > 0
+                                    ? `Protect efficient terms like ${recoveryTerms[0].term} before reallocating away from weaker traffic.`
+                                    : 'No clear scale-first term surfaced yet.'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Target size={16} color="#6366f1" />
+                            Asset Watchlist
+                            <InfoTooltip text="Assets most worth reviewing because they have meaningful impression volume but weak label support or soft CTR." />
+                        </h3>
+                        <span className="badge badge-warning">{fmtNumber(watchlistAssets.length)} review</span>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {watchlistAssets.length > 0 ? watchlistAssets.map((asset: any, index: number) => (
+                            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, paddingBottom: 12, borderBottom: index === watchlistAssets.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.type.replace(/_/g, ' ')} • {asset.campaign}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{asset.reason}</div>
                                 </div>
-                            </>
-                        ) : (
-                            <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <CheckCircle size={24} style={{ color: '#10b981', margin: '0 auto 12px' }} />
-                                <p style={{ fontSize: 13 }}>No fatigued assets detected. Your ad copy is performing well.</p>
+                                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700 }}>{asset.ctr.toFixed(2)}% CTR</div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtNumber(asset.impressions)} impressions</div>
+                                    <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 4 }}>{asset.performance.replace(/_/g, ' ')}</div>
+                                </div>
+                            </div>
+                        )) : (
+                            <div style={{ textAlign: 'center', padding: 20, color: 'var(--muted)', fontSize: 13 }}>
+                                No asset watchlist candidates stood out against the current asset average.
                             </div>
                         )}
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Layers size={16} color="#10b981" />
+                            Asset Health Mix
+                            <InfoTooltip text="A cleaner read of the current asset pool: what is strong, what is still learning, what has no usable label, and what looks fatigued." />
+                        </h3>
+                        <span className="badge badge-info">{averageAssetCtr.toFixed(2)}% avg CTR</span>
+                    </div>
+                    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+                            <div style={{ padding: 12, borderRadius: 10, background: '#10b98112', border: '1px solid #10b98133' }}>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Strong</div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#10b981' }}>{fmtNumber(strongAssets.length)}</div>
+                            </div>
+                            <div style={{ padding: 12, borderRadius: 10, background: '#6366f112', border: '1px solid #6366f133' }}>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Stable</div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#93c5fd' }}>{fmtNumber(stableAssets.length)}</div>
+                            </div>
+                            <div style={{ padding: 12, borderRadius: 10, background: '#f59e0b12', border: '1px solid #f59e0b33' }}>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Unlabeled</div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b' }}>{fmtNumber(unlabeledAssets.length)}</div>
+                            </div>
+                            <div style={{ padding: 12, borderRadius: 10, background: '#ef444412', border: '1px solid #ef444433' }}>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Fatigue</div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#ef4444' }}>{fmtNumber(fatigueAssets.length)}</div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {fatigueAssets.length > 0 ? fatigueAssets.map((asset: any, index: number) => (
+                                <div key={index} style={{ padding: 12, border: '1px dashed #ef4444', borderRadius: 10, background: '#ef444408' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 13, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.text}</div>
+                                        <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700 }}>{asset.ctr.toFixed(2)}% CTR</div>
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                        {fmtNumber(asset.impressions)} impressions • {fmtNumber(asset.clicks)} clicks • {asset.performance.replace(/_/g, ' ')} • {asset.type.replace(/_/g, ' ')}
+                                    </div>
+                                </div>
+                            )) : (
+                                <div style={{ padding: 18, borderRadius: 10, background: 'var(--card-raised)', border: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
+                                    No clear fatigue cluster surfaced. That is better than the old binary “all clear” state, but still keep an eye on the watchlist assets above.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
