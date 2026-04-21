@@ -227,7 +227,7 @@ export const googleAdsApi = {
     getCreatives: () => googleApi.get('/google/auth/creatives'),
     getCrossPlatform: (preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0) =>
         googleApi.get(`/google/auth/cross-platform?preset=${preset}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
-    getAlerts: () => googleApi.get('/google/auth/alerts'),
+    getAlerts: (preset = '30d') => googleApi.get(`/google/auth/alerts?preset=${preset}`),
     getAuctionInsights: (preset = '30d') => googleApi.get(`/google/auth/auction-insights?preset=${preset}`),
     getSearchTerms: (preset = '30d') => googleApi.get(`/google/auth/search-terms?preset=${preset}`),
     getQualityScore: () => googleApi.get('/google/auth/quality-score'),
