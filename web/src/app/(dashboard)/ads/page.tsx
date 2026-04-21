@@ -20,7 +20,7 @@ import {
     IndianRupee, Eye, MousePointer, Users, BarChart3,
     Play, Target, Layers, TrendingUp, HelpCircle, Smartphone, Monitor,
     Globe, MapPin, Award, Zap, DollarSign, ExternalLink, ChevronDown, ChevronUp,
-    Filter, Calendar, Clock, ArrowRight, ShoppingCart, CreditCard, Package, Brain, Activity
+    Filter, Calendar, Clock, ArrowRight, ShoppingCart, CreditCard, Package, Brain, Activity, X
 } from 'lucide-react';
 import {
     AreaChart, Area, BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
@@ -67,6 +67,19 @@ function formatCompactPercent(value: string | number, digits = 1) {
     const num = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(num)) return '0%';
     return `${num.toFixed(digits)}%`;
+}
+
+function formatSignedPercent(value?: number | null, digits = 1) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return 'No baseline';
+    const num = Number(value);
+    return `${num >= 0 ? '+' : ''}${num.toFixed(digits)}%`;
+}
+
+function formatChartDateLabel(value?: string | null) {
+    if (!value) return '—';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '—';
+    return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
 function formatShortDate(value?: string | null) {
@@ -669,6 +682,604 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
     );
 }
 
+function SpendTrendAreaChart({
+    points,
+    comparisonLabel,
+    height = 240
+}: {
+    points: Array<{ dateStart?: string | null; spend?: number; previousSpend?: number }>;
+    comparisonLabel?: string | null;
+    height?: number;
+}) {
+    const chartData = (points || []).map((point) => ({
+        label: formatChartDateLabel(point?.dateStart || null),
+        spend: Number(point?.spend || 0),
+        previousSpend: Number(point?.previousSpend || 0)
+    }));
+    const hasComparison = Boolean(comparisonLabel) && chartData.some((point) => point.previousSpend > 0);
+
+    if (!chartData.length) {
+        return (
+            <div style={{
+                minHeight: height,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--muted)',
+                fontSize: 13
+            }}>
+                Spend trend unavailable for this selection.
+            </div>
+        );
+    }
+
+    return (
+        <ResponsiveContainer width="100%" height={height}>
+            <AreaChart data={chartData}>
+                <defs>
+                    <linearGradient id="campaignSpendFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="campaignSpendPrevFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#94a3b8" stopOpacity={0.02} />
+                    </linearGradient>
+                </defs>
+                <XAxis
+                    dataKey="label"
+                    tick={{ fill: 'var(--muted)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                />
+                <YAxis
+                    tick={{ fill: 'var(--muted)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value) => formatCurrency(value)}
+                    width={72}
+                />
+                <RechartsTooltip
+                    formatter={(value, key) => [
+                        formatCurrency(Number(value || 0)),
+                        key === 'previousSpend' ? (comparisonLabel || 'Previous period') : 'Spend'
+                    ]}
+                    labelFormatter={(value) => `Date: ${value}`}
+                    contentStyle={{
+                        background: '#0f172a',
+                        border: '1px solid rgba(148,163,184,0.2)',
+                        borderRadius: 10,
+                        color: '#fff'
+                    }}
+                />
+                {hasComparison && <Legend wrapperStyle={{ fontSize: 11 }} />}
+                {hasComparison && (
+                    <Area
+                        type="monotone"
+                        dataKey="previousSpend"
+                        name={comparisonLabel || 'Previous period'}
+                        stroke="#94a3b8"
+                        fill="url(#campaignSpendPrevFill)"
+                        strokeWidth={2}
+                    />
+                )}
+                <Area
+                    type="monotone"
+                    dataKey="spend"
+                    name="Spend"
+                    stroke="#2563eb"
+                    fill="url(#campaignSpendFill)"
+                    strokeWidth={3}
+                />
+            </AreaChart>
+        </ResponsiveContainer>
+    );
+}
+
+function CreativeSpendModal({
+    creative,
+    comparisonLabel,
+    onClose
+}: {
+    creative: any;
+    comparisonLabel?: string | null;
+    onClose: () => void;
+}) {
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
+
+    if (typeof document === 'undefined' || !creative) return null;
+
+    const retention = creative.retention || null;
+
+    return createPortal(
+        <div
+            style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(2, 6, 23, 0.78)',
+                backdropFilter: 'blur(6px)',
+                zIndex: 1000001,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 20
+            }}
+            onClick={onClose}
+        >
+            <div
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                    width: 'min(920px, 100%)',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))',
+                    color: '#0f172a',
+                    borderRadius: 20,
+                    boxShadow: '0 24px 80px rgba(15, 23, 42, 0.32)',
+                    border: '1px solid rgba(148,163,184,0.18)'
+                }}
+            >
+                <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(148,163,184,0.16)', display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        <div style={{ width: 92, height: 92, borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, rgba(37,99,235,0.14), rgba(15,23,42,0.12))', flexShrink: 0 }}>
+                            {creative.thumbnail ? (
+                                <img
+                                    src={creative.thumbnail}
+                                    alt={creative.adName}
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: creative.previewSource === 'thumbnail' ? 'contain' : 'cover',
+                                        background: creative.previewSource === 'thumbnail' ? 'rgba(15,23,42,0.94)' : 'transparent',
+                                        padding: creative.previewSource === 'thumbnail' ? 8 : 0
+                                    }}
+                                />
+                            ) : null}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>
+                                Creative Spend Trend
+                            </div>
+                            <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{creative.adName}</h3>
+                            <div style={{ marginTop: 6, fontSize: 13, color: '#64748b' }}>
+                                {[creative.adsetName, creative.creativeName].filter(Boolean).join(' • ') || 'Ad-level creative'}
+                            </div>
+                            <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(37,99,235,0.1)', color: '#1d4ed8', fontSize: 12, fontWeight: 700 }}>
+                                    Spend {formatCurrency(creative.metrics?.spend || 0)}
+                                </span>
+                                <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#334155', fontSize: 12, fontWeight: 700 }}>
+                                    {comparisonLabel || 'Selected period'} {formatSignedPercent(creative.comparison?.spendDeltaPct)}
+                                </span>
+                                {retention && (
+                                    <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(16,185,129,0.12)', color: '#047857', fontSize: 12, fontWeight: 700 }}>
+                                        Hold {formatCompactPercent(retention.holdRate || 0)}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        style={{
+                            border: 'none',
+                            background: 'rgba(148,163,184,0.14)',
+                            color: '#0f172a',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 999,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div style={{ padding: 20 }}>
+                    <div style={{ marginBottom: 18 }}>
+                        <SpendTrendAreaChart points={creative.spendTrend || []} comparisonLabel={comparisonLabel} height={280} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                        <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(148,163,184,0.16)' }}>
+                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Primary Result</div>
+                            <div style={{ fontSize: 18, fontWeight: 700 }}>{formatNumber(creative.primaryMetric?.value || 0)}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{creative.primaryMetric?.label || 'Results'}</div>
+                        </div>
+                        <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(148,163,184,0.16)' }}>
+                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>CTR</div>
+                            <div style={{ fontSize: 18, fontWeight: 700 }}>{formatPercent(creative.metrics?.ctr || 0)}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{formatNumber(creative.metrics?.impressions || 0)} impressions</div>
+                        </div>
+                        <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(148,163,184,0.16)' }}>
+                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Cost / Result</div>
+                            <div style={{ fontSize: 18, fontWeight: 700 }}>
+                                {creative.primaryMetric?.costValue ? formatCurrency(creative.primaryMetric.costValue) : '—'}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{creative.primaryMetric?.costLabel || 'Cost efficiency'}</div>
+                        </div>
+                        {retention && (
+                            <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(148,163,184,0.16)' }}>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Video Retention</div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>{formatCompactPercent(retention.hookRate || 0)}</div>
+                                <div style={{ fontSize: 12, color: '#64748b' }}>Hook • Hold {formatCompactPercent(retention.holdRate || 0)}</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+function CampaignDrilldownDrawer({
+    open,
+    loading,
+    data,
+    onClose,
+    onCreativeSelect
+}: {
+    open: boolean;
+    loading: boolean;
+    data: any;
+    onClose: () => void;
+    onCreativeSelect: (creative: any) => void;
+}) {
+    useEffect(() => {
+        if (!open) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [open, onClose]);
+
+    if (!open || typeof document === 'undefined') return null;
+
+    const campaign = data?.campaign || null;
+    const creativeSummary = data?.creativeSummary || {};
+    const spendTrend = data?.spendTrend || {};
+    const creatives = data?.creatives || [];
+
+    return createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000000, display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+                type="button"
+                aria-label="Close campaign drilldown"
+                onClick={onClose}
+                style={{
+                    flex: 1,
+                    border: 'none',
+                    background: 'rgba(2, 6, 23, 0.62)',
+                    backdropFilter: 'blur(3px)',
+                    cursor: 'pointer'
+                }}
+            />
+            <aside style={{
+                width: 'min(1120px, 100vw)',
+                height: '100vh',
+                overflowY: 'auto',
+                background: 'linear-gradient(180deg, rgba(248,250,252,0.98), rgba(255,255,255,0.99))',
+                borderLeft: '1px solid rgba(148,163,184,0.18)',
+                boxShadow: '-20px 0 60px rgba(15, 23, 42, 0.18)',
+                padding: 24
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 20 }}>
+                    <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>
+                            Campaign Drilldown
+                        </div>
+                        <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>{campaign?.name || 'Loading campaign...'}</h2>
+                        <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--muted)', maxWidth: 720 }}>
+                            Click any creative preview to open its spend graph. Current period is compared against the previous matching window when the active preset supports it.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        style={{
+                            border: '1px solid rgba(148,163,184,0.22)',
+                            background: '#fff',
+                            color: '#0f172a',
+                            width: 40,
+                            height: 40,
+                            borderRadius: 999,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                        }}
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                {loading ? (
+                    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+                        <div className="spinner" />
+                        <p className="text-muted" style={{ margin: 0 }}>Loading campaign and creative analytics...</p>
+                    </div>
+                ) : campaign ? (
+                    <div style={{ display: 'grid', gap: 18 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(280px, 0.7fr)', gap: 18, alignItems: 'stretch' }}>
+                            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid rgba(148,163,184,0.14)', padding: 18 }}>
+                                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
+                                    <div style={{ width: 88, height: 88, borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, rgba(37,99,235,0.14), rgba(15,23,42,0.16))', flexShrink: 0 }}>
+                                        {campaign.thumbnail ? (
+                                            <img
+                                                src={campaign.thumbnail}
+                                                alt={campaign.name}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: campaign.previewSource === 'thumbnail' ? 'contain' : 'cover',
+                                                    background: campaign.previewSource === 'thumbnail' ? 'rgba(15,23,42,0.94)' : 'transparent',
+                                                    padding: campaign.previewSource === 'thumbnail' ? 8 : 0
+                                                }}
+                                            />
+                                        ) : null}
+                                    </div>
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                                            <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(37,99,235,0.1)', color: '#1d4ed8', fontSize: 11, fontWeight: 700 }}>
+                                                {campaign.typeLabel || 'General'}
+                                            </span>
+                                            <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#334155', fontSize: 11, fontWeight: 700 }}>
+                                                {campaign.status?.replace(/_/g, ' ') || 'UNKNOWN'}
+                                            </span>
+                                            <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.12)', color: '#047857', fontSize: 11, fontWeight: 700 }}>
+                                                {campaign.budgetMode}{campaign.budgetAmount ? ` • ${formatCurrency(campaign.budgetAmount)}` : ''}
+                                            </span>
+                                        </div>
+                                        <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                                            {campaign.objectiveLabel} • Updated {formatShortDate(campaign.updatedTime)}
+                                        </div>
+                                        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                            <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(15,23,42,0.06)', color: '#0f172a', fontSize: 12, fontWeight: 700 }}>
+                                                {creativeSummary.adsCount || 0} ads
+                                            </span>
+                                            <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#4338ca', fontSize: 12, fontWeight: 700 }}>
+                                                {creativeSummary.creativesCount || 0} creatives
+                                            </span>
+                                            <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.14)', color: '#b45309', fontSize: 12, fontWeight: 700 }}>
+                                                {creativeSummary.videoCreativesCount || 0} video creatives
+                                            </span>
+                                            {(creativeSummary.multiAssetCreativesCount || 0) > 0 && (
+                                                <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(14,165,233,0.12)', color: '#0369a1', fontSize: 12, fontWeight: 700 }}>
+                                                    {creativeSummary.multiAssetCreativesCount} multi-asset
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+                                    <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.12)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Spend</div>
+                                        <div style={{ fontSize: 20, fontWeight: 800 }}>{formatCurrency(campaign.metrics?.spend || 0)}</div>
+                                        <div style={{ fontSize: 12, color: '#64748b' }}>{spendTrend.comparisonLabel || 'Selected period'} {formatSignedPercent(campaign.comparison?.spendDeltaPct)}</div>
+                                    </div>
+                                    <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.12)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{campaign.primaryMetric?.label || 'Results'}</div>
+                                        <div style={{ fontSize: 20, fontWeight: 800 }}>{formatNumber(campaign.primaryMetric?.value || 0)}</div>
+                                        <div style={{ fontSize: 12, color: '#64748b' }}>{campaign.primaryMetric?.costValue ? `${campaign.primaryMetric.costLabel}: ${formatCurrency(campaign.primaryMetric.costValue)}` : 'No cost baseline yet'}</div>
+                                    </div>
+                                    <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.16)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>CTR / Clicks</div>
+                                        <div style={{ fontSize: 20, fontWeight: 800 }}>{formatPercent(campaign.metrics?.ctr || 0)}</div>
+                                        <div style={{ fontSize: 12, color: '#64748b' }}>{formatNumber(campaign.metrics?.linkClicks || 0)} link clicks</div>
+                                    </div>
+                                    <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.16)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>ROAS / Frequency</div>
+                                        <div style={{ fontSize: 20, fontWeight: 800 }}>{formatRoas(campaign.metrics?.purchaseRoas || 0)}</div>
+                                        <div style={{ fontSize: 12, color: '#64748b' }}>{Number(campaign.metrics?.frequency || 0).toFixed(2)}x frequency</div>
+                                    </div>
+                                </div>
+
+                                <div style={{ padding: '12px 14px', borderRadius: 14, background: 'linear-gradient(180deg, rgba(248,250,252,0.9), rgba(255,255,255,0.95))', border: '1px solid rgba(148,163,184,0.16)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+                                        <div>
+                                            <div style={{ fontSize: 18, fontWeight: 700 }}>Spend Trends</div>
+                                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                                Current campaign spend vs the previous matching window for the selected preset
+                                            </div>
+                                        </div>
+                                        {spendTrend.comparisonLabel && (
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', padding: '6px 10px', borderRadius: 999, background: 'rgba(148,163,184,0.12)' }}>
+                                                {spendTrend.comparisonLabel}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <SpendTrendAreaChart points={spendTrend.points || []} comparisonLabel={spendTrend.comparisonLabel} height={280} />
+                                </div>
+                            </div>
+
+                            <div style={{ background: '#0f172a', color: '#e2e8f0', borderRadius: 20, padding: 18, border: '1px solid rgba(148,163,184,0.12)' }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10 }}>
+                                    What This Gives You
+                                </div>
+                                <div style={{ display: 'grid', gap: 12 }}>
+                                    <div style={{ padding: 12, borderRadius: 14, background: 'rgba(15,23,42,0.42)', border: '1px solid rgba(148,163,184,0.12)' }}>
+                                        <div style={{ fontWeight: 700, marginBottom: 4 }}>Campaign-level pacing</div>
+                                        <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5 }}>
+                                            See whether the selected campaign is accelerating, softening, or simply holding its normal spend curve versus the previous comparable period.
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: 12, borderRadius: 14, background: 'rgba(15,23,42,0.42)', border: '1px solid rgba(148,163,184,0.12)' }}>
+                                        <div style={{ fontWeight: 700, marginBottom: 4 }}>Creative-by-creative read</div>
+                                        <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5 }}>
+                                            Each creative card shows real spend, result efficiency, hold rate for videos, and a preview-triggered popup for the creative’s own spend graph.
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: 12, borderRadius: 14, background: 'rgba(15,23,42,0.42)', border: '1px solid rgba(148,163,184,0.12)' }}>
+                                        <div style={{ fontWeight: 700, marginBottom: 4 }}>Structure summary</div>
+                                        <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5 }}>
+                                            Ads, unique creatives, video creatives, and multi-asset units are surfaced up top so you can judge whether the campaign has enough creative depth.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ background: '#fff', borderRadius: 20, border: '1px solid rgba(148,163,184,0.14)', padding: 18 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+                                <div>
+                                    <div style={{ fontSize: 20, fontWeight: 700 }}>Creatives ({creatives.length})</div>
+                                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                        Click the preview image on any creative to open its spend graph.
+                                    </div>
+                                </div>
+                            </div>
+
+                            {creatives.length ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
+                                    {creatives.map((creative: any) => (
+                                        <div key={creative.adId} style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(148,163,184,0.16)', background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => onCreativeSelect(creative)}
+                                                style={{
+                                                    width: '100%',
+                                                    border: 'none',
+                                                    padding: 0,
+                                                    margin: 0,
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                    background: 'transparent'
+                                                }}
+                                            >
+                                                <div style={{ position: 'relative', height: 160, background: 'linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.22))' }}>
+                                                    {creative.thumbnail ? (
+                                                        <img
+                                                            src={creative.thumbnail}
+                                                            alt={creative.adName}
+                                                            loading="lazy"
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '100%',
+                                                                objectFit: creative.previewSource === 'thumbnail' ? 'contain' : 'cover',
+                                                                background: creative.previewSource === 'thumbnail' ? 'rgba(15,23,42,0.94)' : 'transparent',
+                                                                padding: creative.previewSource === 'thumbnail' ? 10 : 0
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 12 }}>
+                                                            Preview unavailable
+                                                        </div>
+                                                    )}
+                                                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.64))' }} />
+                                                    <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                                        <span style={{ padding: '5px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.9)', color: '#0f172a', fontSize: 10, fontWeight: 700 }}>
+                                                            Click for spend graph
+                                                        </span>
+                                                        {creative.hasVideo && (
+                                                            <span style={{ padding: '5px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.9)', color: '#052e16', fontSize: 10, fontWeight: 800 }}>
+                                                                Video
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+                                                        <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', marginBottom: 4, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
+                                                            {creative.adName}
+                                                        </div>
+                                                        <div style={{ fontSize: 11, color: '#dbe4f0' }}>
+                                                            {[creative.adsetName, creative.creativeName].filter(Boolean).join(' • ') || 'Creative detail'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </button>
+
+                                            <div style={{ padding: 16 }}>
+                                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                                                    <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(37,99,235,0.08)', color: '#1d4ed8', fontSize: 11, fontWeight: 700 }}>
+                                                        Spend {formatCurrency(creative.metrics?.spend || 0)}
+                                                    </span>
+                                                    <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#334155', fontSize: 11, fontWeight: 700 }}>
+                                                        {spendTrend.comparisonLabel || 'Selected period'} {formatSignedPercent(creative.comparison?.spendDeltaPct)}
+                                                    </span>
+                                                    {creative.assetCount > 1 && (
+                                                        <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontSize: 11, fontWeight: 700 }}>
+                                                            {creative.assetCount} assets
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+                                                    <div>
+                                                        <div style={{ fontSize: 15, fontWeight: 700 }}>{formatNumber(creative.primaryMetric?.value || 0)}</div>
+                                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{creative.primaryMetric?.label || 'Results'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: 15, fontWeight: 700 }}>{formatPercent(creative.metrics?.ctr || 0)}</div>
+                                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>CTR</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: 15, fontWeight: 700 }}>
+                                                            {creative.primaryMetric?.costValue ? formatCurrency(creative.primaryMetric.costValue) : '—'}
+                                                        </div>
+                                                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{creative.primaryMetric?.costLabel || 'Cost / Result'}</div>
+                                                    </div>
+                                                </div>
+
+                                                {creative.retention ? (
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+                                                        <div style={{ padding: '10px 8px', borderRadius: 12, background: 'rgba(37,99,235,0.05)', border: '1px solid rgba(37,99,235,0.1)', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 800 }}>{formatCompactPercent(creative.retention.hookRate || 0)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hook Rate</div>
+                                                        </div>
+                                                        <div style={{ padding: '10px 8px', borderRadius: 12, background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.1)', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 800 }}>{formatCompactPercent(creative.retention.holdRate || 0)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hold Rate</div>
+                                                        </div>
+                                                        <div style={{ padding: '10px 8px', borderRadius: 12, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.1)', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 800 }}>{formatCompactPercent(creative.retention.completionRate || 0)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Completion</div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(148,163,184,0.12)', color: 'var(--muted)', fontSize: 11, marginBottom: 12 }}>
+                                                        No video retention signal on this creative yet.
+                                                    </div>
+                                                )}
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 11, color: 'var(--muted)' }}>
+                                                    <span>{formatNumber(creative.metrics?.impressions || 0)} impressions</span>
+                                                    <span>{Number(creative.metrics?.frequency || 0).toFixed(2)}x freq</span>
+                                                    <span>{creative.status?.replace(/_/g, ' ') || 'UNKNOWN'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{ padding: '28px 0', textAlign: 'center', color: 'var(--muted)' }}>
+                                    No creative-level rows surfaced for this campaign in the selected window.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>
+                        Campaign drilldown data is unavailable right now.
+                    </div>
+                )}
+            </aside>
+        </div>,
+        document.body
+    );
+}
+
 // ==================== SECTION COMPONENTS ====================
 
 function SectionCard({ title, subtitle, children, collapsible = false, defaultOpen = true }: {
@@ -795,6 +1406,8 @@ export default function AdsPage() {
     const [campaignStatusFilter, setCampaignStatusFilter] = useState('all');
     const [campaignSort, setCampaignSort] = useState('spend_desc');
     const [campaignPage, setCampaignPage] = useState(1);
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+    const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
 
     // Fetch accounts
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -852,6 +1465,16 @@ export default function AdsPage() {
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'campaigns'
+    });
+
+    const { data: campaignDrilldownData, isLoading: campaignDrilldownLoading } = useQuery({
+        queryKey: ['campaign-drilldown', effectiveAccount, selectedCampaignId, datePreset],
+        queryFn: async () => {
+            if (!effectiveAccount || !selectedCampaignId) return null;
+            const res = await adsApi.getCampaignDrilldown(effectiveAccount, selectedCampaignId, datePreset);
+            return res.data;
+        },
+        enabled: !!effectiveAccount && !!selectedCampaignId
     });
 
     // Fetch conversion funnel
@@ -1082,6 +1705,31 @@ export default function AdsPage() {
         }
     }, [campaignPage, campaignTotalPages]);
 
+    useEffect(() => {
+        setSelectedCampaignId(null);
+        setSelectedCreativeId(null);
+    }, [effectiveAccount, datePreset]);
+
+    useEffect(() => {
+        setSelectedCreativeId(null);
+    }, [selectedCampaignId]);
+
+    useEffect(() => {
+        if (activeTab !== 'campaigns') {
+            setSelectedCampaignId(null);
+            setSelectedCreativeId(null);
+        }
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (!selectedCampaignId) return;
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = originalOverflow;
+        };
+    }, [selectedCampaignId]);
+
     if (accountsLoading) {
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
@@ -1114,6 +1762,8 @@ export default function AdsPage() {
     const deepProfileType = deepInsightsData?.data?.accountProfile?.type || 'general';
     const deepPlacementSummary = deepInsightsData?.data?.placementSummary || null;
     const deepPlacementRows = deepInsightsData?.data?.placementDiagnostics || [];
+    const selectedCampaignDrilldown = campaignDrilldownData?.data || null;
+    const selectedCreative = selectedCampaignDrilldown?.creatives?.find((creative: any) => creative.adId === selectedCreativeId) || null;
 
     const handlePageExport = async (format: SectionExportFormat) => {
         if (!effectiveAccount) return;
@@ -1729,22 +2379,75 @@ export default function AdsPage() {
                                                 : campaign.effectiveStatus?.includes('PAUSED')
                                                     ? { bg: 'rgba(148,163,184,0.16)', color: '#cbd5e1', border: 'rgba(148,163,184,0.22)' }
                                                     : { bg: 'rgba(245,158,11,0.14)', color: '#fcd34d', border: 'rgba(245,158,11,0.24)' };
+                                            const previewShouldContain = campaign.previewSource === 'thumbnail';
 
                                             return (
                                                 <tr key={campaign.id}>
                                                     <td style={{ minWidth: 260 }}>
-                                                        <div style={{ fontWeight: 600, marginBottom: 6 }}>{campaign.name}</div>
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
-                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.14)', color: '#c4b5fd', fontSize: 11, fontWeight: 600 }}>
-                                                                {campaign.objectiveLabel}
-                                                            </span>
-                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(14,165,233,0.14)', color: '#7dd3fc', fontSize: 11, fontWeight: 600 }}>
-                                                                {campaign.budgetMode}{campaign.budgetAmount ? ` • ${formatCurrency(campaign.budgetAmount)}` : ''}
-                                                            </span>
-                                                        </div>
-                                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                                                            {daysLive !== null ? `${daysLive}d live` : 'Start unknown'} • Updated {formatShortDate(campaign.updated_time)}
-                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedCampaignId(campaign.id);
+                                                                setSelectedCreativeId(null);
+                                                            }}
+                                                            style={{
+                                                                width: '100%',
+                                                                border: 'none',
+                                                                background: 'transparent',
+                                                                padding: 0,
+                                                                margin: 0,
+                                                                textAlign: 'left',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                                                <div style={{
+                                                                    width: 48,
+                                                                    height: 48,
+                                                                    borderRadius: 12,
+                                                                    overflow: 'hidden',
+                                                                    flexShrink: 0,
+                                                                    background: 'linear-gradient(135deg, rgba(99,102,241,0.14), rgba(15,23,42,0.16))',
+                                                                    border: '1px solid rgba(148,163,184,0.16)'
+                                                                }}>
+                                                                    {campaign.thumbnail ? (
+                                                                        <img
+                                                                            src={campaign.thumbnail}
+                                                                            alt={campaign.name}
+                                                                            loading="lazy"
+                                                                            style={{
+                                                                                width: '100%',
+                                                                                height: '100%',
+                                                                                objectFit: previewShouldContain ? 'contain' : 'cover',
+                                                                                background: previewShouldContain ? 'rgba(15,23,42,0.94)' : 'transparent',
+                                                                                padding: previewShouldContain ? 6 : 0
+                                                                            }}
+                                                                        />
+                                                                    ) : (
+                                                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>
+                                                                            Open
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div style={{ minWidth: 0 }}>
+                                                                    <div style={{ fontWeight: 600, marginBottom: 6 }}>{campaign.name}</div>
+                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+                                                                        <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.14)', color: '#c4b5fd', fontSize: 11, fontWeight: 600 }}>
+                                                                            {campaign.objectiveLabel}
+                                                                        </span>
+                                                                        <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(14,165,233,0.14)', color: '#7dd3fc', fontSize: 11, fontWeight: 600 }}>
+                                                                            {campaign.budgetMode}{campaign.budgetAmount ? ` • ${formatCurrency(campaign.budgetAmount)}` : ''}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                                                        {daysLive !== null ? `${daysLive}d live` : 'Start unknown'} • Updated {formatShortDate(campaign.updated_time)}
+                                                                    </div>
+                                                                    <div style={{ fontSize: 11, color: '#2563eb', marginTop: 6, fontWeight: 600 }}>
+                                                                        Click thumbnail or name to open creative drilldown
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
                                                     </td>
                                                     <td>
                                                         <div style={{ fontWeight: 600 }}>{campaign.typeLabel || 'General'}</div>
@@ -3911,6 +4614,23 @@ export default function AdsPage() {
                     ))}
                 </div>
             </SectionCard>
+            <CampaignDrilldownDrawer
+                open={Boolean(selectedCampaignId)}
+                loading={campaignDrilldownLoading}
+                data={selectedCampaignDrilldown}
+                onClose={() => {
+                    setSelectedCampaignId(null);
+                    setSelectedCreativeId(null);
+                }}
+                onCreativeSelect={(creative) => setSelectedCreativeId(creative.adId)}
+            />
+            {selectedCreative && (
+                <CreativeSpendModal
+                    creative={selectedCreative}
+                    comparisonLabel={selectedCampaignDrilldown?.spendTrend?.comparisonLabel || null}
+                    onClose={() => setSelectedCreativeId(null)}
+                />
+            )}
         </div>
     );
 }

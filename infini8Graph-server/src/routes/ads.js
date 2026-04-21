@@ -21,6 +21,7 @@ router.get('/accounts/:adAccountId/geography', adsController.getGeography);
 
 // Campaigns
 router.get('/accounts/:adAccountId/campaigns', adsController.getCampaigns);
+router.get('/accounts/:adAccountId/campaigns/:campaignId/drilldown', adsController.getCampaignDrilldown);
 
 // Ad Sets
 router.get('/accounts/:adAccountId/adsets', adsController.getAdSets);
