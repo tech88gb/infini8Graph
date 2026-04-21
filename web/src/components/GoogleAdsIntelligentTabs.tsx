@@ -1195,6 +1195,13 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
         .slice(0, 5);
 
     const dayLabels: Record<string, string> = {
+        '2': 'Mon',
+        '3': 'Tue',
+        '4': 'Wed',
+        '5': 'Thu',
+        '6': 'Fri',
+        '7': 'Sat',
+        '8': 'Sun',
         MONDAY: 'Mon',
         TUESDAY: 'Tue',
         WEDNESDAY: 'Wed',
@@ -1225,13 +1232,21 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
         };
     });
 
-    const productiveWindows = windows
-        .filter((slot: any) => slot.conversions > 0 || slot.roas > 0)
-        .sort((a: any, b: any) => {
-            if (b.roas !== a.roas) return b.roas - a.roas;
-            if (b.conversions !== a.conversions) return b.conversions - a.conversions;
-            return a.spend - b.spend;
-        });
+    const productiveWindows = windows.filter((slot: any) => slot.conversions > 0 || slot.roas > 0);
+    const useEfficiencyMode = productiveWindows.length > 0
+        && productiveWindows.every((slot: any) => Number(slot.roas || 0) < 1);
+    const productiveWindowSort = (a: any, b: any) => {
+        if (useEfficiencyMode) {
+            const aCost = a.costPerConversion ?? Number.MAX_SAFE_INTEGER;
+            const bCost = b.costPerConversion ?? Number.MAX_SAFE_INTEGER;
+            if (aCost !== bCost) return aCost - bCost;
+            return b.conversions - a.conversions;
+        }
+        if (b.roas !== a.roas) return b.roas - a.roas;
+        if (b.conversions !== a.conversions) return b.conversions - a.conversions;
+        return a.spend - b.spend;
+    };
+    productiveWindows.sort(productiveWindowSort);
     const bestWindows = productiveWindows.slice(0, 5);
 
     const costlyWeakWindows = windows
@@ -1246,17 +1261,12 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
     const bestWindow = bestWindows[0] || null;
     const riskiestWindow = costlyWeakWindows[0] || null;
 
-    const topComp = competitors[0] || null;
-    const competitorPressure = topComp
-        ? Math.round(
-            Number(topComp.overlapRate || 0) * 0.4
-            + Number(topComp.positionAboveRate || 0) * 0.35
-            + Math.max(0, 100 - Number(topComp.impressionShare || 0)) * 0.25
-        )
-        : null;
-
     const topCompetitors = competitors.slice(0, 5);
     const primaryCompetitor = topCompetitors[0] || null;
+    const hasAuctionData = topCompetitors.length > 0;
+    const totalKeywordSpend = keywords.reduce((sum: number, kw: any) => sum + Number(kw.spend || 0), 0);
+    const totalKeywordClicks = keywords.reduce((sum: number, kw: any) => sum + Number(kw.clicks || 0), 0);
+    const avgKeywordCpc = totalKeywordClicks > 0 ? totalKeywordSpend / totalKeywordClicks : 0;
 
     const keywordsWithThreat = keywords.map((kw: any, i: number) => {
         const comp = topCompetitors[i % Math.max(topCompetitors.length, 1)] || {};
@@ -1265,32 +1275,78 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
         const impressionDeficit = Math.max(0, 100 - Number(comp.impressionShare || 0));
         const qualityScore = kw.qualityScore ?? null;
         const qualityWeakness = qualityScore === null ? 40 : Math.max(0, (10 - qualityScore) * 10);
-        const threatScore = Math.min(100, Math.round(
-            overlapRate * 0.35
-            + posAbove * 0.30
-            + impressionDeficit * 0.20
-            + qualityWeakness * 0.15
+        const spend = Number(kw.spend || 0);
+        const clicks = Number(kw.clicks || 0);
+        const conversions = Number(kw.conversions || 0);
+        const cpcBid = Number(kw.cpc || 0);
+        const spendShare = totalKeywordSpend > 0 ? (spend / totalKeywordSpend) * 100 : 0;
+        const cpcPressure = avgKeywordCpc > 0
+            ? Math.min(100, Math.max(0, ((cpcBid / avgKeywordCpc) - 1) * 100))
+            : 0;
+        const conversionDrag = spend > 0 && conversions === 0
+            ? Math.min(100, 50 + spendShare)
+            : clicks > 0
+                ? Math.max(0, 100 - ((conversions / clicks) * 100))
+                : 0;
+        const internalPressureScore = Math.min(100, Math.round(
+            cpcPressure * 0.30
+            + qualityWeakness * 0.25
+            + Math.min(spendShare * 2, 100) * 0.25
+            + conversionDrag * 0.20
         ));
+        const primaryDriver = conversions === 0 && spend > 0
+            ? 'High spend, no conversions'
+            : qualityWeakness >= 50
+                ? 'Quality Score weakness'
+                : cpcPressure >= 30
+                    ? 'Above-average CPC pressure'
+                    : 'Spend concentration';
+        const threatScore = hasAuctionData
+            ? Math.min(100, Math.round(
+                overlapRate * 0.35
+                + posAbove * 0.30
+                + impressionDeficit * 0.20
+                + qualityWeakness * 0.15
+            ))
+            : internalPressureScore;
         return {
             ...kw,
             text: kw.keyword,
-            cpcBid: Number(kw.cpc || 0),
-            competitor: comp.domain || 'Auction data unavailable',
+            spend,
+            clicks,
+            conversions,
+            cpcBid,
+            competitor: comp.domain || 'Indirect signal',
             overlapRate,
             posAbove,
             impressionShare: Number(comp.impressionShare || 0),
-            threatScore
+            threatScore,
+            spendShare,
+            cpcPressure,
+            qualityWeakness,
+            primaryDriver
         };
     });
 
-    const maxThreat = keywordsWithThreat.reduce((m: any, k: any) => k.threatScore > (m?.threatScore || 0) ? k : m, null);
-    const avgThreatScore = keywordsWithThreat.length > 0
-        ? Math.round(keywordsWithThreat.reduce((s: number, k: any) => s + k.threatScore, 0) / keywordsWithThreat.length)
+    const threatRows = keywordsWithThreat.filter((k: any) => typeof k.threatScore === 'number');
+    const maxThreat = threatRows.reduce((m: any, k: any) => k.threatScore > (m?.threatScore || 0) ? k : m, null);
+    const avgThreatScore = threatRows.length > 0
+        ? Math.round(threatRows.reduce((s: number, k: any) => s + k.threatScore, 0) / threatRows.length)
         : 0;
+    const topComp = competitors[0] || null;
+    const competitorPressure = hasAuctionData
+        ? Math.round(
+            Number(topComp.overlapRate || 0) * 0.4
+            + Number(topComp.positionAboveRate || 0) * 0.35
+            + Math.max(0, 100 - Number(topComp.impressionShare || 0)) * 0.25
+        )
+        : (threatRows.length > 0 ? avgThreatScore : null);
     const combinedSignal = Math.round(
-        ((bestWindow?.roas || 0) > 0 ? Math.min((bestWindow?.roas || 0) * 20, 100) : 25) * 0.4
+        (useEfficiencyMode
+            ? (bestWindow?.costPerConversion ? Math.max(15, 100 - bestWindow.costPerConversion * 8) : 25)
+            : ((bestWindow?.roas || 0) > 0 ? Math.min((bestWindow?.roas || 0) * 20, 100) : 25)) * 0.4
         + (competitorPressure ?? 30) * 0.35
-        + (keywordsWithThreat.length > 0 ? avgThreatScore : 30) * 0.25
+        + (threatRows.length > 0 ? avgThreatScore : 30) * 0.25
     );
 
     const getThreatColor = (s: number) => s >= 75 ? '#ef4444' : s >= 45 ? '#f59e0b' : '#10b981';
@@ -1313,8 +1369,12 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                     <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
                         {bestWindow ? (
                             <>
-                                Best current bidding window is <strong>{bestWindow.label}</strong> with <strong>{bestWindow.roas.toFixed(2)}x ROAS</strong>.
-                                {maxThreat ? <> Competitive pressure is led by <strong>{maxThreat.competitor}</strong> against <strong>"{maxThreat.text}"</strong>.</> : ' Auction pressure data is limited, so this view is leaning on timing efficiency first.'}
+                                Best current bidding window is <strong>{bestWindow.label}</strong> with <strong>{useEfficiencyMode ? `${fmtCurrency(bestWindow.costPerConversion || 0)} cost / conv.` : `${bestWindow.roas.toFixed(2)}x ROAS`}</strong>.
+                                {maxThreat
+                                    ? hasAuctionData
+                                        ? <> Competitive pressure is led by <strong>{maxThreat.competitor}</strong> against <strong>"{maxThreat.text}"</strong>.</>
+                                        : <> Internal market pressure is strongest on <strong>"{maxThreat.text}"</strong> because of <strong>{maxThreat.primaryDriver.toLowerCase()}</strong>.</>
+                                    : ' Auction pressure data is limited, so this view is leaning on timing efficiency first.'}
                             </>
                         ) : (
                             'Combines real day-part bidding performance with auction pressure on your most valuable keywords.'
@@ -1337,19 +1397,23 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                     label="Best Window"
                     value={bestWindow ? bestWindow.label : 'Not surfaced'}
                     tone={bestWindow ? 'success' : 'default'}
-                    tooltip="Best day-part window ranked by ROAS first, then conversions, from the selected date range."
+                    tooltip={useEfficiencyMode
+                        ? 'Best day-part window ranked by lowest cost per conversion, then conversions, from the selected date range.'
+                        : 'Best day-part window ranked by ROAS first, then conversions, from the selected date range.'}
                 />
                 <CompactMetric
-                    label="Best Window ROAS"
-                    value={bestWindow ? `${bestWindow.roas.toFixed(2)}x` : '—'}
-                    tone={bestWindow && bestWindow.roas > 1 ? 'success' : 'default'}
-                    tooltip="Return on ad spend in the strongest bidding window from the day/hour heatmap."
+                    label={useEfficiencyMode ? 'Best Window Cost / Conv.' : 'Best Window ROAS'}
+                    value={bestWindow ? (useEfficiencyMode ? fmtCurrency(bestWindow.costPerConversion || 0) : `${bestWindow.roas.toFixed(2)}x`) : '—'}
+                    tone={bestWindow ? 'success' : 'default'}
+                    tooltip={useEfficiencyMode ? 'Cost per conversion in the strongest efficiency window from the day/hour heatmap.' : 'Return on ad spend in the strongest bidding window from the day/hour heatmap.'}
                 />
                 <CompactMetric
-                    label="Auction Pressure"
+                    label={hasAuctionData ? 'Auction Pressure' : 'Market Pressure'}
                     value={competitorPressure !== null ? `${competitorPressure}/100` : 'Not surfaced'}
                     tone={competitorPressure !== null ? (competitorPressure >= 75 ? 'danger' : competitorPressure >= 45 ? 'warning' : 'success') : 'default'}
-                    tooltip="Composite competitor pressure built from overlap rate, position-above rate, and impression share deficit."
+                    tooltip={hasAuctionData
+                        ? 'Composite competitor pressure built from overlap rate, position-above rate, and impression share deficit.'
+                        : 'Fallback market-pressure score built from CPC pressure, spend concentration, quality weakness, and conversion drag.'}
                 />
                 <CompactMetric
                     label="Tracked Competitors"
@@ -1365,23 +1429,38 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <BarChart2 size={16} color="#10b981" />
                             Best Bidding Windows
-                            <InfoTooltip text="Day-part windows ranked by ROAS and conversion output from the real bidding heatmap." />
+                            <InfoTooltip text={useEfficiencyMode
+                                ? 'Day-part windows ranked by lowest cost per conversion and conversion output from the real bidding heatmap.'
+                                : 'Day-part windows ranked by ROAS and conversion output from the real bidding heatmap.'} />
                         </h3>
                         <span className="badge badge-success">{bestWindows.length} surfaced</span>
                     </div>
                     <div style={{ padding: '0 20px 20px' }}>
                         {bestWindows.length > 0 ? (
-                            <div style={{ height: 260 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ReBarChart data={bestWindows}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
-                                        <XAxis dataKey="label" tick={{ fontSize: 11 }} angle={-18} textAnchor="end" height={60} />
-                                        <YAxis tick={{ fontSize: 11 }} />
-                                        <Tooltip />
-                                        <Bar dataKey="roas" fill="#10b981" radius={[6, 6, 0, 0]} name="ROAS" />
-                                    </ReBarChart>
-                                </ResponsiveContainer>
-                            </div>
+                            <table className="table" style={{ fontSize: 12 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Window</th>
+                                        <th>Spend</th>
+                                        <th>Clicks</th>
+                                        <th>Conv.</th>
+                                        <th>{useEfficiencyMode ? 'Cost / Conv.' : 'ROAS'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {bestWindows.map((slot: any, index: number) => (
+                                        <tr key={index}>
+                                            <td style={{ fontWeight: 700 }}>{slot.label}</td>
+                                            <td>{fmtCurrency(slot.spend)}</td>
+                                            <td>{fmtNumber(slot.clicks)}</td>
+                                            <td>{fmtNumber(slot.conversions, 1)}</td>
+                                            <td style={{ color: '#10b981', fontWeight: 700 }}>
+                                                {useEfficiencyMode ? (slot.costPerConversion !== null ? fmtCurrency(slot.costPerConversion) : '—') : `${slot.roas.toFixed(2)}x`}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         ) : (
                             <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>No converting bidding windows surfaced for this date range.</div>
                         )}
@@ -1417,12 +1496,12 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
 
             <div className="card">
                 <div className="card-header">
-                    <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Crosshair size={16} color="#6366f1" />
-                        Top 5 Keywords — Auction Pressure
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Crosshair size={16} color="#6366f1" />
+                        Top 5 Keywords — {hasAuctionData ? 'Auction Pressure' : 'Market Pressure'}
                     </h3>
                     <span className="badge badge-danger" style={{ background: '#ef444422', color: '#ef4444' }}>
-                        {keywordsWithThreat.filter((k: any) => k.threatScore >= 75).length} Critical
+                        {threatRows.filter((k: any) => (k.threatScore || 0) >= 75).length} Critical
                     </span>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
@@ -1434,12 +1513,14 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                                     <th>Keyword</th>
                                     <th>Your QS</th>
                                     <th>Your CPC</th>
-                                    <th>Top Competitor</th>
-                                    <th>Overlap Rate</th>
+                                    <th>{hasAuctionData ? 'Top Competitor' : 'Primary Driver'}</th>
+                                    <th>{hasAuctionData ? 'Overlap Rate' : 'Spend Share'}</th>
                                     <th>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            Threat Score
-                                            <InfoTooltip text="Composite pressure score from auction overlap, position-above rate, impression share deficit, and your keyword quality weakness." />
+                                            {hasAuctionData ? 'Threat Score' : 'Pressure Score'}
+                                            <InfoTooltip text={hasAuctionData
+                                                ? 'Composite pressure score from auction overlap, position-above rate, impression share deficit, and your keyword quality weakness.'
+                                                : 'Fallback pressure score from CPC pressure, keyword quality weakness, spend share, and conversion drag.'} />
                                         </span>
                                     </th>
                                     <th>Action</th>
@@ -1448,7 +1529,9 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                             <tbody>
                                 {keywordsWithThreat.map((kw: any, i: number) => {
                                     const tc = getThreatColor(kw.threatScore);
-                                    const action = kw.threatScore >= 75 ? 'Raise Bid ↑' : kw.threatScore >= 45 ? 'Improve QS' : 'Maintain';
+                                    const action = hasAuctionData
+                                        ? (kw.threatScore >= 75 ? 'Raise Bid ↑' : kw.threatScore >= 45 ? 'Improve QS' : 'Maintain')
+                                        : (kw.threatScore >= 75 ? 'Cut Waste' : kw.threatScore >= 45 ? 'Tighten QS' : 'Maintain');
                                     const actionColor = kw.threatScore >= 75 ? '#ef4444' : kw.threatScore >= 45 ? '#f59e0b' : '#10b981';
                                     return (
                                         <tr key={i} style={{ background: kw.threatScore >= 75 ? 'rgba(239,68,68,0.03)' : 'transparent' }}>
@@ -1456,9 +1539,11 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                                             <td style={{ fontWeight: 600 }}>"{kw.text}"</td>
                                             <td><QualityScore score={kw.qualityScore || null} /></td>
                                             <td style={{ fontWeight: 600 }}>₹{(kw.cpcBid || 0).toFixed(2)}</td>
-                                            <td style={{ color: '#6366f1', fontWeight: 600 }}>{kw.competitor}</td>
-                                            <td style={{ color: kw.overlapRate > 50 ? '#ef4444' : 'var(--foreground)', fontWeight: kw.overlapRate > 50 ? 700 : 400 }}>{kw.overlapRate.toFixed(1)}%</td>
-                                            <td style={{ minWidth: 180 }}><ThreatScoreBadge score={kw.threatScore} /></td>
+                                            <td style={{ color: '#6366f1', fontWeight: 600 }}>{hasAuctionData ? kw.competitor : kw.primaryDriver}</td>
+                                            <td style={{ color: hasAuctionData && kw.overlapRate > 50 ? '#ef4444' : 'var(--foreground)', fontWeight: hasAuctionData && kw.overlapRate > 50 ? 700 : 400 }}>
+                                                {hasAuctionData ? `${kw.overlapRate.toFixed(1)}%` : `${kw.spendShare.toFixed(1)}%`}
+                                            </td>
+                                            <td style={{ minWidth: 180 }}>{kw.threatScore !== null ? <ThreatScoreBadge score={kw.threatScore} /> : <span style={{ color: 'var(--muted)' }}>Not surfaced</span>}</td>
                                             <td>
                                                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: `${actionColor}18`, color: actionColor }}>{action}</span>
                                             </td>
@@ -1476,8 +1561,16 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                 </div>
                 <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)', lineHeight: 1.6 }}>
                     <Info size={12} style={{ display: 'inline', marginRight: 4 }} />
-                    <strong>Threat Score formula:</strong> (Overlap Rate × 0.35) + (Position Above Rate × 0.30) + (Impression Share Deficit × 0.20) + (Quality Weakness × 0.15).
-                    Score ≥ 75 = Critical pressure; 45–74 = Elevated; &lt; 45 = Low pressure.
+                    {hasAuctionData ? (
+                        <>
+                            <strong>Threat Score formula:</strong> (Overlap Rate × 0.35) + (Position Above Rate × 0.30) + (Impression Share Deficit × 0.20) + (Quality Weakness × 0.15).
+                            Score ≥ 75 = Critical pressure; 45–74 = Elevated; &lt; 45 = Low pressure.
+                        </>
+                    ) : (
+                        <>
+                            Google Ads did not surface auction-insight competitor rows for this account/window, so the table falls back to internal market-pressure signals built from CPC pressure, spend share, quality weakness, and conversion drag.
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1486,12 +1579,12 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                     <div className="card-header">
                         <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Users size={16} color="#ec4899" />
-                            Competitor Auction Reference
+                            {hasAuctionData ? 'Competitor Auction Reference' : 'Indirect Pressure Drivers'}
                         </h3>
-                        <span className="badge badge-info">{topCompetitors.length} domains</span>
+                        <span className="badge badge-info">{hasAuctionData ? `${topCompetitors.length} domains` : `${threatRows.length} signals`}</span>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
-                        {topCompetitors.length > 0 ? (
+                        {hasAuctionData ? (
                             <table className="table" style={{ fontSize: 12 }}>
                                 <thead>
                                     <tr>
@@ -1520,7 +1613,34 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                                 </tbody>
                             </table>
                         ) : (
-                            <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>Auction insights were not surfaced for this account in the selected window.</div>
+                            threatRows.length > 0 ? (
+                                <table className="table" style={{ fontSize: 12 }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Keyword</th>
+                                            <th>Primary Driver</th>
+                                            <th>Spend</th>
+                                            <th>CPC</th>
+                                            <th>Conv.</th>
+                                            <th>Pressure</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {threatRows.slice(0, 5).map((kw: any, i: number) => (
+                                            <tr key={i}>
+                                                <td style={{ fontWeight: 600 }}>"{kw.text}"</td>
+                                                <td style={{ color: '#6366f1', fontWeight: 600 }}>{kw.primaryDriver}</td>
+                                                <td>{fmtCurrency(kw.spend)}</td>
+                                                <td>{fmtCurrency(kw.cpcBid)}</td>
+                                                <td>{fmtNumber(kw.conversions, 1)}</td>
+                                                <td><ThreatScoreBadge score={kw.threatScore} /></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>Auction insights were not surfaced and there was not enough keyword data to build indirect pressure signals.</div>
+                            )
                         )}
                     </div>
                 </div>
@@ -1536,7 +1656,11 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                         <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
                             <div style={{ fontWeight: 700, marginBottom: 4 }}>Bid Up Window</div>
                             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                                {bestWindow ? `${bestWindow.label} is the strongest candidate, returning ${bestWindow.roas.toFixed(2)}x ROAS with ${fmtNumber(bestWindow.conversions, 1)} conversions.` : 'No high-confidence bid-up window surfaced yet.'}
+                                {bestWindow
+                                    ? useEfficiencyMode
+                                        ? `${bestWindow.label} is the strongest candidate, holding ${fmtCurrency(bestWindow.costPerConversion || 0)} cost / conv. across ${fmtNumber(bestWindow.conversions, 1)} conversions.`
+                                        : `${bestWindow.label} is the strongest candidate, returning ${bestWindow.roas.toFixed(2)}x ROAS with ${fmtNumber(bestWindow.conversions, 1)} conversions.`
+                                    : 'No high-confidence bid-up window surfaced yet.'}
                             </div>
                         </div>
                         <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
@@ -1548,7 +1672,11 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
                         <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-raised)' }}>
                             <div style={{ fontWeight: 700, marginBottom: 4 }}>Auction Focus</div>
                             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                                {primaryCompetitor ? `${primaryCompetitor.domain} is your leading auction pressure source with ${primaryCompetitor.overlapRate}% overlap and ${primaryCompetitor.positionAboveRate}% position-above rate.` : 'Competitor auction data was not surfaced, so focus on timing efficiency and Quality Score first.'}
+                                {primaryCompetitor
+                                    ? `${primaryCompetitor.domain} is your leading auction pressure source with ${primaryCompetitor.overlapRate}% overlap and ${primaryCompetitor.positionAboveRate}% position-above rate.`
+                                    : maxThreat
+                                        ? `"${maxThreat.text}" is your strongest indirect pressure signal because of ${maxThreat.primaryDriver.toLowerCase()}. Focus on CPC discipline and Quality Score first.`
+                                        : 'Competitor auction data was not surfaced, so focus on timing efficiency and Quality Score first.'}
                             </div>
                         </div>
                     </div>
