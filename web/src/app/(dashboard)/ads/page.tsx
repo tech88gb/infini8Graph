@@ -3553,6 +3553,43 @@ export default function AdsPage() {
                                         </div>
                                     )}
 
+                                    {(advancedData.data.fatigueAnalysis?.sourceSplit || []).length > 0 && (
+                                        <div style={{ display: 'grid', gap: 12 }}>
+                                            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Fatigue Source Split</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                                                {(advancedData.data.fatigueAnalysis.sourceSplit || []).map((source: any) => {
+                                                    const tone = getRiskTone(source.score || 0);
+                                                    const confidenceTone = getConfidenceTone(source.confidenceLabel || 'Low confidence');
+                                                    return (
+                                                        <div key={source.key} style={{ padding: 14, borderRadius: 12, background: 'var(--background)', border: `1px solid ${tone.border}` }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                                <div style={{ fontWeight: 700 }}>{source.label}</div>
+                                                                <div style={{ color: tone.color, fontWeight: 700 }}>{Math.round(source.score || 0)}</div>
+                                                            </div>
+                                                            <div style={{ height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 8 }}>
+                                                                <div style={{ width: `${Math.min(source.score || 0, 100)}%`, height: '100%', background: tone.color }} />
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                                                <span style={{ fontSize: 11, color: tone.color }}>{tone.label}</span>
+                                                                <span style={{
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: 999,
+                                                                    background: confidenceTone.bg,
+                                                                    color: confidenceTone.color,
+                                                                    fontSize: 10,
+                                                                    fontWeight: 600
+                                                                }}>
+                                                                    {source.confidenceLabel}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-muted" style={{ fontSize: 12 }}>{source.detail}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {(advancedData.data.fatigueAnalysis?.missingSignals || []).length > 0 && (
                                         <div style={{ padding: '12px 16px', background: 'rgba(148, 163, 184, 0.12)', borderRadius: 10, fontSize: 12 }}>
                                             <strong>Missing or limited data:</strong> {(advancedData.data.fatigueAnalysis.missingSignals || []).join(' ')}
@@ -3750,11 +3787,29 @@ export default function AdsPage() {
 
                                                         {ad.hasVideo && ad.videoMetrics && (
                                                             <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6 }}>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>Video Retention</div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>Video Retention</div>
+                                                                    <span style={{
+                                                                        padding: '3px 8px',
+                                                                        borderRadius: 999,
+                                                                        background: getConfidenceTone(ad.videoMetrics.confidenceLabel || 'Low confidence').bg,
+                                                                        color: getConfidenceTone(ad.videoMetrics.confidenceLabel || 'Low confidence').color,
+                                                                        fontSize: 10,
+                                                                        fontWeight: 600
+                                                                    }}>
+                                                                        {ad.videoMetrics.confidenceLabel || 'Low confidence'}
+                                                                    </span>
+                                                                </div>
                                                                 <div style={{ fontSize: 12 }}>
                                                                     Hook: <strong>{ad.videoMetrics.hookRate}%</strong> •
-                                                                    Complete: <strong>{ad.videoMetrics.completionRate}%</strong>
+                                                                    Complete: <strong>{ad.videoMetrics.completionRate}%</strong> •
+                                                                    Plays: <strong>{formatNumber(ad.videoMetrics.plays || 0)}</strong>
                                                                 </div>
+                                                                {!ad.videoMetrics.reliableForCreative && (
+                                                                    <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                                                        This video signal is directional only for the selected date range, so weak hook/completion is not used as a hard creative diagnosis.
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                         {!ad.hasVideo && (
