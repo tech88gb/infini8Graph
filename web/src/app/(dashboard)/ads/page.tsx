@@ -119,6 +119,10 @@ function getRiskTone(value: number) {
     return { bg: 'rgba(16, 185, 129, 0.14)', border: 'rgba(16, 185, 129, 0.3)', color: '#34d399', label: 'Stable' };
 }
 
+function getDerivedBadgeTone() {
+    return { bg: 'rgba(99, 102, 241, 0.14)', color: '#c7d2fe', border: 'rgba(99, 102, 241, 0.28)' };
+}
+
 function getConfidenceTone(label: string) {
     if (label === 'High confidence') return { bg: 'rgba(16, 185, 129, 0.14)', color: '#86efac' };
     if (label === 'Medium confidence') return { bg: 'rgba(59, 130, 246, 0.14)', color: '#93c5fd' };
@@ -3442,6 +3446,9 @@ export default function AdsPage() {
                                 subtitle="Account-level fatigue read built from hook, CPR, CPM, CTR, and frequency"
                             >
                                 <div style={{ display: 'grid', gap: 20 }}>
+                                    <div style={{ padding: '12px 16px', background: 'rgba(148, 163, 184, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
+                                        <strong>How to read this:</strong> the percentages and ratios shown in each card are the raw Meta trend signals for the selected date range. The small score is a modeled fatigue-pressure score from 0 to 100, not a Meta-native metric.
+                                    </div>
                                     <div style={{ padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
                                         <strong>Scope:</strong> {advancedData.data.fatigueAnalysis?.scope || 'Account-level aggregate across all campaigns in the selected ad account'}<br />
                                         <strong>Compared to:</strong> {advancedData.data.fatigueAnalysis?.comparisonBasis || 'First half of the selected period vs second half of the selected period.'}
@@ -3470,11 +3477,14 @@ export default function AdsPage() {
                                                 {advancedData.data.fatigueAnalysis?.statusEmoji}
                                             </div>
                                             <div style={{ fontSize: 12, color: 'white', opacity: 0.9 }}>
-                                                Score: {advancedData.data.fatigueAnalysis?.score || 0}
+                                                Blended Score: {advancedData.data.fatigueAnalysis?.score || 0}
                                             </div>
                                         </div>
                                         <div style={{ marginTop: 12, fontWeight: 600 }}>
                                             {advancedData.data.fatigueAnalysis?.statusLabel || 'Unknown'}
+                                        </div>
+                                        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                            Derived heuristic, not a direct Meta field
                                         </div>
                                     </div>
 
@@ -3533,20 +3543,40 @@ export default function AdsPage() {
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                                             {(advancedData.data.fatigueAnalysis.framework || []).map((item: any) => {
                                                 const tone = getRiskTone(item.score || 0);
+                                                const derivedTone = getDerivedBadgeTone();
                                                 return (
                                                     <div key={item.key} style={{ padding: 14, borderRadius: 12, background: 'var(--background)', border: `1px solid ${tone.border}` }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                                            <div style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
-                                                                {item.label}
-                                                                <InfoTooltip text={item.description} />
+                                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                                                            <div>
+                                                                <div style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
+                                                                    {item.label}
+                                                                    <InfoTooltip text={`${item.description} The pressure score shown here is derived from thresholds in our fatigue model, not fetched directly from Meta Ads Manager.`} />
+                                                                </div>
+                                                                <div className="text-muted" style={{ fontSize: 10, marginTop: 3 }}>Raw Meta trend</div>
+                                                            </div>
+                                                            <span style={{
+                                                                padding: '3px 8px',
+                                                                borderRadius: 999,
+                                                                background: derivedTone.bg,
+                                                                border: `1px solid ${derivedTone.border}`,
+                                                                color: derivedTone.color,
+                                                                fontSize: 10,
+                                                                fontWeight: 600
+                                                            }}>
+                                                                Modeled
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{item.value}</div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                                                            <div style={{ fontSize: 11, color: tone.color, display: 'inline-flex', alignItems: 'center' }}>
+                                                                Pressure Score <InfoTooltip text="This 0-100 score is derived from the raw trend using fatigue-model thresholds. A low score does not mean the raw metric is zero; it means the model sees little fatigue pressure from it right now." />
                                                             </div>
                                                             <div style={{ color: tone.color, fontWeight: 700 }}>{Math.round(item.score || 0)}</div>
                                                         </div>
                                                         <div style={{ height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 8 }}>
                                                             <div style={{ width: `${Math.min(item.score || 0, 100)}%`, height: '100%', background: tone.color }} />
                                                         </div>
-                                                        <div style={{ fontSize: 11, color: tone.color, marginBottom: 4 }}>{tone.label}</div>
-                                                        <div className="text-muted" style={{ fontSize: 12 }}>{item.value}</div>
+                                                        <div style={{ fontSize: 11, color: tone.color }}>{tone.label}</div>
                                                     </div>
                                                 );
                                             })}
@@ -3560,10 +3590,30 @@ export default function AdsPage() {
                                                 {(advancedData.data.fatigueAnalysis.sourceSplit || []).map((source: any) => {
                                                     const tone = getRiskTone(source.score || 0);
                                                     const confidenceTone = getConfidenceTone(source.confidenceLabel || 'Low confidence');
+                                                    const derivedTone = getDerivedBadgeTone();
                                                     return (
                                                         <div key={source.key} style={{ padding: 14, borderRadius: 12, background: 'var(--background)', border: `1px solid ${tone.border}` }}>
                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                                                <div style={{ fontWeight: 700 }}>{source.label}</div>
+                                                                <div style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
+                                                                    {source.label}
+                                                                    <InfoTooltip text="This source split is inferred by weighting the component fatigue pressures. It is a diagnostic heuristic to explain likely cause, not a direct Meta breakdown." />
+                                                                </div>
+                                                                <span style={{
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: 999,
+                                                                    background: derivedTone.bg,
+                                                                    border: `1px solid ${derivedTone.border}`,
+                                                                    color: derivedTone.color,
+                                                                    fontSize: 10,
+                                                                    fontWeight: 600
+                                                                }}>
+                                                                    Derived
+                                                                </span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                                <div style={{ fontSize: 11, color: tone.color, display: 'inline-flex', alignItems: 'center' }}>
+                                                                    Modeled Contribution <InfoTooltip text="This 0-100 score shows how much this inferred source is contributing to fatigue pressure right now. It is not fetched directly from Meta Ads Manager." />
+                                                                </div>
                                                                 <div style={{ color: tone.color, fontWeight: 700 }}>{Math.round(source.score || 0)}</div>
                                                             </div>
                                                             <div style={{ height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 8 }}>
