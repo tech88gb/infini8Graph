@@ -14,12 +14,12 @@ function buildExchangeRedirect(path, payload) {
 }
 
 // ============================================================
-// GOOGLE LOGIN (Primary identity — replaces Meta login)
+// GOOGLE LOGIN (Primary identity)
 // ============================================================
 
 /**
  * Step 1: Redirect user to Google OAuth consent screen.
- * This is now the main /api/auth/login endpoint.
+ * Route: GET /api/auth/login
  */
 export async function login(req, res) {
     try {
@@ -35,7 +35,7 @@ export async function login(req, res) {
 /**
  * Step 2: Handle Google OAuth callback.
  * Finds or creates user by google_id, checks meta_connected, returns JWT.
- * Route: GET /api/auth/google/callback  (GOOGLE_LOGIN_REDIRECT_URL must point here)
+ * Route: GET /api/auth/google/callback
  */
 export async function googleCallback(req, res) {
     try {
@@ -49,27 +49,21 @@ export async function googleCallback(req, res) {
             return res.redirect(`${FRONTEND_REDIRECT_URL}/login?error=No+authorization+code+received`);
         }
 
-        // Exchange code for Google tokens
         const tokens = await authService.exchangeGoogleLoginCode(code);
         if (!tokens.access_token) throw new Error('No access token from Google');
 
-        // Get user profile from Google
         const googleUserInfo = await authService.getGoogleUserInfo(tokens.access_token);
         console.log(`✅ Google login: ${googleUserInfo.email}`);
 
-        // Find or create user by google_id
         const user = await authService.findOrCreateUserByGoogle(googleUserInfo.id, googleUserInfo.email);
 
-        // DEFENSIVE FIX: Always check auth_tokens for an active account,
-        // regardless of the meta_connected flag (which can be stale/false after
-        // a migration or re-login). This ensures users with existing tokens
-        // get their full Instagram context in the JWT.
+        // Always check auth_tokens for an active account regardless of meta_connected flag
         const activeAccount = await authService.getActiveAccountForUser(user.id);
         const isMetaConnected = user.meta_connected || !!activeAccount;
 
-        // If we found tokens but meta_connected was false, fix the DB flag silently
+        // Fix stale meta_connected=false if tokens exist
         if (activeAccount && !user.meta_connected) {
-            console.log(`\ud83d\udd27 Correcting stale meta_connected=false for user: ${googleUserInfo.email}`);
+            console.log(`🔧 Correcting stale meta_connected=false for user: ${googleUserInfo.email}`);
             await supabase.from('users')
                 .update({ meta_connected: true, updated_at: new Date().toISOString() })
                 .eq('id', user.id);
@@ -86,8 +80,6 @@ export async function googleCallback(req, res) {
         const jwtToken = generateToken(sessionPayload);
 
         setAuthCookie(res, jwtToken);
-
-        // Redirect to frontend callback handler with a short-lived one-time code.
         return res.redirect(buildExchangeRedirect('/auth/callback', sessionPayload));
     } catch (error) {
         console.error('❌ Google callback error:', error);
@@ -121,7 +113,12 @@ export async function metaConnect(req, res) {
 /**
  * Step 3b: Handle Meta OAuth callback — set up Instagram accounts for the user.
  * The userId is encoded in state as "setup:<userId>".
- * Route: GET /api/auth/callback  (META_REDIRECT_URI must point here — same as before)
+ * Route: GET /api/auth/callback
+ *
+ * KEY: We use the SHORT-LIVED token (scoped to only pages the user selected in
+ * the OAuth dialog) to query /me/accounts. The long-lived token has cached
+ * permissions from previous sessions and returns ALL pages regardless of selection.
+ * The long-lived token is then stored for future API calls.
  */
 export async function callback(req, res) {
     try {
@@ -136,7 +133,6 @@ export async function callback(req, res) {
             return res.redirect(`${FRONTEND_REDIRECT_URL}/connect-meta?error=No+authorization+code+received`);
         }
 
-        // Decode userId from state
         const stateDecoded = state ? decodeURIComponent(state) : '';
         if (!stateDecoded.startsWith('setup:')) {
             return res.redirect(`${FRONTEND_REDIRECT_URL}/connect-meta?error=Invalid+state+parameter`);
@@ -145,14 +141,15 @@ export async function callback(req, res) {
 
         console.log(`🔗 Meta setup callback for user: ${userId}`);
 
-        // Exchange code for Meta long-lived token
+        // Exchange code for both short-lived (scoped) and long-lived tokens
         const tokenData = await authService.exchangeCodeForToken(code);
 
-        // Fetch all authorized IG accounts
-        const authorizedAccounts = await authService.getInstagramBusinessAccount(tokenData.accessToken);
-        console.log(`✅ Meta authorized ${authorizedAccounts.length} Instagram account(s)`);
+        // Use short-lived token for account discovery — it only returns pages the
+        // user actually selected in the OAuth dialog this session.
+        const authorizedAccounts = await authService.getInstagramBusinessAccount(tokenData.shortLivedToken);
+        console.log(`✅ Meta authorized ${authorizedAccounts.length} Instagram account(s) (short-lived scope)`);
 
-        // Set up accounts in DB (composite key, no user_id overwrite)
+        // Store accounts with the long-lived token for future API calls
         await authService.setupMetaAccounts(
             userId,
             authorizedAccounts,
@@ -175,7 +172,7 @@ export async function callback(req, res) {
 }
 
 // ============================================================
-// SHARED ENDPOINTS (unchanged behavior, updated internals)
+// SHARED ENDPOINTS
 // ============================================================
 
 export async function exchangeCode(req, res) {
@@ -229,7 +226,6 @@ export async function refreshToken(req, res) {
         });
 
         setAuthCookie(res, jwtToken);
-
         res.json({ success: true, message: 'Token refreshed', token: jwtToken });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to refresh token' });
@@ -284,7 +280,6 @@ export async function switchAccount(req, res) {
         }
 
         setAuthCookie(res, result.jwt);
-
         res.json({ success: true, account: result.account, token: result.jwt });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to switch account' });
@@ -292,13 +287,12 @@ export async function switchAccount(req, res) {
 }
 
 /**
- * Reconnect Meta account — resets meta_connected so user goes through setup again.
+ * Reconnect Meta account — re-initiates the Meta setup flow.
  * Route: POST /api/auth/meta/reconnect
  */
 export async function metaReconnect(req, res) {
     try {
         const userId = req.user?.userId;
-        // Just return the Meta setup URL — same as metaConnect
         const loginUrl = authService.getMetaSetupUrl(userId);
         res.json({ success: true, loginUrl });
     } catch (error) {

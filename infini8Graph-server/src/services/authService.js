@@ -249,6 +249,10 @@ export async function exchangeCodeForToken(code) {
         });
 
         return {
+            // Use shortLivedToken to query /me/accounts — it is scoped to ONLY the pages
+            // the user actually selected in the OAuth dialog. The long-lived token has
+            // cached permissions from previous sessions and returns ALL pages regardless.
+            shortLivedToken,
             accessToken: longLivedResponse.data.access_token,
             expiresIn: longLivedResponse.data.expires_in || 5184000,
         };
