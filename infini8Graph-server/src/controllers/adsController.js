@@ -2049,6 +2049,12 @@ export async function getAdvancedAnalytics(req, res) {
                 : sorted[middle];
         };
 
+        const getConfidenceLabel = ({ spend = 0, conversions = 0, clicks = 0, impressions = 0 } = {}) => {
+            if (conversions >= 20 || spend >= 12000 || clicks >= 1500 || impressions >= 80000) return 'High confidence';
+            if (conversions >= 6 || spend >= 3500 || clicks >= 400 || impressions >= 20000) return 'Medium confidence';
+            return 'Low confidence';
+        };
+
         const describeOptimizationGoal = (optimizationGoal = '', campaignObjective = '') => {
             const goal = String(optimizationGoal || '').toUpperCase();
             const objective = String(campaignObjective || '').toUpperCase();
@@ -2205,7 +2211,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
+                    fields: 'id,name,status,creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values,video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
                     limit: 100
                 }
             }),
@@ -2464,6 +2470,7 @@ export async function getAdvancedAnalytics(req, res) {
             const creativeBase = ads.filter(ad => ad.insights?.data?.[0]).map(ad => {
                 const insights = ad.insights.data[0];
                 const actions = insights.actions || [];
+                const actionValues = insights.action_values || [];
                 const ctr = parseFloat(insights.ctr || 0);
                 const cpc = parseFloat(insights.cpc || 0);
                 const cpm = parseFloat(insights.cpm || 0);
@@ -2472,19 +2479,23 @@ export async function getAdvancedAnalytics(req, res) {
                 const spend = parseFloat(insights.spend || 0);
                 const frequency = parseFloat(insights.frequency || 0);
 
+                const videoPlays = parseInt(insights.video_play_actions?.[0]?.value || 0);
                 const v25 = parseInt(insights.video_p25_watched_actions?.[0]?.value || 0);
                 const v50 = parseInt(insights.video_p50_watched_actions?.[0]?.value || 0);
                 const v75 = parseInt(insights.video_p75_watched_actions?.[0]?.value || 0);
                 const v100 = parseInt(insights.video_p100_watched_actions?.[0]?.value || 0);
-                const hasVideo = v25 > 0;
+                const hasVideo = videoPlays > 0 || v25 > 0;
 
                 const leads = getActionTotal(actions, ['lead']);
                 const purchases = getActionTotal(actions, ['purchase']);
                 const conversions = leads + purchases;
+                const purchaseValue = getActionTotal(actionValues, ['purchase']);
+                const roas = spend > 0 ? purchaseValue / spend : 0;
                 const costPerConversion = conversions > 0 ? spend / conversions : null;
-                const hookRate = hasVideo && impressions > 0 ? (v25 / impressions * 100) : null;
-                const completionRate = hasVideo && v25 > 0 ? (v100 / v25 * 100) : null;
+                const hookRate = hasVideo && videoPlays > 0 ? (v25 / videoPlays * 100) : null;
+                const completionRate = hasVideo && videoPlays > 0 ? (v100 / videoPlays * 100) : null;
                 const clickToConversionRate = clicks > 0 ? (conversions / clicks * 100) : 0;
+                const confidenceLabel = getConfidenceLabel({ spend, conversions, clicks, impressions });
 
                 const primaryImage = ad.creative?.image_url
                     || ad.creative?.object_story_spec?.video_data?.image_url
@@ -2511,10 +2522,14 @@ export async function getAdvancedAnalytics(req, res) {
                     conversions,
                     leads,
                     purchases,
+                    purchaseValue,
+                    roas,
                     costPerConversion,
                     clickToConversionRate,
+                    confidenceLabel,
                     hasVideo,
                     videoMetrics: hasVideo ? {
+                        plays: videoPlays,
                         hookRate: hookRate !== null ? hookRate : 0,
                         retention25: v25,
                         retention50: v50,
@@ -2530,6 +2545,11 @@ export async function getAdvancedAnalytics(req, res) {
             const medianFrequency = getMedian(creativeBase.map(ad => ad.frequency).filter(value => value > 0));
             const medianCpa = getMedian(creativeBase.map(ad => ad.costPerConversion).filter(value => value !== null && value > 0));
             const medianSpend = getMedian(creativeBase.map(ad => ad.spend).filter(value => value > 0));
+            const medianCreativeCvr = getMedian(creativeBase.map(ad => ad.clickToConversionRate).filter(value => value > 0));
+            const medianCreativeRoas = getMedian(creativeBase.map(ad => ad.roas).filter(value => value > 0));
+            const medianHookRate = getMedian(creativeBase.filter(ad => ad.videoMetrics && ad.videoMetrics.hookRate > 0).map(ad => ad.videoMetrics.hookRate));
+            const maxCreativeConversions = creativeBase.reduce((max, ad) => Math.max(max, ad.conversions || 0), 0);
+            const maxCreativeSpend = creativeBase.reduce((max, ad) => Math.max(max, ad.spend || 0), 0);
 
             creativeForensics = creativeBase.map(ad => {
                 let pattern;
@@ -2602,15 +2622,48 @@ export async function getAdvancedAnalytics(req, res) {
                 if (ad.costPerConversion !== null && medianCpa > 0 && ad.costPerConversion > medianCpa * 1.35) fatigueReasons.push(`High CPR ₹${ad.costPerConversion.toFixed(0)}`);
                 if (medianCpm > 0 && ad.cpm > medianCpm * 1.3) fatigueReasons.push(`High CPM ₹${ad.cpm.toFixed(0)}`);
 
+                const ctrScore = medianCtr > 0
+                    ? Math.min((ad.ctr / medianCtr) * 18, 18)
+                    : Math.min((ad.ctr / 3) * 18, 18);
+                const cvrScore = medianCreativeCvr > 0
+                    ? Math.min((ad.clickToConversionRate / medianCreativeCvr) * 24, 24)
+                    : Math.min((ad.clickToConversionRate / 2) * 24, 24);
+                const volumeScore = maxCreativeConversions > 0
+                    ? Math.min((Math.log10(ad.conversions + 1) / Math.log10(maxCreativeConversions + 1)) * 16, 16)
+                    : 0;
+                const efficiencyScore = ad.costPerConversion !== null && medianCpa > 0
+                    ? Math.min((medianCpa / ad.costPerConversion) * 18, 18)
+                    : 0;
+                const spendConfidenceScore = maxCreativeSpend > 0
+                    ? Math.min((Math.log10(ad.spend + 1) / Math.log10(maxCreativeSpend + 1)) * 10, 10)
+                    : 0;
+                const roasScore = ad.roas > 0 && medianCreativeRoas > 0
+                    ? Math.min((ad.roas / medianCreativeRoas) * 8, 8)
+                    : 0;
+                const hookScore = ad.hasVideo && ad.videoMetrics && ad.videoMetrics.hookRate > 0
+                    ? Math.min((ad.videoMetrics.hookRate / Math.max(medianHookRate || 8, 8)) * 6, 6)
+                    : 0;
+                const frequencyPenalty = ad.frequency > Math.max(3.5, medianFrequency + 0.8)
+                    ? 10
+                    : ad.frequency > Math.max(2.5, medianFrequency + 0.4)
+                        ? 4
+                        : 0;
+                const lowDataPenalty = ad.confidenceLabel === 'Low confidence' ? 6 : 0;
+
                 const performanceScore = Math.max(
                     0,
                     Math.min(
                         100,
                         (
-                            Math.min((ad.ctr / Math.max(medianCtr || 1, 1)) * 25, 25) +
-                            Math.min((ad.clickToConversionRate / 1.5) * 30, 30) +
-                            Math.min((ad.conversions / 15) * 25, 25) +
-                            (ad.costPerConversion !== null && medianCpa > 0 ? Math.min((medianCpa / ad.costPerConversion) * 20, 20) : 0)
+                            ctrScore +
+                            cvrScore +
+                            volumeScore +
+                            efficiencyScore +
+                            spendConfidenceScore +
+                            roasScore +
+                            hookScore -
+                            frequencyPenalty -
+                            lowDataPenalty
                         )
                     )
                 );
@@ -2623,6 +2676,7 @@ export async function getAdvancedAnalytics(req, res) {
                     frequency: ad.frequency.toFixed(2),
                     clickToConversionRate: ad.clickToConversionRate.toFixed(2),
                     costPerConversion: ad.costPerConversion !== null ? ad.costPerConversion.toFixed(2) : null,
+                    roas: ad.roas > 0 ? ad.roas.toFixed(2) : null,
                     videoMetrics: ad.videoMetrics ? {
                         ...ad.videoMetrics,
                         hookRate: ad.videoMetrics.hookRate.toFixed(1),
@@ -2630,6 +2684,17 @@ export async function getAdvancedAnalytics(req, res) {
                     } : null,
                     pattern,
                     performanceScore: performanceScore.toFixed(0),
+                    scoreComponents: {
+                        ctrScore: ctrScore.toFixed(1),
+                        cvrScore: cvrScore.toFixed(1),
+                        volumeScore: volumeScore.toFixed(1),
+                        efficiencyScore: efficiencyScore.toFixed(1),
+                        spendConfidenceScore: spendConfidenceScore.toFixed(1),
+                        roasScore: roasScore.toFixed(1),
+                        hookScore: hookScore.toFixed(1),
+                        frequencyPenalty,
+                        lowDataPenalty
+                    },
                     fatigue: {
                         status: creativeFatigue,
                         frequency: ad.frequency,
@@ -2735,6 +2800,35 @@ export async function getAdvancedAnalytics(req, res) {
                 const benchmarkProgress = goalProfile.benchmarkTarget
                     ? Math.min((weeklyPace / goalProfile.benchmarkTarget) * 100, 100)
                     : null;
+                const ctrValue = parseFloat(insights.ctr || 0);
+                const frequencyValue = parseFloat(insights.frequency || 0);
+                const deliveryWarnings = [];
+
+                if (goalProfile.needsOptimizationEvents && weeklyPace < 50) {
+                    deliveryWarnings.push(`Projected pace is only ${weeklyPace.toFixed(1)}/week against the ${goalProfile.benchmarkTarget}/week benchmark.`);
+                }
+                if (daysActive < Math.min(5, selectedWindowDays || 5)) {
+                    deliveryWarnings.push('This ad set is still young, so delivery stability is not proven yet.');
+                }
+                if (frequencyValue >= (goalProfile.needsOptimizationEvents ? 3.2 : 2.2)) {
+                    deliveryWarnings.push(`Frequency is elevated at ${frequencyValue.toFixed(2)}x.`);
+                }
+                if (ctrValue > 0 && ctrValue < (goalProfile.needsOptimizationEvents ? 1 : 0.2)) {
+                    deliveryWarnings.push(`CTR is soft at ${ctrValue.toFixed(2)}%.`);
+                }
+
+                const hasStableRunway = daysActive >= Math.min(5, selectedWindowDays || 5);
+                const hasHealthyFrequency = frequencyValue === 0 || frequencyValue < (goalProfile.needsOptimizationEvents ? 3.2 : 2.2);
+                const hasViableCtr = ctrValue === 0 || ctrValue >= (goalProfile.needsOptimizationEvents ? 1 : 0.2);
+                const safeToScale = goalProfile.needsOptimizationEvents
+                    ? weeklyPace >= Math.max(goalProfile.benchmarkTarget || 50, 75) && spend >= 2000 && hasStableRunway && hasHealthyFrequency && hasViableCtr
+                    : spend >= 1000 && hasStableRunway && hasHealthyFrequency;
+                const confidenceLabel = getConfidenceLabel({
+                    spend,
+                    conversions: goalProfile.needsOptimizationEvents ? goalEvents : generalConversions,
+                    clicks: parseFloat(insights.clicks || 0),
+                    impressions: parseFloat(insights.impressions || 0)
+                });
 
                 let learningStatus = { status: 'unknown', label: 'Unknown', color: '#6b7280', icon: '❓' };
                 const isLearning = status === 'LEARNING' || status === 'PENDING_REVIEW';
@@ -2772,13 +2866,19 @@ export async function getAdvancedAnalytics(req, res) {
                 } else if (isActive) {
                     learningStatus = {
                         status: goalProfile.needsOptimizationEvents ? 'active' : 'delivery_active',
-                        label: goalProfile.needsOptimizationEvents ? 'Stable Delivery' : 'Delivery Stable',
+                        label: safeToScale
+                            ? 'Scale Ready'
+                            : goalProfile.needsOptimizationEvents
+                                ? 'Stable Delivery'
+                                : 'Delivery Stable',
                         color: '#10b981',
                         icon: '✅',
-                        safeToScale: goalProfile.needsOptimizationEvents ? weeklyPace >= 50 && spend > 100 : false,
-                        note: goalProfile.needsOptimizationEvents
-                            ? `Projected pace: ${weeklyPace.toFixed(1)} ${goalProfile.metricLabel.toLowerCase()}/week`
-                            : 'This ad set is not judged by a fixed event-volume threshold.'
+                        safeToScale,
+                        note: safeToScale
+                            ? 'Event pace, spend depth, age, and frequency all support cautious scaling.'
+                            : goalProfile.needsOptimizationEvents
+                                ? `Projected pace: ${weeklyPace.toFixed(1)} ${goalProfile.metricLabel.toLowerCase()}/week. Use the watchouts below before scaling harder.`
+                                : 'This goal is judged on delivery stability. Watch frequency and spend depth before scaling.'
                     };
                 }
 
@@ -2804,10 +2904,12 @@ export async function getAdvancedAnalytics(req, res) {
                     needsOptimizationEvents: goalProfile.needsOptimizationEvents,
                     objectiveType: goalProfile.objectiveLabel,
                     optimizationType: goalProfile.friendlyLabel,
+                    confidenceLabel,
+                    warnings: deliveryWarnings,
                     learningStatus,
                     startTime: adset.start_time || null,
-                    frequency: parseFloat(insights.frequency || 0),
-                    ctr: parseFloat(insights.ctr || 0).toFixed(2)
+                    frequency: frequencyValue,
+                    ctr: ctrValue.toFixed(2)
                 };
             }).sort((a, b) => (b.spend || 0) - (a.spend || 0));
         }
@@ -2910,8 +3012,10 @@ export async function getAdvancedAnalytics(req, res) {
             // Calculate LQS per campaign
             const campaignBase = campaigns.filter(c => c.insights?.data?.[0]).map(c => {
                 const insights = c.insights.data[0];
+                const actionValues = insights.action_values || [];
                 const ctr = parseFloat(insights.ctr || 0);
                 const clicks = parseInt(insights.clicks || 0);
+                const impressions = parseInt(insights.impressions || 0);
                 const frequency = parseFloat(insights.frequency || 0);
                 const spend = parseFloat(insights.spend || 0);
                 const cpc = parseFloat(insights.cpc || 0);
@@ -2921,6 +3025,9 @@ export async function getAdvancedAnalytics(req, res) {
 
                 const conversionRate = clicks > 0 ? (conversions / clicks * 100) : 0;
                 const cpa = conversions > 0 ? spend / conversions : null;
+                const purchaseValue = getActionTotal(actionValues, ['purchase']);
+                const roas = spend > 0 ? purchaseValue / spend : 0;
+                const confidenceLabel = getConfidenceLabel({ spend, conversions, clicks, impressions });
 
                 return {
                     id: c.id,
@@ -2932,26 +3039,52 @@ export async function getAdvancedAnalytics(req, res) {
                     spend,
                     conversions,
                     cpc,
-                    cpa
+                    cpa,
+                    roas,
+                    confidenceLabel
                 };
             });
 
-            const bestCPA = Math.min(...campaignBase.filter(c => c.cpa && c.cpa > 0).map(c => c.cpa), Number.POSITIVE_INFINITY);
+            const medianCampaignCtr = getMedian(campaignBase.map(c => c.ctr).filter(value => value > 0));
+            const medianCampaignCvr = getMedian(campaignBase.map(c => c.conversionRate).filter(value => value > 0));
+            const medianCampaignCpa = getMedian(campaignBase.map(c => c.cpa).filter(value => value !== null && value > 0));
+            const medianCampaignCpc = getMedian(campaignBase.map(c => c.cpc).filter(value => value > 0));
+            const medianCampaignRoas = getMedian(campaignBase.map(c => c.roas).filter(value => value > 0));
+            const maxCampaignConversions = campaignBase.reduce((max, campaign) => Math.max(max, campaign.conversions || 0), 0);
+            const maxCampaignSpend = campaignBase.reduce((max, campaign) => Math.max(max, campaign.spend || 0), 0);
             const campaignLQS = campaignBase.map(c => {
-                const ctrScore = Math.min((c.ctr / 5) * 28, 28);
-                const conversionScore = Math.min((c.conversionRate / 3) * 38, 38);
-                const cpaScore = Number.isFinite(bestCPA) && c.cpa ? Math.min((bestCPA / c.cpa) * 22, 22) : 0;
-                const spendConfidence = c.spend > 0 ? Math.min((Math.log10(c.spend + 1) / 4) * 12, 12) : 0;
-                const frequencyPenalty = c.frequency > 3.5 ? 12 : c.frequency > 2.5 ? 6 : 0;
+                const ctrScore = medianCampaignCtr > 0
+                    ? Math.min((c.ctr / medianCampaignCtr) * 18, 18)
+                    : Math.min((c.ctr / 3) * 18, 18);
+                const conversionScore = medianCampaignCvr > 0
+                    ? Math.min((c.conversionRate / medianCampaignCvr) * 24, 24)
+                    : Math.min((c.conversionRate / 2) * 24, 24);
+                const cpaScore = c.cpa && medianCampaignCpa > 0
+                    ? Math.min((medianCampaignCpa / c.cpa) * 16, 16)
+                    : 0;
+                const cpcScore = c.cpc > 0 && medianCampaignCpc > 0
+                    ? Math.min((medianCampaignCpc / c.cpc) * 8, 8)
+                    : 0;
+                const volumeScore = maxCampaignConversions > 0
+                    ? Math.min((Math.log10(c.conversions + 1) / Math.log10(maxCampaignConversions + 1)) * 12, 12)
+                    : 0;
+                const spendConfidence = maxCampaignSpend > 0
+                    ? Math.min((Math.log10(c.spend + 1) / Math.log10(maxCampaignSpend + 1)) * 10, 10)
+                    : 0;
+                const roasScore = c.roas > 0 && medianCampaignRoas > 0
+                    ? Math.min((c.roas / medianCampaignRoas) * 12, 12)
+                    : 0;
+                const frequencyPenalty = c.frequency > 3.5 ? 10 : c.frequency > 2.5 ? 5 : 0;
+                const lowDataPenalty = c.confidenceLabel === 'Low confidence' ? 7 : 0;
 
-                const rawLQS = ctrScore + conversionScore + cpaScore + spendConfidence - frequencyPenalty;
+                const rawLQS = ctrScore + conversionScore + cpaScore + cpcScore + volumeScore + spendConfidence + roasScore - frequencyPenalty - lowDataPenalty;
                 const lqs = Math.max(0, Math.min(100, rawLQS));
 
                 let grade = 'D';
                 let gradeColor = '#ef4444';
-                if (lqs >= 70) { grade = 'A'; gradeColor = '#10b981'; }
-                else if (lqs >= 50) { grade = 'B'; gradeColor = '#6366f1'; }
-                else if (lqs >= 30) { grade = 'C'; gradeColor = '#f59e0b'; }
+                if (lqs >= 78) { grade = 'A'; gradeColor = '#10b981'; }
+                else if (lqs >= 60) { grade = 'B'; gradeColor = '#6366f1'; }
+                else if (lqs >= 40) { grade = 'C'; gradeColor = '#f59e0b'; }
 
                 return {
                     id: c.id,
@@ -2966,11 +3099,17 @@ export async function getAdvancedAnalytics(req, res) {
                         frequency: c.frequency.toFixed(2),
                         cpc: c.cpc.toFixed(2),
                         cpa: c.cpa ? c.cpa.toFixed(2) : null,
+                        roas: c.roas > 0 ? c.roas.toFixed(2) : null,
+                        confidenceLabel: c.confidenceLabel,
                         ctrScore: ctrScore.toFixed(1),
                         conversionScore: conversionScore.toFixed(1),
                         cpaScore: cpaScore.toFixed(1),
+                        cpcScore: cpcScore.toFixed(1),
+                        volumeScore: volumeScore.toFixed(1),
                         spendConfidence: spendConfidence.toFixed(1),
-                        frequencyPenalty
+                        roasScore: roasScore.toFixed(1),
+                        frequencyPenalty,
+                        lowDataPenalty
                     },
                     spend: c.spend,
                     conversions: c.conversions

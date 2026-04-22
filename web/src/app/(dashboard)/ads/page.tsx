@@ -113,6 +113,12 @@ function getScoreTone(value: number) {
     return { bg: 'rgba(239, 68, 68, 0.14)', border: 'rgba(239, 68, 68, 0.28)', color: '#f87171', label: 'Watch' };
 }
 
+function getRiskTone(value: number) {
+    if (value >= 75) return { bg: 'rgba(239, 68, 68, 0.14)', border: 'rgba(239, 68, 68, 0.3)', color: '#f87171', label: 'High Pressure' };
+    if (value >= 45) return { bg: 'rgba(245, 158, 11, 0.14)', border: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24', label: 'Building' };
+    return { bg: 'rgba(16, 185, 129, 0.14)', border: 'rgba(16, 185, 129, 0.3)', color: '#34d399', label: 'Stable' };
+}
+
 function getConfidenceTone(label: string) {
     if (label === 'High confidence') return { bg: 'rgba(16, 185, 129, 0.14)', color: '#86efac' };
     if (label === 'Medium confidence') return { bg: 'rgba(59, 130, 246, 0.14)', color: '#93c5fd' };
@@ -3526,7 +3532,7 @@ export default function AdsPage() {
                                     {(advancedData.data.fatigueAnalysis?.framework || []).length > 0 && (
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                                             {(advancedData.data.fatigueAnalysis.framework || []).map((item: any) => {
-                                                const tone = getScoreTone(item.score || 0);
+                                                const tone = getRiskTone(item.score || 0);
                                                 return (
                                                     <div key={item.key} style={{ padding: 14, borderRadius: 12, background: 'var(--background)', border: `1px solid ${tone.border}` }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -3598,11 +3604,14 @@ export default function AdsPage() {
                                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                                                             CTR: {c.metrics.ctr}% • Click CVR: {c.metrics.conversionRate}% • CPA: {c.metrics.cpa ? formatCurrency(parseFloat(c.metrics.cpa)) : '—'}
                                                         </div>
+                                                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+                                                            ROAS: {c.metrics.roas ? formatRoas(c.metrics.roas) : '—'} • {c.metrics.confidenceLabel || 'Low confidence'}
+                                                        </div>
                                                     </div>
                                                     <div style={{ textAlign: 'right' }}>
                                                         <div style={{ fontWeight: 700, color: c.gradeColor }}>{c.lqs}</div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-                                                            CTR {c.metrics.ctrScore} • CVR {c.metrics.conversionScore}
+                                                            CTR {c.metrics.ctrScore} • CVR {c.metrics.conversionScore} • Vol {c.metrics.volumeScore}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3734,6 +3743,9 @@ export default function AdsPage() {
 
                                                         <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
                                                             Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x
+                                                        </div>
+                                                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
+                                                            ROAS {ad.roas ? formatRoas(ad.roas) : '—'} • {ad.confidenceLabel || 'Low confidence'}
                                                         </div>
 
                                                         {ad.hasVideo && ad.videoMetrics && (
@@ -3927,6 +3939,11 @@ export default function AdsPage() {
                                                         {status.note && (
                                                             <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
                                                                 {status.note}
+                                                            </div>
+                                                        )}
+                                                        {(adset.warnings || []).length > 0 && (
+                                                            <div style={{ marginTop: 8, fontSize: 11, color: '#fbbf24' }}>
+                                                                Watchouts: {(adset.warnings || []).slice(0, 2).join(' ')}
                                                             </div>
                                                         )}
                                                     </div>
