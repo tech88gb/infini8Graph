@@ -2004,7 +2004,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v5', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v6', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2233,38 +2233,68 @@ export async function getAdvancedAnalytics(req, res) {
             'audience_network': { weight: 0.5, label: 'Low Intent', color: '#ef4444' }
         };
 
-        const buildAdvancedAdFields = (includeVideoPlays = true) => [
+        const buildAdvancedAdFields = ({ includeVideoPlays = true, includeVideoRetention = true, includeStorySpec = true } = {}) => [
             'id',
             'name',
             'status',
             'effective_status',
             'created_time',
             'updated_time',
-            'creative{id,name,image_url,thumbnail_url,object_story_spec}',
-            `insights.date_preset(${datePreset}){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values${includeVideoPlays ? ',video_play_actions' : ''},video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}`
+            includeStorySpec
+                ? 'creative{id,name,image_url,thumbnail_url,object_story_spec}'
+                : 'creative{id,name,image_url,thumbnail_url}',
+            `insights.date_preset(${datePreset}){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values${includeVideoPlays ? ',video_play_actions' : ''}${includeVideoRetention ? ',video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions' : ''},frequency}`
         ].join(',');
 
         const fetchAdvancedAds = async () => {
-            try {
-                return await axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
-                    params: {
-                        access_token: accessToken,
-                        fields: buildAdvancedAdFields(true),
-                        limit: 100
-                    }
-                });
-            } catch (error) {
-                if (!isUnsupportedFieldError(error, 'video_play_actions')) {
-                    throw error;
+            const fieldVariants = [
+                {
+                    key: 'full',
+                    fields: buildAdvancedAdFields({ includeVideoPlays: true, includeVideoRetention: true, includeStorySpec: true })
+                },
+                {
+                    key: 'no_video_plays',
+                    fields: buildAdvancedAdFields({ includeVideoPlays: false, includeVideoRetention: true, includeStorySpec: true })
+                },
+                {
+                    key: 'basic_creative',
+                    fields: buildAdvancedAdFields({ includeVideoPlays: false, includeVideoRetention: false, includeStorySpec: false })
                 }
+            ];
 
-                return axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+            let lastError = null;
+            for (const variant of fieldVariants) {
+                try {
+                    const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+                        params: {
+                            access_token: accessToken,
+                            fields: variant.fields,
+                            limit: 100
+                        }
+                    });
+
+                    return { ...response, creativeFetchMode: variant.key };
+                } catch (error) {
+                    lastError = error;
+                    const unsupportedVideoFields = ['video_play_actions', 'video_p25_watched_actions', 'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p100_watched_actions'];
+                    const isFieldCompatibilityIssue = unsupportedVideoFields.some((field) => isUnsupportedFieldError(error, field));
+                    if (!isFieldCompatibilityIssue && variant.key !== 'basic_creative') {
+                        throw error;
+                    }
+                }
+            }
+
+            try {
+                const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                     params: {
                         access_token: accessToken,
-                        fields: buildAdvancedAdFields(false),
+                        fields: buildAdvancedAdFields({ includeVideoPlays: false, includeVideoRetention: false, includeStorySpec: false }),
                         limit: 100
                     }
                 });
+                return { ...response, creativeFetchMode: 'last_resort' };
+            } catch (fallbackError) {
+                throw lastError || fallbackError;
             }
         };
 
@@ -2529,9 +2559,23 @@ export async function getAdvancedAnalytics(req, res) {
 
         // ==================== 3. CREATIVE FORENSICS ====================
         let creativeForensics = [];
+        let creativeForensicsMeta = {
+            available: false,
+            fetchMode: 'unavailable',
+            note: null
+        };
 
         if (adsRes.status === 'fulfilled') {
             const ads = adsRes.value.data.data || [];
+            creativeForensicsMeta = {
+                available: true,
+                fetchMode: adsRes.value.creativeFetchMode || 'full',
+                note: adsRes.value.creativeFetchMode === 'basic_creative' || adsRes.value.creativeFetchMode === 'last_resort'
+                    ? 'Creative diagnostics are using a reduced Meta field set for this account, so some video-specific signals may be unavailable in this date range.'
+                    : adsRes.value.creativeFetchMode === 'no_video_plays'
+                        ? 'Meta did not return video play counts directly for this account, so creative analysis is using fallback video retention fields where available.'
+                        : null
+            };
             const creativeBase = ads.filter(ad => ad.insights?.data?.[0]).map(ad => {
                 const insights = ad.insights.data[0];
                 const actions = insights.actions || [];
@@ -2808,6 +2852,10 @@ export async function getAdvancedAnalytics(req, res) {
                 return b.conversions - a.conversions;
             });
 
+            if (creativeBase.length === 0) {
+                creativeForensicsMeta.note = 'Meta returned ad objects for this account, but none had ad-level insight rows in the selected date range.';
+            }
+
             const videoCreatives = creativeForensics.filter(ad => ad.hasVideo && ad.videoMetrics && ad.spend > 0);
             const reliableVideoCreatives = videoCreatives.filter(ad => ad.videoMetrics?.reliableForFatigue);
             const lowConfidenceVideoCreatives = videoCreatives.filter(ad => !ad.videoMetrics?.reliableForFatigue);
@@ -2918,6 +2966,8 @@ export async function getAdvancedAnalytics(req, res) {
             fatigueAnalysis.status = fatigueAnalysis.score >= 60 ? 'critical' : fatigueAnalysis.score >= 30 ? 'warning' : 'healthy';
             fatigueAnalysis.statusEmoji = fatigueAnalysis.score >= 60 ? '🔴' : fatigueAnalysis.score >= 30 ? '🟡' : '🟢';
             fatigueAnalysis.statusLabel = fatigueAnalysis.score >= 60 ? 'Fatigue Critical' : fatigueAnalysis.score >= 30 ? 'Fatigue Building' : 'Healthy';
+        } else {
+            creativeForensicsMeta.note = 'The ad-level creative fetch did not complete for this account, so creative diagnostics could not be calculated for this refresh.';
         }
 
         // ==================== 4. LEARNING PHASE STATUS ====================
@@ -3297,6 +3347,7 @@ export async function getAdvancedAnalytics(req, res) {
                 fatigueAnalysis,
                 placementIntent: placementIntent.slice(0, 15),
                 creativeForensics: creativeForensics.slice(0, 20),
+                creativeForensicsMeta,
                 learningPhase,
                 retargetingLift,
                 leadQualityScore,

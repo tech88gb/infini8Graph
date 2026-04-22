@@ -3566,12 +3566,22 @@ export default function AdsPage() {
                                                                 Modeled
                                                             </span>
                                                         </div>
-                                                        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{item.value}</div>
+                                                        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 10 }}>{item.value}</div>
                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                                                            <div style={{ fontSize: 11, color: tone.color, display: 'inline-flex', alignItems: 'center' }}>
-                                                                Pressure Score <InfoTooltip text="This 0-100 score is derived from the raw trend using fatigue-model thresholds. A low score does not mean the raw metric is zero; it means the model sees little fatigue pressure from it right now." />
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>
+                                                                Derived pressure <InfoTooltip text="This 0-100 score is derived from the raw trend using fatigue-model thresholds. A low score does not mean the raw metric is zero; it means the model sees little fatigue pressure from it right now." />
                                                             </div>
-                                                            <div style={{ color: tone.color, fontWeight: 700 }}>{Math.round(item.score || 0)}</div>
+                                                            <div style={{
+                                                                padding: '4px 8px',
+                                                                borderRadius: 999,
+                                                                background: 'rgba(15, 23, 42, 0.7)',
+                                                                border: `1px solid ${tone.border}`,
+                                                                color: tone.color,
+                                                                fontWeight: 700,
+                                                                fontSize: 11
+                                                            }}>
+                                                                {Math.round(item.score || 0)}/100
+                                                            </div>
                                                         </div>
                                                         <div style={{ height: 8, borderRadius: 999, background: 'rgba(148, 163, 184, 0.18)', overflow: 'hidden', marginBottom: 8 }}>
                                                             <div style={{ width: `${Math.min(item.score || 0, 100)}%`, height: '100%', background: tone.color }} />
@@ -3709,176 +3719,187 @@ export default function AdsPage() {
                             )}
 
                             {/* Creative Forensics */}
-                            {(advancedData.data.creativeForensics || []).length > 0 && (
-                                <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Reads each ad creative against its peers using real CTR, click-to-result rate, CPR, CPM, frequency, and video hook quality when available. The labels here are meant to help you decide whether to scale, refresh, or let the creative mature." /></span>} subtitle="Creative-by-creative diagnosis with visuals, cost signals, and practical next actions">
-                                    <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
-                                        The label is a diagnosis, not a vanity badge. Winners combine conversion proof and efficiency, and now also need to be active for at least 3 days with at least ₹2,000 spent. Traffic mismatch means the ad earns clicks but not enough downstream action. Early read means it simply has not spent enough yet to judge fairly.
+                            <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Reads each ad creative against its peers using real CTR, click-to-result rate, CPR, CPM, frequency, and video hook quality when available. The labels here are meant to help you decide whether to scale, refresh, or let the creative mature." /></span>} subtitle="Creative-by-creative diagnosis with visuals, cost signals, and practical next actions">
+                                {advancedData.data.creativeForensicsMeta?.note && (
+                                    <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.18)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
+                                        <strong style={{ color: 'var(--foreground)' }}>Creative data note:</strong> {advancedData.data.creativeForensicsMeta.note}
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                                        {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
-                                            const pattern = ad.pattern || { label: 'Mixed Read', color: '#64748b', insight: 'Mixed performance signals.', action: 'Keep monitoring.' };
-                                            const performanceScore = parseFloat(ad.performanceScore || 0);
-                                            const shouldContainPreview = ad.previewSource === 'thumbnail';
+                                )}
+                                {(advancedData.data.creativeForensics || []).length > 0 ? (
+                                <>
+                                <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
+                                    The label is a diagnosis, not a vanity badge. Winners combine conversion proof and efficiency, and now also need to be active for at least 3 days with at least ₹2,000 spent. Traffic mismatch means the ad earns clicks but not enough downstream action. Early read means it simply has not spent enough yet to judge fairly.
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                                    {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
+                                        const pattern = ad.pattern || { label: 'Mixed Read', color: '#64748b', insight: 'Mixed performance signals.', action: 'Keep monitoring.' };
+                                        const performanceScore = parseFloat(ad.performanceScore || 0);
+                                        const shouldContainPreview = ad.previewSource === 'thumbnail';
 
-                                            return (
-                                                <div key={ad.id} style={{
-                                                    background: 'var(--background)',
-                                                    borderRadius: 12,
-                                                    overflow: 'hidden',
-                                                    border: pattern.type === 'winner'
-                                                        ? '2px solid #10b981'
-                                                        : pattern.type === 'burning_spend' || pattern.type === 'traffic_mismatch'
-                                                            ? '1px solid rgba(239, 68, 68, 0.45)'
-                                                            : '1px solid var(--border)'
-                                                }}>
-                                                    <div style={{ position: 'relative', height: 136, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(15, 23, 42, 0.95))' }}>
-                                                        {ad.thumbnail ? (
-                                                            <img
-                                                                src={ad.thumbnail}
-                                                                alt={ad.name}
-                                                                loading="lazy"
-                                                                style={{
-                                                                    width: '100%',
-                                                                    height: '100%',
-                                                                    objectFit: shouldContainPreview ? 'contain' : 'cover',
-                                                                    objectPosition: 'center',
-                                                                    display: 'block',
-                                                                    padding: shouldContainPreview ? 10 : 0,
-                                                                    background: shouldContainPreview ? 'rgba(15, 23, 42, 0.88)' : 'transparent'
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.72)', fontSize: 12 }}>
-                                                                Preview unavailable
-                                                            </div>
-                                                        )}
-                                                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.82))' }} />
-                                                        <div style={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                                                            <span style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                padding: '6px 10px',
-                                                                borderRadius: 999,
-                                                                background: pattern.color || '#64748b',
-                                                                color: '#fff',
-                                                                fontWeight: 700,
-                                                                fontSize: 11
-                                                            }}>
-                                                                {pattern.label}
-                                                            </span>
-                                                            <span style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                padding: '6px 10px',
-                                                                borderRadius: 999,
-                                                                background: 'rgba(15, 23, 42, 0.82)',
-                                                                border: '1px solid rgba(148, 163, 184, 0.28)',
-                                                                color: performanceScore >= 70 ? '#86efac' : performanceScore >= 45 ? '#fcd34d' : '#fca5a5',
-                                                                fontWeight: 700,
-                                                                fontSize: 11
-                                                            }}>
-                                                                Score {Math.round(performanceScore)}
-                                                            </span>
+                                        return (
+                                            <div key={ad.id} style={{
+                                                background: 'var(--background)',
+                                                borderRadius: 12,
+                                                overflow: 'hidden',
+                                                border: pattern.type === 'winner'
+                                                    ? '2px solid #10b981'
+                                                    : pattern.type === 'burning_spend' || pattern.type === 'traffic_mismatch'
+                                                        ? '1px solid rgba(239, 68, 68, 0.45)'
+                                                        : '1px solid var(--border)'
+                                            }}>
+                                                <div style={{ position: 'relative', height: 136, background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(15, 23, 42, 0.95))' }}>
+                                                    {ad.thumbnail ? (
+                                                        <img
+                                                            src={ad.thumbnail}
+                                                            alt={ad.name}
+                                                            loading="lazy"
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '100%',
+                                                                objectFit: shouldContainPreview ? 'contain' : 'cover',
+                                                                objectPosition: 'center',
+                                                                display: 'block',
+                                                                padding: shouldContainPreview ? 10 : 0,
+                                                                background: shouldContainPreview ? 'rgba(15, 23, 42, 0.88)' : 'transparent'
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.72)', fontSize: 12 }}>
+                                                            Preview unavailable
                                                         </div>
-                                                        <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
-                                                            <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', marginBottom: 6, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
-                                                                {ad.name}
-                                                            </div>
-                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                                                {ad.hasVideo && (
-                                                                    <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(15,23,42,0.78)', color: '#cbd5e1', fontSize: 10 }}>
-                                                                        Video
-                                                                    </span>
-                                                                )}
-                                                                {ad.fatigue?.status !== 'healthy' && (
-                                                                    <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.85)', color: '#111827', fontSize: 10, fontWeight: 700 }}>
-                                                                        {ad.fatigue?.status === 'critical' ? 'Fatigue risk' : 'Watch fatigue'}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                                    )}
+                                                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.82))' }} />
+                                                    <div style={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            padding: '6px 10px',
+                                                            borderRadius: 999,
+                                                            background: pattern.color || '#64748b',
+                                                            color: '#fff',
+                                                            fontWeight: 700,
+                                                            fontSize: 11
+                                                        }}>
+                                                            {pattern.label}
+                                                        </span>
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            padding: '6px 10px',
+                                                            borderRadius: 999,
+                                                            background: 'rgba(15, 23, 42, 0.82)',
+                                                            border: '1px solid rgba(148, 163, 184, 0.28)',
+                                                            color: performanceScore >= 70 ? '#86efac' : performanceScore >= 45 ? '#fcd34d' : '#fca5a5',
+                                                            fontWeight: 700,
+                                                            fontSize: 11
+                                                        }}>
+                                                            Score {Math.round(performanceScore)}
+                                                        </span>
                                                     </div>
-
-                                                    <div style={{ padding: 16 }}>
-                                                        <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>{pattern.insight}</p>
-                                                        <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.16)', fontSize: 11, color: '#dbe4f0', marginBottom: 12 }}>
-                                                            <strong style={{ color: '#fff' }}>Next action:</strong> {pattern.action}
+                                                    <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+                                                        <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', marginBottom: 6, textShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
+                                                            {ad.name}
                                                         </div>
-
-                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, textAlign: 'center' }}>
-                                                            <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.ctr}%</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>CTR</div>
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.conversions}</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Results</div>
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.costPerConversion ? formatCurrency(parseFloat(ad.costPerConversion)) : '—'}</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPR</div>
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(parseFloat(ad.cpm || 0))}</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPM</div>
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.clickToConversionRate}%</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Click CVR</div>
-                                                            </div>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                            {ad.hasVideo && (
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(15,23,42,0.78)', color: '#cbd5e1', fontSize: 10 }}>
+                                                                    Video
+                                                                </span>
+                                                            )}
+                                                            {ad.fatigue?.status !== 'healthy' && (
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.85)', color: '#111827', fontSize: 10, fontWeight: 700 }}>
+                                                                    {ad.fatigue?.status === 'critical' ? 'Fatigue risk' : 'Watch fatigue'}
+                                                                </span>
+                                                            )}
                                                         </div>
-
-                                                        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
-                                                            Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x • {ad.isActive ? 'Active' : 'Inactive'} {ad.daysActive}d
-                                                        </div>
-                                                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
-                                                            ROAS {ad.roas ? formatRoas(ad.roas) : '—'} • {ad.confidenceLabel || 'Low confidence'}
-                                                        </div>
-
-                                                        {ad.hasVideo && ad.videoMetrics && (
-                                                            <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6 }}>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                                                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>Video Retention</div>
-                                                                    <span style={{
-                                                                        padding: '3px 8px',
-                                                                        borderRadius: 999,
-                                                                        background: getConfidenceTone(ad.videoMetrics.confidenceLabel || 'Low confidence').bg,
-                                                                        color: getConfidenceTone(ad.videoMetrics.confidenceLabel || 'Low confidence').color,
-                                                                        fontSize: 10,
-                                                                        fontWeight: 600
-                                                                    }}>
-                                                                        {ad.videoMetrics.confidenceLabel || 'Low confidence'}
-                                                                    </span>
-                                                                </div>
-                                                                <div style={{ fontSize: 12 }}>
-                                                                    Hook: <strong>{ad.videoMetrics.hookRate}%</strong> •
-                                                                    Complete: <strong>{ad.videoMetrics.completionRate}%</strong> •
-                                                                    Plays: <strong>{formatNumber(ad.videoMetrics.plays || 0)}</strong>
-                                                                </div>
-                                                                {!ad.videoMetrics.reliableForCreative && (
-                                                                    <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
-                                                                        This video signal is directional only for the selected date range, so weak hook/completion is not used as a hard creative diagnosis.
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                        {!ad.hasVideo && (
-                                                            <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(148, 163, 184, 0.12)', borderRadius: 6, fontSize: 11, color: 'var(--muted)' }}>
-                                                                No video hook or completion data for this creative.
-                                                            </div>
-                                                        )}
-                                                        {ad.fatigue?.reasons?.length > 0 && (
-                                                            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
-                                                                Watchouts: {ad.fatigue.reasons.join(' • ')}
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
+
+                                                <div style={{ padding: 16 }}>
+                                                    <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>{pattern.insight}</p>
+                                                    <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.16)', fontSize: 11, color: '#dbe4f0', marginBottom: 12 }}>
+                                                        <strong style={{ color: '#fff' }}>Next action:</strong> {pattern.action}
+                                                    </div>
+
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, textAlign: 'center' }}>
+                                                        <div>
+                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.ctr}%</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>CTR</div>
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.conversions}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Results</div>
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.costPerConversion ? formatCurrency(parseFloat(ad.costPerConversion)) : '—'}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPR</div>
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{formatCurrency(parseFloat(ad.cpm || 0))}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>CPM</div>
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ fontSize: 14, fontWeight: 600 }}>{ad.clickToConversionRate}%</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Click CVR</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
+                                                        Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x • {ad.isActive ? 'Active' : 'Inactive'} {ad.daysActive}d
+                                                    </div>
+                                                    <div style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
+                                                        ROAS {ad.roas ? formatRoas(ad.roas) : '—'} • {ad.confidenceLabel || 'Low confidence'}
+                                                    </div>
+
+                                                    {ad.hasVideo && ad.videoMetrics && (
+                                                        <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 6 }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Video Retention</div>
+                                                                <span style={{
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: 999,
+                                                                    background: getConfidenceTone(ad.videoMetrics.confidenceLabel || 'Low confidence').bg,
+                                                                    color: getConfidenceTone(ad.videoMetrics.confidenceLabel || 'Low confidence').color,
+                                                                    fontSize: 10,
+                                                                    fontWeight: 600
+                                                                }}>
+                                                                    {ad.videoMetrics.confidenceLabel || 'Low confidence'}
+                                                                </span>
+                                                            </div>
+                                                            <div style={{ fontSize: 12 }}>
+                                                                Hook: <strong>{ad.videoMetrics.hookRate}%</strong> •
+                                                                Complete: <strong>{ad.videoMetrics.completionRate}%</strong> •
+                                                                Plays: <strong>{formatNumber(ad.videoMetrics.plays || 0)}</strong>
+                                                            </div>
+                                                            {!ad.videoMetrics.reliableForCreative && (
+                                                                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                                                    This video signal is directional only for the selected date range, so weak hook/completion is not used as a hard creative diagnosis.
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {!ad.hasVideo && (
+                                                        <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(148, 163, 184, 0.12)', borderRadius: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                                            No video hook or completion data for this creative.
+                                                        </div>
+                                                    )}
+                                                    {ad.fatigue?.reasons?.length > 0 && (
+                                                        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
+                                                            Watchouts: {ad.fatigue.reasons.join(' • ')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                </>
+                                ) : (
+                                    <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.45)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--muted)' }}>
+                                        No creative-level diagnostics were available for this refresh. This usually means Meta did not return ad-level insight rows for the selected date range, or the account required a reduced field fallback for ad creatives.
                                     </div>
-                                </SectionCard>
-                            )}
+                                )}
+                            </SectionCard>
 
                             {/* Delivery Readiness */}
                             {(advancedData.data.learningPhase || []).length > 0 && (
