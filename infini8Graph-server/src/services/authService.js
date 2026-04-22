@@ -326,10 +326,11 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
             const isFirst = account === accountsData[0];
             const encryptedPageToken = account.pageToken ? encrypt(account.pageToken) : null;
 
-            // Check if this IG account already exists in the system (any user may have registered it)
+            // Check if this IG account already exists in the system.
+            // Fetch user_id so we can determine whether this user is the original owner.
             const { data: existingAccount } = await supabase
                 .from('instagram_accounts')
-                .select('id')
+                .select('id, user_id')
                 .eq('instagram_user_id', account.instagramUserId)
                 .maybeSingle();
 
@@ -396,32 +397,32 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
                 .eq('instagram_account_id', instagramAccountId)
                 .maybeSingle();
 
-            // Determine is_enabled using a 3-state model:
+            // Determine is_enabled using ownership-aware 3-state logic:
             //
-            // State 3 — Reconnect: user already has a token for this account.
-            //   Always preserve whatever the user previously set. Never override.
+            // State 3 — Reconnect: this user already has a token row for this account.
+            //   Always preserve whatever they previously set. Never override.
             //
-            // State 2 — Inherited: account already exists in the system (registered
-            //   by a different Google user) but this user has no prior token.
-            //   Meta returned it because the shared Meta identity has page access,
-            //   not because this user deliberately chose it. Only enable the primary
-            //   (first) account; all others start hidden so the dashboard is clean.
+            // State 2 — Truly Inherited: account exists AND was registered by a DIFFERENT
+            //   user. Meta returned it because the shared Facebook identity has page access,
+            //   not because this user deliberately selected it. Disable it so it stays
+            //   hidden in their dashboard (visible in Settings to enable manually).
             //
-            // State 1 — Brand new: account has never been seen in the system at all.
-            //   This user is the original owner — enable all their accounts freely.
+            // State 1 — Own account: either brand new to the system (this user is first
+            //   to register it) OR the account already exists and this user IS the original
+            //   owner (user_id matches). Enable all of them freely.
             let isEnabled;
             if (existingUserToken !== null && existingUserToken !== undefined) {
-                // State 3: Reconnect — honour the user's explicit saved preference
+                // State 3: Reconnect — honour the user's saved preference
                 isEnabled = existingUserToken.is_enabled;
                 console.log(`🔄 [setup] @${account.username} → reconnect, preserving is_enabled=${isEnabled}`);
-            } else if (existingAccount !== null) {
-                // State 2: Inherited — only the primary account starts enabled
-                isEnabled = isFirst;
-                console.log(`🔗 [setup] @${account.username} → inherited from another user, is_enabled=${isEnabled} (isFirst=${isFirst})`);
+            } else if (existingAccount !== null && existingAccount.user_id !== userId) {
+                // State 2: Truly inherited — registered by a different user, disable
+                isEnabled = false;
+                console.log(`🔗 [setup] @${account.username} → inherited (owner=${existingAccount.user_id}), is_enabled=false`);
             } else {
-                // State 1: Brand new to system — enable by default
+                // State 1: Brand new OR this user is the original owner — enable
                 isEnabled = true;
-                console.log(`✨ [setup] @${account.username} → brand new account, is_enabled=true`);
+                console.log(`✨ [setup] @${account.username} → own account, is_enabled=true`);
             }
 
             await supabase
