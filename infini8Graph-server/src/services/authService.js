@@ -396,7 +396,33 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
                 .eq('instagram_account_id', instagramAccountId)
                 .maybeSingle();
 
-            const isEnabled = existingUserToken?.is_enabled ?? true;
+            // Determine is_enabled using a 3-state model:
+            //
+            // State 3 — Reconnect: user already has a token for this account.
+            //   Always preserve whatever the user previously set. Never override.
+            //
+            // State 2 — Inherited: account already exists in the system (registered
+            //   by a different Google user) but this user has no prior token.
+            //   Meta returned it because the shared Meta identity has page access,
+            //   not because this user deliberately chose it. Only enable the primary
+            //   (first) account; all others start hidden so the dashboard is clean.
+            //
+            // State 1 — Brand new: account has never been seen in the system at all.
+            //   This user is the original owner — enable all their accounts freely.
+            let isEnabled;
+            if (existingUserToken !== null && existingUserToken !== undefined) {
+                // State 3: Reconnect — honour the user's explicit saved preference
+                isEnabled = existingUserToken.is_enabled;
+                console.log(`🔄 [setup] @${account.username} → reconnect, preserving is_enabled=${isEnabled}`);
+            } else if (existingAccount !== null) {
+                // State 2: Inherited — only the primary account starts enabled
+                isEnabled = isFirst;
+                console.log(`🔗 [setup] @${account.username} → inherited from another user, is_enabled=${isEnabled} (isFirst=${isFirst})`);
+            } else {
+                // State 1: Brand new to system — enable by default
+                isEnabled = true;
+                console.log(`✨ [setup] @${account.username} → brand new account, is_enabled=true`);
+            }
 
             await supabase
                 .from('auth_tokens')
