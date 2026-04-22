@@ -360,116 +360,91 @@ class AutoReplyService {
             // Otherwise, check if any keyword matches
             for (const keyword of rule.keywords) {
                 if (lowerText.includes(keyword.toLowerCase())) {
+                    return rule;
+                }
+            }
+        }
 
-                    /**
-                     * Find matching rule for text
-                     * Rules with empty keywords array match ALL text (default/fallback behavior)
-                     * Rules with keywords only match if a keyword is found in text
-                     */
-                    findMatchingRule(text, rules) {
-                        if (!text) return null;
-
-                        const lowerText = text.toLowerCase();
-
-                        // Sort by priority (lower = higher priority)
-                        // Priority 1 = specific post rules, Priority 2 = general rules
-                        const sortedRules = [...rules].sort((a, b) => a.priority - b.priority);
-
-                        for (const rule of sortedRules) {
-                            // If rule has no keywords or empty keywords array, it matches EVERYTHING (default behavior)
-                            if (!rule.keywords || rule.keywords.length === 0) {
-                                return rule;
-                            }
-
-                            // Otherwise, check if any keyword matches
-                            for (const keyword of rule.keywords) {
-                                if (lowerText.includes(keyword.toLowerCase())) {
-                                    return rule;
-                                }
-                            }
-                        }
-
-                        return null;
-                    }
+        return null;
+    }
 
     /**
      * Process incoming DM and send auto-reply
      */
     async processMessage(event) {
-                        try {
-                            const { sender, recipient, message, timestamp } = event;
+        try {
+            const { sender, recipient, message, timestamp } = event;
 
-                            if (!message?.text) return;
+            if (!message?.text) return;
 
-                            const senderId = sender?.id;
-                            const recipientId = recipient?.id;
+            const senderId = sender?.id;
+            const recipientId = recipient?.id;
 
-                            // Resolve full context: DB automation rules + token for this IG account
-                            // This is consistent with processComment and ensures we use the right rules
-                            // and the correct page access token (not the user access token).
-                            const resolvedContext = await this.resolveAutomationContext(recipientId);
-                            const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(recipientId);
-                            const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
+            // Resolve full context: DB automation rules + token for this IG account.
+            const resolvedContext = await this.resolveAutomationContext(recipientId);
+            const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(recipientId);
+            const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
 
-                            await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
-                                senderId, recipientId, text: message.text
-                            });
+            await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
+                senderId, recipientId, text: message.text
+            });
 
-                            if (!tokenData) {
-                                await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
-                                return;
-                            }
+            if (!tokenData) {
+                await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
+                return;
+            }
 
-                            await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
-                                pageId: tokenData.facebookPageId, username: tokenData.username
-                            });
+            await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
+                pageId: tokenData.facebookPageId, username: tokenData.username
+            });
 
-                            if (senderId === recipientId) {
-                                return;
-                            }
+            if (senderId === recipientId) {
+                return;
+            }
 
-                            const messageTime = timestamp ? new Date(timestamp * 1000) : new Date();
-                            const windowEnd = new Date(messageTime.getTime() + MESSAGING_WINDOW_MS);
-                            if (new Date() > windowEnd) {
-                                return;
-                            }
+            const messageTime = timestamp ? new Date(timestamp * 1000) : new Date();
+            const windowEnd = new Date(messageTime.getTime() + MESSAGING_WINDOW_MS);
+            if (new Date() > windowEnd) {
+                return;
+            }
 
-                            // Use DB rules if available (from resolvedContext), fall back to hardcoded
-                            const rules = resolvedContext?.rules || this.messageRules;
-                            const rule = this.findMatchingRule(message.text, rules);
-                            if (!rule) {
-                                await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
-                                return;
-                            }
+            const rules = resolvedContext?.rules || this.messageRules;
+            const rule = this.findMatchingRule(message.text, rules);
+            if (!rule) {
+                await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
+                return;
+            }
 
-                            await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
-                                replyText: rule.reply, ruleName: rule.name
-                            });
+            await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
+                replyText: rule.reply, ruleName: rule.name
+            });
 
-                            // BUG FIX: Use pageToken (page access token) not accessToken (user token).
-                            // /{pageId}/messages requires the Page Access Token — the user token will
-                            // be rejected by Meta with an OAuthException. The comment-to-DM path at
-                            // processComment already does this correctly; this aligns DM-to-DM replies.
-                            if (!tokenData.pageToken) {
-                                await this.addActivityLog(activeId, 'API ERROR',
-                                    'Missing page access token — cannot send DM reply. Re-connect Meta to refresh.', { step: 'SEND_DM' });
-                                return;
-                            }
+            if (!tokenData.pageToken) {
+                await this.addActivityLog(
+                    activeId,
+                    'API ERROR',
+                    'Missing page access token — cannot send DM reply. Re-connect Meta to refresh.',
+                    { step: 'SEND_DM' }
+                );
+                return;
+            }
 
-                            await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.pageToken, null, activeId);
-                            await this.markReplied(senderId, 'message');
+            await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.pageToken, null, activeId);
+            await this.markReplied(senderId, 'message');
 
-                            await this.logReply({
-                                type: 'message', senderId, recipientId,
-                                originalText: message.text, replyText: rule.reply,
-                                instagramAccountId: tokenData.instagramAccountId,
-                                userId: tokenData.userId
-                            });
-
-                        } catch (error) {
-                            console.error('Auto-reply DM processing failed:', error.message);
-                        }
-                    }
+            await this.logReply({
+                type: 'message',
+                senderId,
+                recipientId,
+                originalText: message.text,
+                replyText: rule.reply,
+                instagramAccountId: tokenData.instagramAccountId,
+                userId: tokenData.userId
+            });
+        } catch (error) {
+            console.error('Auto-reply DM processing failed:', error.message);
+        }
+    }
 
     /**
      * Send a DM reply via the Instagram Messaging API.
@@ -478,221 +453,230 @@ class AutoReplyService {
      * @param {string|null} instagramAccountId - Account ID used for activity logging
      */
     async sendMessageReply(facebookPageId, recipientIGSID, text, accessToken, commentId = null, instagramAccountId = null) {
-                        try {
-                            const recipient = commentId
-                                ? { comment_id: commentId }
-                                : { id: recipientIGSID };
+        try {
+            const recipient = commentId
+                ? { comment_id: commentId }
+                : { id: recipientIGSID };
 
-                            await this.addActivityLog(instagramAccountId, 'API REQUEST', `POST /${facebookPageId}/messages`, {
-                                endpoint: `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
-                                payload: { recipient, message: { text } }
-                            });
+            await this.addActivityLog(instagramAccountId, 'API REQUEST', `POST /${facebookPageId}/messages`, {
+                endpoint: `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
+                payload: { recipient, message: { text } }
+            });
 
-                            if (!facebookPageId) {
-                                throw new Error('Facebook Page ID is required for Instagram messaging.');
-                            }
+            if (!facebookPageId) {
+                throw new Error('Facebook Page ID is required for Instagram messaging.');
+            }
 
-                            const response = await axios.post(
-                                `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
-                                { recipient, message: { text } },
-                                {
-                                    params: { platform: 'instagram', access_token: accessToken },
-                                    headers: { 'Content-Type': 'application/json' }
-                                }
-                            );
+            const response = await axios.post(
+                `${FACEBOOK_GRAPH_API}/${facebookPageId}/messages`,
+                { recipient, message: { text } },
+                {
+                    params: { platform: 'instagram', access_token: accessToken },
+                    headers: { 'Content-Type': 'application/json' }
+                }
+            );
 
-                            await this.addActivityLog(instagramAccountId, 'API RESPONSE', 'DM sent successfully via Instagram API', {
-                                recipientIGSID, response: response.data, httpStatus: 200, type: 'dm'
-                            });
+            await this.addActivityLog(instagramAccountId, 'API RESPONSE', 'DM sent successfully via Instagram API', {
+                recipientIGSID, response: response.data, httpStatus: 200, type: 'dm'
+            });
 
-                            return response.data;
-                        } catch (error) {
-                            const metaError = error.response?.data?.error;
-                            console.error(`DM failed: ${metaError?.message || error.message}`);
+            return response.data;
+        } catch (error) {
+            const metaError = error.response?.data?.error;
+            console.error(`DM failed: ${metaError?.message || error.message}`);
 
-                            await this.addActivityLog(instagramAccountId, 'API ERROR', metaError?.message || error.message, {
-                                recipientIGSID, httpStatus: error.response?.status,
-                                errorType: metaError?.type, errorCode: metaError?.code, type: 'dm'
-                            });
+            await this.addActivityLog(instagramAccountId, 'API ERROR', metaError?.message || error.message, {
+                recipientIGSID,
+                httpStatus: error.response?.status,
+                errorType: metaError?.type,
+                errorCode: metaError?.code,
+                type: 'dm'
+            });
 
-                            throw error;
-                        }
-                    }
+            throw error;
+        }
+    }
 
     /**
      * Process incoming comment and send auto-reply
      */
     async processComment(event) {
-                        try {
-                            const { id: instagramAccountId, changes } = event;
+        try {
+            const { id: instagramAccountId, changes } = event;
 
-                            for (const change of changes || []) {
-                                if (change.field !== 'comments') continue;
+            for (const change of changes || []) {
+                if (change.field !== 'comments') continue;
 
-                                const { value } = change;
-                                const { from, id: commentId, text, media } = value;
+                const { value } = change;
+                const { from, id: commentId, text, media } = value;
 
-                                const resolvedContext = await this.resolveAutomationContext(instagramAccountId, media?.id);
-                                const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(instagramAccountId);
-                                const activeId = tokenData ? tokenData.instagramAccountId : instagramAccountId;
+                const resolvedContext = await this.resolveAutomationContext(instagramAccountId, media?.id);
+                const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(instagramAccountId);
+                const activeId = tokenData ? tokenData.instagramAccountId : instagramAccountId;
 
-                                await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', `Received comment from @${from?.username}`, {
-                                    commentId, text, mediaId: media?.id, username: from?.username
-                                });
+                await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', `Received comment from @${from?.username}`, {
+                    commentId, text, mediaId: media?.id, username: from?.username
+                });
 
-                                if (!tokenData) {
-                                    await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
-                                    continue;
-                                }
+                if (!tokenData) {
+                    await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
+                    continue;
+                }
 
-                                await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
-                                    pageId: tokenData.facebookPageId, username: tokenData.username
-                                });
+                await this.addActivityLog(activeId, 'RESOLVE ACCOUNT', `Token verified for @${tokenData.username}`, {
+                    pageId: tokenData.facebookPageId, username: tokenData.username
+                });
 
-                                if (from?.id === instagramAccountId) {
-                                    continue;
-                                }
+                if (from?.id === instagramAccountId) {
+                    continue;
+                }
 
-                                const rules = resolvedContext?.rules || null;
+                const rules = resolvedContext?.rules || null;
+                if (!rules || rules.length === 0) {
+                    continue;
+                }
 
-                                if (!rules || rules.length === 0) {
-                                    continue;
-                                }
+                const rule = this.findMatchingRule(text, rules);
+                if (!rule) {
+                    await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${text}"`);
+                    continue;
+                }
 
-                                const rule = this.findMatchingRule(text, rules);
-                                if (!rule) {
-                                    await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${text}"`);
-                                    continue;
-                                }
+                await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
+                    commentReply: rule.reply, dmReply: rule.dmReply, sendDM: rule.sendDM
+                });
 
-                                await this.addActivityLog(activeId, 'RULE MATCHED', `Triggered rule: "${rule.name || 'default'}"`, {
-                                    commentReply: rule.reply, dmReply: rule.dmReply, sendDM: rule.sendDM
-                                });
+                await this.sendCommentReply(commentId, rule.reply, tokenData.accessToken);
+                await this.markReplied(from?.id, 'comment');
 
-                                // Send comment reply
-                                await this.sendCommentReply(commentId, rule.reply, tokenData.accessToken);
-                                await this.markReplied(from?.id, 'comment');
-
-                                // Send DM if configured
-                                if (rule.sendDM && rule.dmReply && from?.id) {
-                                    try {
-                                        if (tokenData.facebookPageId && tokenData.pageToken) {
-                                            await this.sendMessageReply(
-                                                tokenData.facebookPageId, from.id, rule.dmReply,
-                                                tokenData.pageToken, commentId, activeId
-                                            );
-                                        } else if (!tokenData.pageToken) {
-                                            await this.addActivityLog(activeId, 'API ERROR', 'Missing Page Token for DM reply');
-                                        } else {
-                                            await this.addActivityLog(activeId, 'API ERROR', 'Missing Facebook Page ID for DM reply');
-                                        }
-                                    } catch (dmError) {
-                                        console.warn(`   │     ⚠️  DM failed: ${dmError.response?.data?.error?.message || dmError.message}`);
-                                    }
-                                }
-
-                                await this.logReply({
-                                    type: 'comment', senderId: from?.id, senderUsername: from?.username,
-                                    commentId, mediaId: media?.id, originalText: text,
-                                    replyText: rule.reply, dmSent: rule.sendDM ? true : false,
-                                    instagramAccountId: tokenData.instagramAccountId,
-                                    userId: tokenData.userId
-                                });
-                            }
-                        } catch (error) {
-                            console.error('Auto-reply comment processing failed:', error.message);
+                if (rule.sendDM && rule.dmReply && from?.id) {
+                    try {
+                        if (tokenData.facebookPageId && tokenData.pageToken) {
+                            await this.sendMessageReply(
+                                tokenData.facebookPageId,
+                                from.id,
+                                rule.dmReply,
+                                tokenData.pageToken,
+                                commentId,
+                                activeId
+                            );
+                        } else if (!tokenData.pageToken) {
+                            await this.addActivityLog(activeId, 'API ERROR', 'Missing Page Token for DM reply');
+                        } else {
+                            await this.addActivityLog(activeId, 'API ERROR', 'Missing Facebook Page ID for DM reply');
                         }
+                    } catch (dmError) {
+                        console.warn(`   │     ⚠️  DM failed: ${dmError.response?.data?.error?.message || dmError.message}`);
                     }
+                }
+
+                await this.logReply({
+                    type: 'comment',
+                    senderId: from?.id,
+                    senderUsername: from?.username,
+                    commentId,
+                    mediaId: media?.id,
+                    originalText: text,
+                    replyText: rule.reply,
+                    dmSent: rule.sendDM ? true : false,
+                    instagramAccountId: tokenData.instagramAccountId,
+                    userId: tokenData.userId
+                });
+            }
+        } catch (error) {
+            console.error('Auto-reply comment processing failed:', error.message);
+        }
+    }
 
     /**
      * Send a comment reply
      */
     async sendCommentReply(commentId, text, accessToken) {
-                        try {
-                            const response = await axios.post(
-                                `${FACEBOOK_GRAPH_API}/${commentId}/replies`,
-                                null,
-                                { params: { message: text, access_token: accessToken } }
-                            );
+        try {
+            const response = await axios.post(
+                `${FACEBOOK_GRAPH_API}/${commentId}/replies`,
+                null,
+                { params: { message: text, access_token: accessToken } }
+            );
 
-                            return response.data;
-                        } catch (error) {
-                            console.error(`Comment reply failed: ${error.response?.data?.error?.message || error.message}`);
-                            throw error;
-                        }
-                    }
+            return response.data;
+        } catch (error) {
+            console.error(`Comment reply failed: ${error.response?.data?.error?.message || error.message}`);
+            throw error;
+        }
+    }
 
     /**
      * Log reply to database for analytics
      */
     async logReply(data) {
-                        void data;
-                    }
+        void data;
+    }
 
     /**
      * Get auto-reply statistics
      */
     async getStats(instagramAccountId) {
-                        const defaultStats = {
-                            totalRepliesSent: 0,
-                            messagingReplies: 0,
-                            commentReplies: 0,
-                            errors: 0,
-                            activeRules: this.messageRules.length + this.commentRules.length,
-                            recentEvents: 0
-                        };
+        const defaultStats = {
+            totalRepliesSent: 0,
+            messagingReplies: 0,
+            commentReplies: 0,
+            errors: 0,
+            activeRules: this.messageRules.length + this.commentRules.length,
+            recentEvents: 0
+        };
 
-                        if (!instagramAccountId) return defaultStats;
+        if (!instagramAccountId) return defaultStats;
 
-                        let runtimeStats = { comments: 0, dms: 0, errors: 0 };
-                        let recent = 0;
+        let runtimeStats = { comments: 0, dms: 0, errors: 0 };
+        let recent = 0;
 
-                        try {
-                            const { data: statsRow } = await supabase
-                                .from('auto_reply_runtime_stats')
-                                .select('comments, dms, errors')
-                                .eq('instagram_account_id', instagramAccountId)
-                                .maybeSingle();
+        try {
+            const { data: statsRow } = await supabase
+                .from('auto_reply_runtime_stats')
+                .select('comments, dms, errors')
+                .eq('instagram_account_id', instagramAccountId)
+                .maybeSingle();
 
-                            if (statsRow) {
-                                runtimeStats = {
-                                    comments: Number(statsRow.comments || 0),
-                                    dms: Number(statsRow.dms || 0),
-                                    errors: Number(statsRow.errors || 0),
-                                };
-                            }
+            if (statsRow) {
+                runtimeStats = {
+                    comments: Number(statsRow.comments || 0),
+                    dms: Number(statsRow.dms || 0),
+                    errors: Number(statsRow.errors || 0),
+                };
+            }
 
-                            const { count } = await supabase
-                                .from('auto_reply_activity_logs')
-                                .select('*', { count: 'exact', head: true })
-                                .eq('instagram_account_id', instagramAccountId);
+            const { count } = await supabase
+                .from('auto_reply_activity_logs')
+                .select('*', { count: 'exact', head: true })
+                .eq('instagram_account_id', instagramAccountId);
 
-                            recent = count || 0;
-                        } catch (error) {
-                            console.warn('Auto-reply runtime stats lookup failed:', error.message);
-                        }
+            recent = count || 0;
+        } catch (error) {
+            console.warn('Auto-reply runtime stats lookup failed:', error.message);
+        }
 
-                        // Try to get rules count from DB if possible
-                        let rulesCount = defaultStats.activeRules;
-                        try {
-                            const { count } = await supabase
-                                .from('automation_rules')
-                                .select('*', { count: 'exact', head: true })
-                                .eq('instagram_account_id', instagramAccountId)
-                                .eq('is_active', true);
-                            if (count !== null) rulesCount = count;
-                        } catch (e) { /* ignore */ }
+        let rulesCount = defaultStats.activeRules;
+        try {
+            const { count } = await supabase
+                .from('automation_rules')
+                .select('*', { count: 'exact', head: true })
+                .eq('instagram_account_id', instagramAccountId)
+                .eq('is_active', true);
+            if (count !== null) rulesCount = count;
+        } catch {
+            // Ignore rule count lookup failures.
+        }
 
-                        return {
-                            totalRepliesSent: runtimeStats.comments + runtimeStats.dms,
-                            messagingReplies: runtimeStats.dms,
-                            commentReplies: runtimeStats.comments,
-                            errors: runtimeStats.errors,
-                            activeRules: rulesCount,
-                            recentEvents: recent
-                        };
-                    }
-                }
+        return {
+            totalRepliesSent: runtimeStats.comments + runtimeStats.dms,
+            messagingReplies: runtimeStats.dms,
+            commentReplies: runtimeStats.comments,
+            errors: runtimeStats.errors,
+            activeRules: rulesCount,
+            recentEvents: recent
+        };
+    }
+}
 
-                // Export singleton instance
-                export default new AutoReplyService();
+export default new AutoReplyService();
