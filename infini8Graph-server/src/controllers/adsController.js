@@ -2004,7 +2004,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v4', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v5', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2053,6 +2053,29 @@ export async function getAdvancedAnalytics(req, res) {
             if (conversions >= 20 || spend >= 12000 || clicks >= 1500 || impressions >= 80000) return 'High confidence';
             if (conversions >= 6 || spend >= 3500 || clicks >= 400 || impressions >= 20000) return 'Medium confidence';
             return 'Low confidence';
+        };
+
+        const getVideoSignalConfidence = ({ plays = 0, spend = 0, quartile25Views = 0, completes = 0 } = {}) => {
+            let score = 0;
+
+            if (plays >= 750) score += 2;
+            else if (plays >= 250) score += 1;
+
+            if (spend >= 5000) score += 1;
+            else if (spend >= 1500) score += 0.5;
+
+            if (quartile25Views >= 30) score += 1;
+            else if (quartile25Views >= 10) score += 0.5;
+
+            if (completes >= 10) score += 0.5;
+            else if (completes >= 3) score += 0.25;
+
+            const label = score >= 3 ? 'High confidence' : score >= 1.5 ? 'Medium confidence' : 'Low confidence';
+            return {
+                label,
+                reliableForCreative: label !== 'Low confidence' && plays >= 100,
+                reliableForFatigue: label !== 'Low confidence' && plays >= 150
+            };
         };
 
         const isUnsupportedFieldError = (error, fieldName) => {
@@ -2433,7 +2456,15 @@ export async function getAdvancedAnalytics(req, res) {
                         cpcIncrease: cpcIncrease.toFixed(1),
                         cprIncrease: cprIncrease !== null ? cprIncrease.toFixed(1) : null,
                         currentFrequency: latestFrequency.toFixed(2),
-                        avgFrequency: avgFrequency.toFixed(2)
+                        avgFrequency: avgFrequency.toFixed(2),
+                        componentScores: {
+                            ctr: parseFloat(ctrScore.toFixed(1)),
+                            cpm: parseFloat(cpmScore.toFixed(1)),
+                            cpc: parseFloat(cpcScore.toFixed(1)),
+                            cpr: parseFloat(cprScore.toFixed(1)),
+                            frequency: parseFloat(frequencyScore.toFixed(1)),
+                            hook: null
+                        }
                     },
                     trend: daily.slice(-14).map(d => ({
                         date: d.date_start,
@@ -2539,6 +2570,14 @@ export async function getAdvancedAnalytics(req, res) {
                 const completionRate = hasVideo && videoPlays > 0 ? (v100 / videoPlays * 100) : null;
                 const clickToConversionRate = clicks > 0 ? (conversions / clicks * 100) : 0;
                 const confidenceLabel = getConfidenceLabel({ spend, conversions, clicks, impressions });
+                const videoSignal = hasVideo
+                    ? getVideoSignalConfidence({
+                        plays: videoPlays,
+                        spend,
+                        quartile25Views: v25,
+                        completes: v100
+                    })
+                    : null;
 
                 const primaryImage = ad.creative?.image_url
                     || ad.creative?.object_story_spec?.video_data?.image_url
@@ -2582,7 +2621,10 @@ export async function getAdvancedAnalytics(req, res) {
                         retention50: v50,
                         retention75: v75,
                         retention100: v100,
-                        completionRate: completionRate !== null ? completionRate : 0
+                        completionRate: completionRate !== null ? completionRate : 0,
+                        confidenceLabel: videoSignal?.label || 'Low confidence',
+                        reliableForCreative: Boolean(videoSignal?.reliableForCreative),
+                        reliableForFatigue: Boolean(videoSignal?.reliableForFatigue)
                     } : null
                 };
             });
@@ -2640,7 +2682,7 @@ export async function getAdvancedAnalytics(req, res) {
                         insight: 'Meaningful spend has gone in without conversion proof.',
                         action: 'Pause or refresh this creative unless it serves an upper-funnel purpose.'
                     };
-                } else if (ad.hasVideo && ad.videoMetrics && ad.videoMetrics.hookRate < 8 && ad.spend >= Math.max(1000, medianSpend * 0.6)) {
+                } else if (ad.hasVideo && ad.videoMetrics?.reliableForCreative && ad.videoMetrics.hookRate < 8 && ad.spend >= Math.max(1000, medianSpend * 0.6)) {
                     pattern = {
                         type: 'hook_issue',
                         label: 'Hook Weakness',
@@ -2672,7 +2714,7 @@ export async function getAdvancedAnalytics(req, res) {
                 else if (ad.frequency > Math.max(2.4, medianFrequency + 0.4)) creativeFatigue = 'warning';
 
                 if (ad.frequency > Math.max(2.4, medianFrequency + 0.4)) fatigueReasons.push(`Frequency ${ad.frequency.toFixed(2)}x`);
-                if (ad.videoMetrics?.hookRate !== null && ad.videoMetrics?.hookRate < 10) fatigueReasons.push(`Weak hook ${ad.videoMetrics.hookRate.toFixed(1)}%`);
+                if (ad.videoMetrics?.reliableForCreative && ad.videoMetrics?.hookRate !== null && ad.videoMetrics?.hookRate < 10) fatigueReasons.push(`Weak hook ${ad.videoMetrics.hookRate.toFixed(1)}%`);
                 if (ad.costPerConversion !== null && medianCpa > 0 && ad.costPerConversion > medianCpa * 1.35) fatigueReasons.push(`High CPR ₹${ad.costPerConversion.toFixed(0)}`);
                 if (medianCpm > 0 && ad.cpm > medianCpm * 1.3) fatigueReasons.push(`High CPM ₹${ad.cpm.toFixed(0)}`);
 
@@ -2767,16 +2809,19 @@ export async function getAdvancedAnalytics(req, res) {
             });
 
             const videoCreatives = creativeForensics.filter(ad => ad.hasVideo && ad.videoMetrics && ad.spend > 0);
-            if (videoCreatives.length > 0) {
-                const totalVideoSpend = videoCreatives.reduce((sum, ad) => sum + ad.spend, 0);
+            const reliableVideoCreatives = videoCreatives.filter(ad => ad.videoMetrics?.reliableForFatigue);
+            const lowConfidenceVideoCreatives = videoCreatives.filter(ad => !ad.videoMetrics?.reliableForFatigue);
+
+            if (reliableVideoCreatives.length > 0) {
+                const totalVideoSpend = reliableVideoCreatives.reduce((sum, ad) => sum + ad.spend, 0);
                 const weightedHook = totalVideoSpend > 0
-                    ? videoCreatives.reduce((sum, ad) => sum + (parseFloat(ad.videoMetrics.hookRate || 0) * ad.spend), 0) / totalVideoSpend
+                    ? reliableVideoCreatives.reduce((sum, ad) => sum + (parseFloat(ad.videoMetrics.hookRate || 0) * ad.spend), 0) / totalVideoSpend
                     : 0;
                 const weightedCompletion = totalVideoSpend > 0
-                    ? videoCreatives.reduce((sum, ad) => sum + (parseFloat(ad.videoMetrics.completionRate || 0) * ad.spend), 0) / totalVideoSpend
+                    ? reliableVideoCreatives.reduce((sum, ad) => sum + (parseFloat(ad.videoMetrics.completionRate || 0) * ad.spend), 0) / totalVideoSpend
                     : 0;
-                const hookScore = weightedHook < 5 ? 100 : weightedHook < 10 ? 70 : weightedHook < 15 ? 40 : 0;
-                const completionScore = weightedCompletion < 12 ? 100 : weightedCompletion < 20 ? 65 : weightedCompletion < 30 ? 35 : 0;
+                const hookScore = weightedHook < 8 ? 85 : weightedHook < 12 ? 55 : weightedHook < 18 ? 25 : 0;
+                const completionScore = weightedCompletion < 1 ? 60 : weightedCompletion < 3 ? 35 : weightedCompletion < 6 ? 15 : 0;
                 const creativePressure = Math.round((hookScore * 0.65) + (completionScore * 0.35));
 
                 fatigueAnalysis.framework = [
@@ -2811,13 +2856,63 @@ export async function getAdvancedAnalytics(req, res) {
                 fatigueAnalysis.metrics = {
                     ...fatigueAnalysis.metrics,
                     weightedHookRate: weightedHook.toFixed(1),
-                    weightedCompletionRate: weightedCompletion.toFixed(1)
+                    weightedCompletionRate: weightedCompletion.toFixed(1),
+                    hookConfidenceLabel: reliableVideoCreatives.length >= 3 ? 'High confidence' : 'Medium confidence',
+                    reliableVideoCreatives: reliableVideoCreatives.length,
+                    excludedLowConfidenceVideoCreatives: lowConfidenceVideoCreatives.length,
+                    componentScores: {
+                        ...(fatigueAnalysis.metrics?.componentScores || {}),
+                        hook: creativePressure
+                    }
                 };
+                if (lowConfidenceVideoCreatives.length > 0) {
+                    fatigueAnalysis.missingSignals = [
+                        ...(fatigueAnalysis.missingSignals || []),
+                        `${lowConfidenceVideoCreatives.length} video creative${lowConfidenceVideoCreatives.length === 1 ? '' : 's'} had low-confidence watch-depth data and were excluded from hook pressure scoring.`
+                    ];
+                }
             } else {
                 fatigueAnalysis.missingSignals = [
                     ...(fatigueAnalysis.missingSignals || []),
-                    'No meaningful video-watch data was available, so the fatigue model could not use hook or completion quality.'
+                    videoCreatives.length > 0
+                        ? 'Video watch data existed, but it stayed low-confidence in this date range, so the fatigue model excluded hook/completion pressure.'
+                        : 'No meaningful video-watch data was available, so the fatigue model could not use hook or completion quality.'
                 ];
+            }
+
+            if (fatigueAnalysis.metrics?.componentScores) {
+                const componentScores = fatigueAnalysis.metrics.componentScores || {};
+                const audienceSaturation = ((Number(componentScores.frequency || 0) * 0.6) + (Number(componentScores.ctr || 0) * 0.4));
+                const creativeDecay = componentScores.hook === null || componentScores.hook === undefined
+                    ? ((Number(componentScores.ctr || 0) * 0.7) + (Number(componentScores.frequency || 0) * 0.3))
+                    : ((Number(componentScores.hook || 0) * 0.65) + (Number(componentScores.ctr || 0) * 0.35));
+                const auctionPressure = ((Number(componentScores.cpm || 0) * 0.45) + (Number(componentScores.cpc || 0) * 0.2) + (Number(componentScores.cpr || 0) * 0.35));
+
+                fatigueAnalysis.sourceSplit = [
+                    {
+                        key: 'audience',
+                        label: 'Audience Saturation',
+                        score: parseFloat(audienceSaturation.toFixed(1)),
+                        detail: `Frequency ${fatigueAnalysis.metrics.currentFrequency || '0.00'}x with CTR trend ${fatigueAnalysis.metrics.ctrDecay || '0.0'}%.`,
+                        confidenceLabel: 'High confidence'
+                    },
+                    {
+                        key: 'creative',
+                        label: 'Creative Decay',
+                        score: parseFloat(creativeDecay.toFixed(1)),
+                        detail: componentScores.hook === null || componentScores.hook === undefined
+                            ? 'Hook pressure is unavailable, so this read leans on CTR softening and repeat exposure only.'
+                            : `Hook pressure ${Math.round(Number(componentScores.hook || 0))} with ${fatigueAnalysis.metrics.weightedHookRate || '0.0'}% weighted hook rate.`,
+                        confidenceLabel: fatigueAnalysis.metrics?.hookConfidenceLabel || 'Low confidence'
+                    },
+                    {
+                        key: 'auction',
+                        label: 'Auction Pressure',
+                        score: parseFloat(auctionPressure.toFixed(1)),
+                        detail: `CPM ${fatigueAnalysis.metrics.cpmIncrease || '0.0'}%, CPC ${fatigueAnalysis.metrics.cpcIncrease || '0.0'}%, CPR ${fatigueAnalysis.metrics.cprIncrease ?? 'n/a'}%.`,
+                        confidenceLabel: fatigueAnalysis.metrics?.cprIncrease === null ? 'Medium confidence' : 'High confidence'
+                    }
+                ].sort((a, b) => b.score - a.score);
             }
 
             fatigueAnalysis.status = fatigueAnalysis.score >= 60 ? 'critical' : fatigueAnalysis.score >= 30 ? 'warning' : 'healthy';
@@ -2861,6 +2956,9 @@ export async function getAdvancedAnalytics(req, res) {
                     : null;
                 const ctrValue = parseFloat(insights.ctr || 0);
                 const frequencyValue = parseFloat(insights.frequency || 0);
+                const isLearning = status === 'LEARNING' || status === 'PENDING_REVIEW';
+                const isLimited = status === 'LEARNING_LIMITED';
+                const isActive = status === 'ACTIVE';
                 const deliveryWarnings = [];
 
                 if (goalProfile.needsOptimizationEvents && weeklyPace < 50) {
@@ -2872,16 +2970,23 @@ export async function getAdvancedAnalytics(req, res) {
                 if (frequencyValue >= (goalProfile.needsOptimizationEvents ? 3.2 : 2.2)) {
                     deliveryWarnings.push(`Frequency is elevated at ${frequencyValue.toFixed(2)}x.`);
                 }
-                if (ctrValue > 0 && ctrValue < (goalProfile.needsOptimizationEvents ? 1 : 0.2)) {
+                if (ctrValue > 0 && ctrValue < (goalProfile.needsOptimizationEvents ? 1 : 0.15)) {
                     deliveryWarnings.push(`CTR is soft at ${ctrValue.toFixed(2)}%.`);
                 }
 
                 const hasStableRunway = daysActive >= Math.min(5, selectedWindowDays || 5);
                 const hasHealthyFrequency = frequencyValue === 0 || frequencyValue < (goalProfile.needsOptimizationEvents ? 3.2 : 2.2);
-                const hasViableCtr = ctrValue === 0 || ctrValue >= (goalProfile.needsOptimizationEvents ? 1 : 0.2);
+                const hasViableCtr = ctrValue === 0 || ctrValue >= (goalProfile.needsOptimizationEvents ? 1 : 0.15);
+                const awarenessScaleReady = !goalProfile.needsOptimizationEvents
+                    && spend >= 5000
+                    && daysActive >= 10
+                    && hasStableRunway
+                    && hasHealthyFrequency
+                    && hasViableCtr
+                    && goalEvents >= (goalProfile.metricSource === 'reach' ? 150000 : 250000);
                 const safeToScale = goalProfile.needsOptimizationEvents
                     ? weeklyPace >= Math.max(goalProfile.benchmarkTarget || 50, 75) && spend >= 2000 && hasStableRunway && hasHealthyFrequency && hasViableCtr
-                    : spend >= 1000 && hasStableRunway && hasHealthyFrequency;
+                    : awarenessScaleReady;
                 const confidenceLabel = getConfidenceLabel({
                     spend,
                     conversions: goalProfile.needsOptimizationEvents ? goalEvents : generalConversions,
@@ -2889,10 +2994,11 @@ export async function getAdvancedAnalytics(req, res) {
                     impressions: parseFloat(insights.impressions || 0)
                 });
 
+                if (!goalProfile.needsOptimizationEvents && isActive && !awarenessScaleReady) {
+                    deliveryWarnings.push('Delivery is stable, but this awareness ad set has not cleared the stronger scale-ready thresholds for spend depth, age, frequency, CTR, and delivery volume.');
+                }
+
                 let learningStatus = { status: 'unknown', label: 'Unknown', color: '#6b7280', icon: '❓' };
-                const isLearning = status === 'LEARNING' || status === 'PENDING_REVIEW';
-                const isLimited = status === 'LEARNING_LIMITED';
-                const isActive = status === 'ACTIVE';
 
                 if (goalProfile.needsOptimizationEvents && isLearning) {
                     learningStatus = {
@@ -2937,7 +3043,7 @@ export async function getAdvancedAnalytics(req, res) {
                             ? 'Event pace, spend depth, age, and frequency all support cautious scaling.'
                             : goalProfile.needsOptimizationEvents
                                 ? `Projected pace: ${weeklyPace.toFixed(1)} ${goalProfile.metricLabel.toLowerCase()}/week. Use the watchouts below before scaling harder.`
-                                : 'This goal is judged on delivery stability. Watch frequency and spend depth before scaling.'
+                                : 'This awareness goal is judged on delivery stability first. It only becomes scale-ready once spend depth, age, frequency, CTR, and reach/impression volume all look durable.'
                     };
                 }
 
