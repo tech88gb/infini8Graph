@@ -325,6 +325,8 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
     try {
         let primaryAccountId = null;
         let primaryAccountData = accountsData[0];
+        // Track which account IDs we process so we can disable stale rows afterwards
+        const processedAccountIds = [];
 
         for (const account of accountsData) {
             const isFirst = account === accountsData[0];
@@ -440,8 +442,29 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
                     is_enabled: isEnabled,
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'user_id,instagram_account_id' }); // COMPOSITE KEY
+            processedAccountIds.push(instagramAccountId);
         }
 
+        // Cleanup: disable any stale auth_token rows this user has that Meta did NOT
+        // return in this OAuth session. This handles accounts that were enabled in a
+        // previous session (with the old buggy long-lived token that returned all pages)
+        // but are no longer selected by the user.
+        if (processedAccountIds.length > 0) {
+            const { error: cleanupError } = await supabase
+                .from('auth_tokens')
+                .update({ is_enabled: false, is_active: false, updated_at: new Date().toISOString() })
+                .eq('user_id', userId)
+                .not('instagram_account_id', 'in', `(${processedAccountIds.map(id => `"${id}"`).join(',')})`)
+                .eq('is_enabled', true); // only touch rows that are currently enabled
+
+            if (cleanupError) {
+                console.warn('⚠️ Cleanup of stale accounts failed:', cleanupError.message);
+            } else {
+                console.log(`🧹 [setup] Disabled stale accounts for user ${userId} (not in current auth: ${processedAccountIds.length} kept)`);
+            }
+        }
+
+        // Ensure exactly one account is active among the enabled ones
         await ensureActiveEnabledAccount(userId);
 
         // Mark user as meta_connected
