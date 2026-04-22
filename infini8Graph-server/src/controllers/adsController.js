@@ -2004,7 +2004,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v3', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v4', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2053,6 +2053,11 @@ export async function getAdvancedAnalytics(req, res) {
             if (conversions >= 20 || spend >= 12000 || clicks >= 1500 || impressions >= 80000) return 'High confidence';
             if (conversions >= 6 || spend >= 3500 || clicks >= 400 || impressions >= 20000) return 'Medium confidence';
             return 'Low confidence';
+        };
+
+        const isUnsupportedFieldError = (error, fieldName) => {
+            const message = String(error?.response?.data?.error?.message || error?.message || '').toLowerCase();
+            return message.includes('field') && message.includes(String(fieldName || '').toLowerCase());
         };
 
         const describeOptimizationGoal = (optimizationGoal = '', campaignObjective = '') => {
@@ -2205,16 +2210,45 @@ export async function getAdvancedAnalytics(req, res) {
             'audience_network': { weight: 0.5, label: 'Low Intent', color: '#ef4444' }
         };
 
+        const buildAdvancedAdFields = (includeVideoPlays = true) => [
+            'id',
+            'name',
+            'status',
+            'effective_status',
+            'created_time',
+            'updated_time',
+            'creative{id,name,image_url,thumbnail_url,object_story_spec}',
+            `insights.date_preset(${datePreset}){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values${includeVideoPlays ? ',video_play_actions' : ''},video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}`
+        ].join(',');
+
+        const fetchAdvancedAds = async () => {
+            try {
+                return await axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: buildAdvancedAdFields(true),
+                        limit: 100
+                    }
+                });
+            } catch (error) {
+                if (!isUnsupportedFieldError(error, 'video_play_actions')) {
+                    throw error;
+                }
+
+                return axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: buildAdvancedAdFields(false),
+                        limit: 100
+                    }
+                });
+            }
+        };
+
         // Fetch all required data in parallel
         const [adsRes, adsetsRes, campaignsRes, dailyRes, placementRes] = await Promise.allSettled([
             // Ads with creative details and insights
-            axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'id,name,status,creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values,video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,frequency}',
-                    limit: 100
-                }
-            }),
+            fetchAdvancedAds(),
             // Adsets with learning phase status
             axios.get(`${GRAPH_API_BASE}/${accountId}/adsets`, {
                 params: {
@@ -2478,6 +2512,15 @@ export async function getAdvancedAnalytics(req, res) {
                 const clicks = parseInt(insights.clicks || 0);
                 const spend = parseFloat(insights.spend || 0);
                 const frequency = parseFloat(insights.frequency || 0);
+                const createdAt = ad.created_time || ad.updated_time || null;
+                const daysActive = Math.max(
+                    1,
+                    Math.ceil(
+                        (Date.now() - new Date(createdAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24)
+                    )
+                );
+                const effectiveStatus = String(ad.effective_status || ad.status || '').toUpperCase();
+                const isActive = effectiveStatus === 'ACTIVE';
 
                 const videoPlays = parseInt(insights.video_play_actions?.[0]?.value || 0);
                 const v25 = parseInt(insights.video_p25_watched_actions?.[0]?.value || 0);
@@ -2519,6 +2562,10 @@ export async function getAdvancedAnalytics(req, res) {
                     cpm,
                     spend,
                     frequency,
+                    createdAt,
+                    daysActive,
+                    effectiveStatus,
+                    isActive,
                     conversions,
                     leads,
                     purchases,
@@ -2553,8 +2600,15 @@ export async function getAdvancedAnalytics(req, res) {
 
             creativeForensics = creativeBase.map(ad => {
                 let pattern;
+                const qualifiesWinnerGate = ad.isActive && ad.daysActive >= 3 && ad.spend >= 2000;
 
-                if (ad.conversions >= 10 && ad.costPerConversion !== null && (medianCpa === 0 || ad.costPerConversion <= medianCpa * 0.9) && ad.ctr >= medianCtr * 0.9) {
+                if (
+                    qualifiesWinnerGate &&
+                    ad.conversions >= 10 &&
+                    ad.costPerConversion !== null &&
+                    (medianCpa === 0 || ad.costPerConversion <= medianCpa * 0.9) &&
+                    ad.ctr >= medianCtr * 0.9
+                ) {
                     pattern = {
                         type: 'winner',
                         label: 'Winner',
@@ -2683,6 +2737,11 @@ export async function getAdvancedAnalytics(req, res) {
                         completionRate: ad.videoMetrics.completionRate.toFixed(1)
                     } : null,
                     pattern,
+                    winnerGate: {
+                        isActive: ad.isActive,
+                        minDaysActive: ad.daysActive >= 3,
+                        minSpend: ad.spend >= 2000
+                    },
                     performanceScore: performanceScore.toFixed(0),
                     scoreComponents: {
                         ctrScore: ctrScore.toFixed(1),
@@ -3169,7 +3228,7 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-deep-v2', [req.user.userId, accountId, datePreset, campaignId || 'all']);
+        const cacheKey = buildMetaCacheKey('meta-deep-v3', [req.user.userId, accountId, datePreset, campaignId || 'all']);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -3218,7 +3277,7 @@ export async function getDeepInsights(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
+                    fields: 'id,name,status,effective_status,created_time,updated_time,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
                     limit: 100
                 }
             })
@@ -3412,6 +3471,14 @@ export async function getDeepInsights(req, res) {
                 })
                 .map(ad => {
                     const insights = ad.insights?.data?.[0] || {};
+                    const effectiveStatus = String(ad.effective_status || ad.status || '').toUpperCase();
+                    const isActive = effectiveStatus === 'ACTIVE';
+                    const daysActive = Math.max(
+                        1,
+                        Math.ceil(
+                            (Date.now() - new Date(ad.created_time || ad.updated_time || Date.now()).getTime()) / (1000 * 60 * 60 * 24)
+                        )
+                    );
 
                     const videoPlays = parseInt(insights.video_play_actions?.[0]?.value || 0);
                     const p25 = parseInt(insights.video_p25_watched_actions?.[0]?.value || 0);
@@ -3435,11 +3502,17 @@ export async function getDeepInsights(req, res) {
                     let pattern = '';
                     let insight = '';
                     let color = '#6b7280';
+                    const spend = parseFloat(insights.spend || 0);
+                    const qualifiesWinnerGate = isActive && daysActive >= 3 && spend >= 2000;
 
-                    if (hookRate >= 50 && holdRate >= 60) {
+                    if (hookRate >= 50 && holdRate >= 60 && qualifiesWinnerGate) {
                         pattern = '🏆 Full Engagement Winner';
                         insight = 'Great hook AND content keeps viewers engaged until the end';
                         color = '#10b981';
+                    } else if (hookRate >= 50 && holdRate >= 60) {
+                        pattern = '🌱 Promising Engagement';
+                        insight = 'Strong engagement shape, but it has not cleared the 3-day active and ₹2,000 spend gate for a true winner call yet.';
+                        color = '#14b8a6';
                     } else if (hookRate >= 50 && holdRate < 40) {
                         pattern = '⚠️ Hook Works, Content Weak';
                         insight = 'Strong first 3 seconds but viewers drop off mid-video. Improve middle content.';
@@ -3461,8 +3534,6 @@ export async function getDeepInsights(req, res) {
                         insight = 'Not enough retention or conversion data to classify';
                         color = '#6b7280';
                     }
-
-                    const spend = parseFloat(insights.spend || 0);
 
                     return {
                         adId: ad.id,
@@ -3488,6 +3559,8 @@ export async function getDeepInsights(req, res) {
                                 ? 'thumbnail'
                                 : 'none',
                         spend,
+                        daysActive,
+                        isActive,
                         retention: {
                             videoPlays: baseViews,
                             p25,
