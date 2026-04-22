@@ -3625,7 +3625,7 @@ export default function AdsPage() {
                             {(advancedData.data.creativeForensics || []).length > 0 && (
                                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Reads each ad creative against its peers using real CTR, click-to-result rate, CPR, CPM, frequency, and video hook quality when available. The labels here are meant to help you decide whether to scale, refresh, or let the creative mature." /></span>} subtitle="Creative-by-creative diagnosis with visuals, cost signals, and practical next actions">
                                     <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
-                                        The label is a diagnosis, not a vanity badge. Winners combine conversion proof and efficiency. Traffic mismatch means the ad earns clicks but not enough downstream action. Early read means it simply has not spent enough yet to judge fairly.
+                                        The label is a diagnosis, not a vanity badge. Winners combine conversion proof and efficiency, and now also need to be active for at least 3 days with at least ₹2,000 spent. Traffic mismatch means the ad earns clicks but not enough downstream action. Early read means it simply has not spent enough yet to judge fairly.
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                                         {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
@@ -3742,7 +3742,7 @@ export default function AdsPage() {
                                                         </div>
 
                                                         <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
-                                                            Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x
+                                                            Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x • {ad.isActive ? 'Active' : 'Inactive'} {ad.daysActive}d
                                                         </div>
                                                         <div style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
                                                             ROAS {ad.roas ? formatRoas(ad.roas) : '—'} • {ad.confidenceLabel || 'Low confidence'}
@@ -4502,6 +4502,8 @@ export default function AdsPage() {
 
                                                     <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11, color: 'var(--muted)' }}>
                                                         <span>Spend {formatCurrency(v.spend)}</span>
+                                                        <span>•</span>
+                                                        <span>{v.isActive ? 'Active' : 'Inactive'} {v.daysActive}d</span>
                                                         <span>•</span>
                                                         <span>Completion {v.retention.completionRate}%</span>
                                                         <span>•</span>
