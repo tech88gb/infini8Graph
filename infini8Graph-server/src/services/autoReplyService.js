@@ -360,6 +360,30 @@ class AutoReplyService {
             // Otherwise, check if any keyword matches
             for (const keyword of rule.keywords) {
                 if (lowerText.includes(keyword.toLowerCase())) {
+
+    /**
+     * Find matching rule for text
+     * Rules with empty keywords array match ALL text (default/fallback behavior)
+     * Rules with keywords only match if a keyword is found in text
+     */
+    findMatchingRule(text, rules) {
+        if (!text) return null;
+
+        const lowerText = text.toLowerCase();
+
+        // Sort by priority (lower = higher priority)
+        // Priority 1 = specific post rules, Priority 2 = general rules
+        const sortedRules = [...rules].sort((a, b) => a.priority - b.priority);
+
+        for (const rule of sortedRules) {
+            // If rule has no keywords or empty keywords array, it matches EVERYTHING (default behavior)
+            if (!rule.keywords || rule.keywords.length === 0) {
+                return rule;
+            }
+
+            // Otherwise, check if any keyword matches
+            for (const keyword of rule.keywords) {
+                if (lowerText.includes(keyword.toLowerCase())) {
                     return rule;
                 }
             }
@@ -380,7 +404,11 @@ class AutoReplyService {
             const senderId = sender?.id;
             const recipientId = recipient?.id;
 
-            const tokenData = await this.getAccessTokenByInstagramId(recipientId);
+            // Resolve full context: DB automation rules + token for this IG account
+            // This is consistent with processComment and ensures we use the right rules
+            // and the correct page access token (not the user access token).
+            const resolvedContext = await this.resolveAutomationContext(recipientId);
+            const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(recipientId);
             const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
 
             await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
@@ -406,7 +434,9 @@ class AutoReplyService {
                 return;
             }
 
-            const rule = this.findMatchingRule(message.text, this.messageRules);
+            // Use DB rules if available (from resolvedContext), fall back to hardcoded
+            const rules = resolvedContext?.rules || this.messageRules;
+            const rule = this.findMatchingRule(message.text, rules);
             if (!rule) {
                 await this.addActivityLog(activeId, 'NO MATCH', `No keyword matched for: "${message.text}"`);
                 return;
@@ -416,13 +446,24 @@ class AutoReplyService {
                 replyText: rule.reply, ruleName: rule.name
             });
 
-            await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.accessToken, null, activeId);
+            // BUG FIX: Use pageToken (page access token) not accessToken (user token).
+            // /{pageId}/messages requires the Page Access Token — the user token will
+            // be rejected by Meta with an OAuthException. The comment-to-DM path at
+            // processComment already does this correctly; this aligns DM-to-DM replies.
+            if (!tokenData.pageToken) {
+                await this.addActivityLog(activeId, 'API ERROR',
+                    'Missing page access token — cannot send DM reply. Re-connect Meta to refresh.', { step: 'SEND_DM' });
+                return;
+            }
+
+            await this.sendMessageReply(tokenData.facebookPageId, senderId, rule.reply, tokenData.pageToken, null, activeId);
             await this.markReplied(senderId, 'message');
 
             await this.logReply({
                 type: 'message', senderId, recipientId,
                 originalText: message.text, replyText: rule.reply,
-                instagramAccountId: tokenData.instagramAccountId
+                instagramAccountId: tokenData.instagramAccountId,
+                userId: tokenData.userId
             });
 
         } catch (error) {
@@ -431,8 +472,10 @@ class AutoReplyService {
     }
 
     /**
-     * @param {string|null} commentId - Optional comment ID (required for comment-triggered DMs to open messaging window)
-     * @param {string|null} instagramAccountId - The account ID for logging
+     * Send a DM reply via the Instagram Messaging API.
+     * MUST be called with a Page Access Token, NOT a User Access Token.
+     * @param {string|null} commentId - Set when opened by a comment interaction (opens messaging window)
+     * @param {string|null} instagramAccountId - Account ID used for activity logging
      */
     async sendMessageReply(facebookPageId, recipientIGSID, text, accessToken, commentId = null, instagramAccountId = null) {
         try {
