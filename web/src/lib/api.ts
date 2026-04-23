@@ -189,14 +189,14 @@ export const adsApi = {
     getAds: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/ads`),
     getPageInsights: () => api.get('/ads/page-insights'),
     getConversionFunnel: (adAccountId: string, datePreset = 'last_90d') =>
-        api.get(`/ads/accounts/${adAccountId}/funnel?datePreset=${datePreset}`),
+        api.get(`/ads/accounts/${adAccountId}/funnel?datePreset=${datePreset}`, { timeout: 45000 }),
     getCampaignIntelligence: (adAccountId: string, datePreset = 'last_30d') =>
         api.get(`/ads/accounts/${adAccountId}/intelligence?datePreset=${datePreset}`, { timeout: 45000 }),
     getAdvancedAnalytics: (adAccountId: string, datePreset = 'last_30d') =>
         api.get(`/ads/accounts/${adAccountId}/advanced?datePreset=${datePreset}`, { timeout: 45000 }),
-    getDeepInsights: (adAccountId: string, datePreset = 'last_30d', section: 'all' | 'core' | 'funnel' | 'placements' | 'video' = 'all') =>
+    getDeepInsights: (adAccountId: string, datePreset = 'last_30d', section: 'all' | 'core' | 'funnel' | 'placements' | 'video' | 'diagnostics' = 'all') =>
         api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}&section=${section}`, {
-            timeout: section === 'video' ? 30000 : section === 'all' ? 45000 : 20000
+            timeout: section === 'diagnostics' || section === 'funnel' || section === 'all' ? 60000 : 45000
         })
 };
 

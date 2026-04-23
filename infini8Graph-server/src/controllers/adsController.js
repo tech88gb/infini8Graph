@@ -3522,12 +3522,12 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const normalizedSection = ['core', 'funnel', 'placements', 'video', 'all'].includes(String(section || '').toLowerCase())
+        const normalizedSection = ['core', 'funnel', 'placements', 'video', 'diagnostics', 'all'].includes(String(section || '').toLowerCase())
             ? String(section).toLowerCase()
             : 'all';
         const includeFunnel = ['all', 'core', 'funnel'].includes(normalizedSection);
-        const includePlacements = ['all', 'core', 'placements'].includes(normalizedSection);
-        const includeVideo = ['all', 'video'].includes(normalizedSection);
+        const includePlacements = ['all', 'core', 'placements', 'diagnostics'].includes(normalizedSection);
+        const includeVideo = ['all', 'video', 'diagnostics'].includes(normalizedSection);
         const cacheKey = buildMetaCacheKey('meta-deep-v6', [req.user.userId, accountId, datePreset, campaignId || 'all', normalizedSection]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
