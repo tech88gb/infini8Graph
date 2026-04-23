@@ -57,6 +57,11 @@ function formatRoas(value: number | string) {
     return num.toFixed(2) + 'x';
 }
 
+function formatMultiplier(value: number) {
+    if (!value || !isFinite(value)) return '0x';
+    return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}x`;
+}
+
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'];
 
 function toTitleCase(value: string) {
@@ -4119,7 +4124,43 @@ export default function AdsPage() {
                             {advancedData.data.retargetingLift && (
                                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔄 Retargeting Lift Analysis <InfoTooltip text="Measures whether retargeting converts better than cold traffic for the selected window. This uses click-to-conversion rate, not reach-to-conversion rate, so the comparison is closer to what performance marketers usually expect." /></span>} subtitle="Compares cold vs retargeting click-to-conversion efficiency and CPA">
                                     <div style={{ marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
-                                        <strong>How to read this:</strong> click CVR is conversions divided by clicks inside each bucket. Lift compares retargeting click CVR against cold click CVR for the same selected period.
+                                        <strong>How to read this:</strong> click CVR means conversions divided by clicks in each bucket. A high lift is useful, but it is most reliable when retargeting has enough clicks and conversions behind it.
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                        <div style={{
+                                            padding: '6px 10px',
+                                            borderRadius: 999,
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            ...getConfidenceTone(advancedData.data.retargetingLift.confidenceLabel || 'Low confidence')
+                                        }}>
+                                            {advancedData.data.retargetingLift.confidenceLabel || 'Low confidence'}
+                                        </div>
+                                        <div style={{
+                                            padding: '6px 10px',
+                                            borderRadius: 999,
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            background: 'rgba(99, 102, 241, 0.1)',
+                                            color: '#6366f1'
+                                        }}>
+                                            {formatMultiplier(
+                                                (parseFloat(advancedData.data.retargetingLift.retarget.conversionRate || '0') || 0) /
+                                                Math.max(parseFloat(advancedData.data.retargetingLift.cold.conversionRate || '0') || 0, 0.0001)
+                                            )} retarget CVR vs cold
+                                        </div>
+                                        {advancedData.data.retargetingLift.cpaDelta !== null && advancedData.data.retargetingLift.cpaDelta !== undefined && (
+                                            <div style={{
+                                                padding: '6px 10px',
+                                                borderRadius: 999,
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                                background: 'rgba(16, 185, 129, 0.1)',
+                                                color: parseFloat(advancedData.data.retargetingLift.cpaDelta) >= 0 ? '#10b981' : '#ef4444'
+                                            }}>
+                                                {parseFloat(advancedData.data.retargetingLift.cpaDelta) >= 0 ? `${formatCompactPercent(advancedData.data.retargetingLift.cpaDelta, 1)} lower CPA` : `${formatCompactPercent(Math.abs(parseFloat(advancedData.data.retargetingLift.cpaDelta)), 1)} higher CPA`}
+                                            </div>
+                                        )}
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 24, alignItems: 'center' }}>
                                         {/* Cold Traffic */}
@@ -4138,6 +4179,9 @@ export default function AdsPage() {
                                             </div>
                                             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
                                                 {formatNumber(advancedData.data.retargetingLift.cold.clicks || 0)} clicks
+                                            </div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                                                {formatNumber(advancedData.data.retargetingLift.cold.conversions || 0)} conversions
                                             </div>
                                         </div>
 
@@ -4175,6 +4219,9 @@ export default function AdsPage() {
                                             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
                                                 {formatNumber(advancedData.data.retargetingLift.retarget.clicks || 0)} clicks
                                             </div>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                                                {formatNumber(advancedData.data.retargetingLift.retarget.conversions || 0)} conversions
+                                            </div>
                                         </div>
                                     </div>
 
@@ -4193,7 +4240,10 @@ export default function AdsPage() {
                                                 color: advancedData.data.retargetingLift.status === 'excellent' || advancedData.data.retargetingLift.status === 'good'
                                                     ? '#10b981' : advancedData.data.retargetingLift.status === 'warning' ? '#f59e0b' : '#ef4444'
                                             }} />
-                                            <div style={{ fontSize: 13 }}>{advancedData.data.retargetingLift.insight}</div>
+                                            <div style={{ fontSize: 13 }}>
+                                                <div>{advancedData.data.retargetingLift.insight}</div>
+                                                <div style={{ marginTop: 4, color: 'var(--muted)' }}>{advancedData.data.retargetingLift.sampleNote}</div>
+                                            </div>
                                         </div>
                                     </div>
                                 </SectionCard>
