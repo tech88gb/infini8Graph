@@ -1824,14 +1824,15 @@ export default function AdsPage() {
     });
 
     // Fetch deep insights (Nurture Funnel, Bounce Gap, Video Hook, Placement Arbitrage)
-    const { data: deepInsightsData, isLoading: deepInsightsLoading } = useQuery({
+    const { data: deepInsightsData, isLoading: deepInsightsLoading, error: deepInsightsError } = useQuery({
         queryKey: ['deep-insights', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
             const res = await adsApi.getDeepInsights(effectiveAccount, datePreset);
             return res.data;
         },
-        enabled: !!effectiveAccount && activeTab === 'deep'
+        enabled: !!effectiveAccount && activeTab === 'deep',
+        retry: 1
     });
 
     // Extract data from insights
@@ -2009,7 +2010,7 @@ export default function AdsPage() {
         ? `${campaignPageStart + 1}-${Math.min(campaignPageStart + campaignPageSize, filteredCampaigns.length)}`
         : '0-0';
     const sectionPageSize = 8;
-    const intelligenceCampaignRows = useMemo(() => (intelligenceData?.data?.campaigns || []).filter((campaign: any) => campaign?.spend > 0), [intelligenceData]);
+    const intelligenceCampaignRows = useMemo(() => intelligenceData?.data?.campaigns || [], [intelligenceData]);
     const intelligenceObjectiveOptions = useMemo(() => {
         const values = Array.from(new Set(intelligenceCampaignRows.map((campaign: any) => normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective)))) as string[];
         return [{ value: 'all', label: 'All objectives' }, ...values.map((value) => ({ value, label: getObjectiveFilterLabel(value) }))];
@@ -2020,7 +2021,7 @@ export default function AdsPage() {
             const objectiveGroup = normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective);
             return (!search || String(campaign.name || '').toLowerCase().includes(search))
                 && (scaleFilters.objective === 'all' || objectiveGroup === scaleFilters.objective)
-                && statusMatchesFilter(campaign.status, scaleFilters.status);
+                && statusMatchesFilter(campaign.effectiveStatus || campaign.status, scaleFilters.status);
         });
 
         return [...rows].sort((a: any, b: any) => {
@@ -2051,7 +2052,7 @@ export default function AdsPage() {
             const objectiveGroup = normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective);
             return (!search || String(campaign.name || '').toLowerCase().includes(search))
                 && (cqiFilters.objective === 'all' || objectiveGroup === cqiFilters.objective)
-                && statusMatchesFilter(campaign.status, cqiFilters.status)
+                && statusMatchesFilter(campaign.effectiveStatus || campaign.status, cqiFilters.status)
                 && (cqiFilters.confidence === 'all' || String(campaign.metrics?.confidenceLabel || '').toLowerCase() === cqiFilters.confidence);
         });
 
@@ -2135,7 +2136,7 @@ export default function AdsPage() {
             const objectiveGroup = normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective);
             return (!search || String(campaign.campaignName || '').toLowerCase().includes(search))
                 && (funnelFilters.objective === 'all' || objectiveGroup === funnelFilters.objective)
-                && statusMatchesFilter(campaign.status, funnelFilters.status);
+                && statusMatchesFilter(campaign.effectiveStatus || campaign.status, funnelFilters.status);
         });
 
         return [...rows].sort((a: any, b: any) => {
@@ -3785,6 +3786,8 @@ export default function AdsPage() {
                                                 const scoreTone = getScoreTone(c.efficiencyScore || 0);
                                                 const confidenceTone = getConfidenceTone(c.confidenceLabel || 'Low confidence');
                                                 const maturityTone = getMaturityTone(c.maturity?.label || 'Early');
+                                                const statusLabel = c.effectiveStatus || c.status || 'UNKNOWN';
+                                                const hasDelivery = Number(c.spend || 0) > 0 || Number(c.clicks || 0) > 0 || Number(c.purchases || 0) > 0;
                                                 return (
                                                     <div key={c.id} style={{
                                                         display: 'grid',
@@ -3816,8 +3819,8 @@ export default function AdsPage() {
                                                                 <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#a5b4fc', fontSize: 12 }}>
                                                                     {c.objectiveLabel || toTitleCase((c.objective || '').replace('OUTCOME_', '').toLowerCase()) || 'Unknown Objective'}
                                                                 </span>
-                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: c.status === 'ACTIVE' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.16)', color: c.status === 'ACTIVE' ? '#86efac' : '#cbd5e1', fontSize: 12 }}>
-                                                                    {c.status}
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: statusLabel === 'ACTIVE' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.16)', color: statusLabel === 'ACTIVE' ? '#86efac' : '#cbd5e1', fontSize: 12 }}>
+                                                                    {statusLabel}
                                                                 </span>
                                                                 <span style={{ padding: '4px 8px', borderRadius: 999, background: confidenceTone.bg, color: confidenceTone.color, fontSize: 12, fontWeight: 600 }}>
                                                                     {c.confidenceLabel || 'Low confidence'}
@@ -3842,7 +3845,9 @@ export default function AdsPage() {
                                                             <div>
                                                                 <div className="text-muted" style={{ fontSize: 11 }}>ROAS</div>
                                                                 <div style={{ fontWeight: 700 }}>{formatRoas(c.roas)}</div>
-                                                                <div className="text-muted" style={{ fontSize: 11 }}>CTR {formatCompactPercent(c.ctr || 0, 2)}</div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>
+                                                                    {hasDelivery ? `CTR ${formatCompactPercent(c.ctr || 0, 2)}` : 'No delivery in range'}
+                                                                </div>
                                                             </div>
                                                         </div>
 
@@ -4192,6 +4197,8 @@ export default function AdsPage() {
                                             {pagedCqiCampaigns.items.map((c: any) => {
                                                 const confidenceTone = getConfidenceTone(c.metrics?.confidenceLabel || 'Low confidence');
                                                 const maturityTone = getMaturityTone(c.maturity?.label || 'Early');
+                                                const statusLabel = c.effectiveStatus || c.status || 'UNKNOWN';
+                                                const hasDelivery = Number(c.spend || 0) > 0 || Number(c.clicks || 0) > 0 || Number(c.conversions || 0) > 0;
                                                 return (
                                                 <div key={c.id} style={{
                                                     display: 'flex',
@@ -4219,6 +4226,7 @@ export default function AdsPage() {
                                                         <div style={{ fontWeight: 500, fontSize: 13 }}>{c.name}</div>
                                                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                                                             <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#a5b4fc', fontSize: 10 }}>{c.objectiveLabel || getObjectiveFilterLabel(normalizeObjectiveGroup(c.objective))}</span>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: statusLabel === 'ACTIVE' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.16)', color: statusLabel === 'ACTIVE' ? '#86efac' : '#cbd5e1', fontSize: 10, fontWeight: 700 }}>{statusLabel}</span>
                                                             <span style={{ padding: '3px 8px', borderRadius: 999, background: confidenceTone.bg, color: confidenceTone.color, fontSize: 10, fontWeight: 700 }}>{c.metrics.confidenceLabel || 'Low confidence'}</span>
                                                             <span style={{ padding: '3px 8px', borderRadius: 999, background: maturityTone.bg, color: maturityTone.color, fontSize: 10, fontWeight: 700 }}>{c.maturity?.label || 'Early'}</span>
                                                         </div>
@@ -4226,7 +4234,9 @@ export default function AdsPage() {
                                                             CTR: {c.metrics.ctr}% • Click CVR: {c.metrics.conversionRate}% • CPA: {c.metrics.cpa ? formatCurrency(parseFloat(c.metrics.cpa)) : '—'}
                                                         </div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
-                                                            ROAS: {c.metrics.roas ? formatRoas(c.metrics.roas) : '—'} • {formatNumber(c.conversions || 0)} conversions from {formatNumber(c.clicks || 0)} clicks
+                                                            {hasDelivery
+                                                                ? `ROAS: ${c.metrics.roas ? formatRoas(c.metrics.roas) : '—'} • ${formatNumber(c.conversions || 0)} conversions from ${formatNumber(c.clicks || 0)} clicks`
+                                                                : 'No delivery in the selected date range, so this CQI row is informational only.'}
                                                         </div>
                                                     </div>
                                                     <div style={{ textAlign: 'right' }}>
@@ -5770,6 +5780,13 @@ export default function AdsPage() {
                                 </SectionCard>
                             )}
                         </>
+                    ) : deepInsightsError ? (
+                        <div style={{ textAlign: 'center', padding: 40 }}>
+                            <p className="text-muted" style={{ marginBottom: 8 }}>Deep diagnostics could not load for this account just now.</p>
+                            <p className="text-muted" style={{ fontSize: 12 }}>
+                                This is usually a slow analytics request or a temporary Meta response issue. Refreshing the tab should retry with the longer timeout now in place.
+                            </p>
+                        </div>
                     ) : (
                         <div style={{ textAlign: 'center', padding: 40 }}>
                             <p className="text-muted">No deep insights data available for this account.</p>
