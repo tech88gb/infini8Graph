@@ -168,34 +168,37 @@ export const webhookApi = {
 export const adsApi = {
     testPermissions: () => api.get('/ads/test-permissions'),
     getAdAccounts: () => api.get('/ads/accounts'),
-    getAdInsights: (adAccountId: string, datePreset = 'last_90d') =>
-        api.get(`/ads/accounts/${adAccountId}/insights?datePreset=${datePreset}`),
-    getDemographics: (adAccountId: string, datePreset = 'last_90d') =>
-        api.get(`/ads/accounts/${adAccountId}/demographics?datePreset=${datePreset}`),
-    getPlacements: (adAccountId: string, datePreset = 'last_90d') =>
-        api.get(`/ads/accounts/${adAccountId}/placements?datePreset=${datePreset}`),
-    getGeography: (adAccountId: string, datePreset = 'last_90d') =>
-        api.get(`/ads/accounts/${adAccountId}/geography?datePreset=${datePreset}`),
-    getCampaigns: (adAccountId: string, datePreset = 'last_30d') => api.get(`/ads/accounts/${adAccountId}/campaigns?datePreset=${datePreset}`),
+    getAdInsights: (adAccountId: string, datePreset = 'last_90d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/insights?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
+    getDemographics: (adAccountId: string, datePreset = 'last_90d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/demographics?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
+    getPlacements: (adAccountId: string, datePreset = 'last_90d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/placements?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
+    getGeography: (adAccountId: string, datePreset = 'last_90d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/geography?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
+    getCampaigns: (adAccountId: string, datePreset = 'last_30d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/campaigns?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
     getCampaignDrilldown: (
         adAccountId: string,
         campaignId: string,
         datePreset = 'last_30d',
         creativeOffset = 0,
-        creativeLimit = 4
+        creativeLimit = 4,
+        startDate?: string,
+        endDate?: string
     ) =>
-        api.get(`/ads/accounts/${adAccountId}/campaigns/${campaignId}/drilldown?datePreset=${datePreset}&creativeOffset=${creativeOffset}&creativeLimit=${creativeLimit}`),
+        api.get(`/ads/accounts/${adAccountId}/campaigns/${campaignId}/drilldown?datePreset=${datePreset}&creativeOffset=${creativeOffset}&creativeLimit=${creativeLimit}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
     getAdSets: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/adsets`),
     getAds: (adAccountId: string) => api.get(`/ads/accounts/${adAccountId}/ads`),
     getPageInsights: () => api.get('/ads/page-insights'),
-    getConversionFunnel: (adAccountId: string, datePreset = 'last_90d') =>
-        api.get(`/ads/accounts/${adAccountId}/funnel?datePreset=${datePreset}`, { timeout: 45000 }),
-    getCampaignIntelligence: (adAccountId: string, datePreset = 'last_30d') =>
-        api.get(`/ads/accounts/${adAccountId}/intelligence?datePreset=${datePreset}`, { timeout: 45000 }),
-    getAdvancedAnalytics: (adAccountId: string, datePreset = 'last_30d') =>
-        api.get(`/ads/accounts/${adAccountId}/advanced?datePreset=${datePreset}`, { timeout: 45000 }),
-    getDeepInsights: (adAccountId: string, datePreset = 'last_30d', section: 'all' | 'core' | 'funnel' | 'placements' | 'video' | 'diagnostics' = 'all') =>
-        api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}&section=${section}`, {
+    getConversionFunnel: (adAccountId: string, datePreset = 'last_90d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/funnel?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`, { timeout: 45000 }),
+    getCampaignIntelligence: (adAccountId: string, datePreset = 'last_30d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/intelligence?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`, { timeout: 45000 }),
+    getAdvancedAnalytics: (adAccountId: string, datePreset = 'last_30d', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/advanced?datePreset=${datePreset}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`, { timeout: 45000 }),
+    getDeepInsights: (adAccountId: string, datePreset = 'last_30d', section: 'all' | 'core' | 'funnel' | 'placements' | 'video' | 'diagnostics' = 'all', startDate?: string, endDate?: string) =>
+        api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}&section=${section}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`, {
             timeout: section === 'diagnostics' || section === 'funnel' || section === 'all' ? 60000 : 45000
         })
 };
