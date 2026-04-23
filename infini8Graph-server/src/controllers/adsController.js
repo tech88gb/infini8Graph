@@ -1804,7 +1804,7 @@ export async function getCampaignIntelligence(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-intelligence-v2', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-intelligence-v3', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -1816,7 +1816,7 @@ export async function getCampaignIntelligence(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cpc,cpm,ctr,frequency,purchase_roas}',
+                    fields: 'id,name,status,effective_status,configured_status,objective,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cpc,cpm,ctr,frequency,purchase_roas}',
                     limit: 500
                 }
             }),
@@ -1867,10 +1867,16 @@ export async function getCampaignIntelligence(req, res) {
                 const ctr = parseFloat(insights.ctr || 0);
                 const frequency = parseFloat(insights.frequency || 0);
 
+                const effectiveStatus = String(c.effective_status || c.status || 'UNKNOWN').toUpperCase();
+                const configuredStatus = String(c.configured_status || c.status || 'UNKNOWN').toUpperCase();
+
                 return {
                     id: c.id,
                     name: c.name,
-                    status: c.status,
+                    status: effectiveStatus,
+                    effectiveStatus,
+                    configuredStatus,
+                    rawStatus: c.status,
                     objective: c.objective,
                     objectiveGroup: mapObjectiveGroup(c.objective),
                     objectiveLabel: getCampaignTypeLabel(c.objective),
@@ -2076,7 +2082,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v7', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v8', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2383,7 +2389,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,objective,insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,ctr,cpc,cpm,actions,action_values,frequency}',
+                    fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,ctr,cpc,cpm,actions,action_values,frequency}',
                     limit: 500
                 }
             }),
@@ -3323,8 +3329,8 @@ export async function getAdvancedAnalytics(req, res) {
             const campaigns = campaignsRes.value.data.data || [];
 
             // Calculate LQS per campaign
-            const campaignBase = campaigns.filter(c => c.insights?.data?.[0]).map(c => {
-                const insights = c.insights.data[0];
+            const campaignBase = campaigns.map(c => {
+                const insights = c.insights?.data?.[0] || {};
                 const actionValues = insights.action_values || [];
                 const ctr = parseFloat(insights.ctr || 0);
                 const clicks = parseInt(insights.clicks || 0);
@@ -3332,6 +3338,8 @@ export async function getAdvancedAnalytics(req, res) {
                 const frequency = parseFloat(insights.frequency || 0);
                 const spend = parseFloat(insights.spend || 0);
                 const cpc = parseFloat(insights.cpc || 0);
+                const effectiveStatus = String(c.effective_status || c.status || 'UNKNOWN').toUpperCase();
+                const configuredStatus = String(c.configured_status || c.status || 'UNKNOWN').toUpperCase();
 
                 const conversions = (insights.actions || []).reduce((sum, a) =>
                     ['purchase', 'lead', 'complete_registration'].includes(a.action_type) ? sum + parseInt(a.value) : sum, 0);
@@ -3345,7 +3353,10 @@ export async function getAdvancedAnalytics(req, res) {
                 return {
                     id: c.id,
                     name: c.name,
-                    status: c.status,
+                    status: effectiveStatus,
+                    effectiveStatus,
+                    configuredStatus,
+                    rawStatus: c.status,
                     objective: c.objective,
                     objectiveGroup: mapObjectiveGroup(c.objective),
                     objectiveLabel: getCampaignTypeLabel(c.objective),
@@ -3363,13 +3374,21 @@ export async function getAdvancedAnalytics(req, res) {
                 };
             });
 
-            const medianCampaignCtr = getMedian(campaignBase.map(c => c.ctr).filter(value => value > 0));
-            const medianCampaignCvr = getMedian(campaignBase.map(c => c.conversionRate).filter(value => value > 0));
-            const medianCampaignCpa = getMedian(campaignBase.map(c => c.cpa).filter(value => value !== null && value > 0));
-            const medianCampaignCpc = getMedian(campaignBase.map(c => c.cpc).filter(value => value > 0));
-            const medianCampaignRoas = getMedian(campaignBase.map(c => c.roas).filter(value => value > 0));
-            const maxCampaignConversions = campaignBase.reduce((max, campaign) => Math.max(max, campaign.conversions || 0), 0);
-            const maxCampaignSpend = campaignBase.reduce((max, campaign) => Math.max(max, campaign.spend || 0), 0);
+            const scoredCampaignBase = campaignBase.filter((campaign) =>
+                campaign.spend > 0
+                || campaign.clicks > 0
+                || campaign.impressions > 0
+                || campaign.conversions > 0
+            );
+
+            const normalizationSource = scoredCampaignBase.length > 0 ? scoredCampaignBase : campaignBase;
+            const medianCampaignCtr = getMedian(normalizationSource.map(c => c.ctr).filter(value => value > 0));
+            const medianCampaignCvr = getMedian(normalizationSource.map(c => c.conversionRate).filter(value => value > 0));
+            const medianCampaignCpa = getMedian(normalizationSource.map(c => c.cpa).filter(value => value !== null && value > 0));
+            const medianCampaignCpc = getMedian(normalizationSource.map(c => c.cpc).filter(value => value > 0));
+            const medianCampaignRoas = getMedian(normalizationSource.map(c => c.roas).filter(value => value > 0));
+            const maxCampaignConversions = normalizationSource.reduce((max, campaign) => Math.max(max, campaign.conversions || 0), 0);
+            const maxCampaignSpend = normalizationSource.reduce((max, campaign) => Math.max(max, campaign.spend || 0), 0);
             const campaignLQS = campaignBase.map(c => {
                 const ctrScore = medianCampaignCtr > 0
                     ? Math.min((c.ctr / medianCampaignCtr) * 18, 18)
@@ -3408,6 +3427,9 @@ export async function getAdvancedAnalytics(req, res) {
                     id: c.id,
                     name: c.name,
                     status: c.status,
+                    effectiveStatus: c.effectiveStatus,
+                    configuredStatus: c.configuredStatus,
+                    rawStatus: c.rawStatus,
                     objective: c.objective,
                     objectiveGroup: c.objectiveGroup,
                     objectiveLabel: c.objectiveLabel,
@@ -3439,15 +3461,22 @@ export async function getAdvancedAnalytics(req, res) {
                 };
             }).sort((a, b) => parseFloat(b.lqs) - parseFloat(a.lqs));
 
-            const avgLQS = campaignLQS.length > 0
-                ? campaignLQS.reduce((s, c) => s + parseFloat(c.lqs), 0) / campaignLQS.length
+            const scoredCampaignLQS = campaignLQS.filter((campaign) =>
+                Number(campaign.spend || 0) > 0
+                || Number(campaign.clicks || 0) > 0
+                || Number(campaign.conversions || 0) > 0
+            );
+
+            const summaryCampaignLQS = scoredCampaignLQS.length > 0 ? scoredCampaignLQS : campaignLQS;
+            const avgLQS = summaryCampaignLQS.length > 0
+                ? summaryCampaignLQS.reduce((s, c) => s + parseFloat(c.lqs), 0) / summaryCampaignLQS.length
                 : 0;
 
             leadQualityScore = {
                 average: avgLQS.toFixed(1),
                 campaigns: campaignLQS.slice(0, 150),
-                topPerformer: campaignLQS[0] || null,
-                bottomPerformer: campaignLQS[campaignLQS.length - 1] || null
+                topPerformer: summaryCampaignLQS[0] || null,
+                bottomPerformer: summaryCampaignLQS[summaryCampaignLQS.length - 1] || null
             };
         }
 
@@ -3493,7 +3522,7 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-deep-v4', [req.user.userId, accountId, datePreset, campaignId || 'all']);
+        const cacheKey = buildMetaCacheKey('meta-deep-v5', [req.user.userId, accountId, datePreset, campaignId || 'all']);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -3517,7 +3546,7 @@ export async function getDeepInsights(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,objective,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cost_per_action_type,inline_link_clicks,outbound_clicks,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions}',
+                    fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cost_per_action_type,inline_link_clicks,outbound_clicks,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions}',
                     limit: 500
                 }
             }),
@@ -3591,6 +3620,8 @@ export async function getDeepInsights(req, res) {
                 const spend = parseFloat(insights.spend || 0);
                 const objectiveGroup = mapObjectiveGroup(c.objective);
                 const objectiveLabel = getCampaignTypeLabel(c.objective);
+                const effectiveStatus = String(c.effective_status || c.status || 'UNKNOWN').toUpperCase();
+                const configuredStatus = String(c.configured_status || c.status || 'UNKNOWN').toUpperCase();
 
                 // Calculate drop-off deltas (percentage of people lost at each stage)
                 const hasLandingPageViewData = landingPageViews > 0;
@@ -3638,7 +3669,10 @@ export async function getDeepInsights(req, res) {
                 return {
                     campaignId: c.id,
                     campaignName: c.name,
-                    status: c.status,
+                    status: effectiveStatus,
+                    effectiveStatus,
+                    configuredStatus,
+                    rawStatus: c.status,
                     objective: c.objective,
                     objectiveGroup,
                     objectiveLabel,
@@ -3680,13 +3714,13 @@ export async function getDeepInsights(req, res) {
                     maturity: getMaturityBadge({ spend, conversions: purchase, clicks: trafficClicks, impressions: parseInt(insights.impressions || 0) }),
                     confidenceFlags
                 };
-            }).filter(c => c.funnel.trafficClicks > 0); // Only campaigns with traffic
+            });
 
             // Sort by ROAS descending for comparison
             campaignFunnels.sort((a, b) => b.conversions.roas - a.conversions.roas);
 
             const comparisonCandidates = campaignFunnels.filter((campaign) =>
-                campaign.status === 'ACTIVE'
+                campaign.effectiveStatus === 'ACTIVE'
                 && campaign.spend >= 2000
                 && campaign.funnel.trafficClicks >= 100
             );

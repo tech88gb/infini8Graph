@@ -191,11 +191,11 @@ export const adsApi = {
     getConversionFunnel: (adAccountId: string, datePreset = 'last_90d') =>
         api.get(`/ads/accounts/${adAccountId}/funnel?datePreset=${datePreset}`),
     getCampaignIntelligence: (adAccountId: string, datePreset = 'last_30d') =>
-        api.get(`/ads/accounts/${adAccountId}/intelligence?datePreset=${datePreset}`),
+        api.get(`/ads/accounts/${adAccountId}/intelligence?datePreset=${datePreset}`, { timeout: 45000 }),
     getAdvancedAnalytics: (adAccountId: string, datePreset = 'last_30d') =>
-        api.get(`/ads/accounts/${adAccountId}/advanced?datePreset=${datePreset}`),
+        api.get(`/ads/accounts/${adAccountId}/advanced?datePreset=${datePreset}`, { timeout: 45000 }),
     getDeepInsights: (adAccountId: string, datePreset = 'last_30d') =>
-        api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}`)
+        api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}`, { timeout: 60000 })
 };
 
 /**
