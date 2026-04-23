@@ -91,6 +91,15 @@ function parseMetricNumber(value) {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getMedian(values = []) {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+}
+
 function calculateTrendPercent(currentValue, previousValue) {
     const current = parseMetricNumber(currentValue);
     const previous = parseMetricNumber(previousValue);
@@ -2117,15 +2126,6 @@ export async function getAdvancedAnalytics(req, res) {
             }
             return sum;
         }, 0);
-
-        const getMedian = (values = []) => {
-            if (!values.length) return 0;
-            const sorted = [...values].sort((a, b) => a - b);
-            const middle = Math.floor(sorted.length / 2);
-            return sorted.length % 2 === 0
-                ? (sorted[middle - 1] + sorted[middle]) / 2
-                : sorted[middle];
-        };
 
         const getConfidenceLabel = ({ spend = 0, conversions = 0, clicks = 0, impressions = 0 } = {}) =>
             getEvidenceLabel({ spend, conversions, clicks, impressions });
