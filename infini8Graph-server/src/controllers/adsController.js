@@ -536,6 +536,62 @@ function formatDateYmd(date) {
     return `${year}-${month}-${day}`;
 }
 
+/**
+ * Resolves a date filter from query params.
+ * If startDate + endDate are provided, uses Meta's time_range.
+ * Otherwise falls back to date_preset.
+ * Returns { params, dateKey, comparisonRange }.
+ */
+function resolveDateFilter(query) {
+    const { datePreset, startDate, endDate } = query;
+    const hasCustom = startDate && endDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) && /^\d{4}-\d{2}-\d{2}$/.test(endDate);
+
+    if (hasCustom) {
+        const timeRange = { since: startDate, until: endDate };
+        return {
+            params: { time_range: JSON.stringify(timeRange) },
+            dateKey: `${startDate}_${endDate}`,
+            comparisonRange: getRollingComparisonRangeCustom(startDate, endDate),
+            isCustom: true,
+            startDate,
+            endDate
+        };
+    }
+
+    const preset = datePreset || 'last_90d';
+    return {
+        params: { date_preset: preset },
+        dateKey: preset,
+        comparisonRange: getRollingComparisonRange(preset),
+        isCustom: false,
+        datePreset: preset
+    };
+}
+
+/**
+ * Build comparison range for custom start/end dates.
+ */
+function getRollingComparisonRangeCustom(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    const days = Math.round((end - start) / (86400000)) + 1;
+    if (days < 1) return null;
+
+    const previousEnd = shiftDate(start, -1);
+    const previousStart = shiftDate(previousEnd, -(days - 1));
+
+    return {
+        current: { since: startDate, until: endDate },
+        previous: {
+            since: formatDateYmd(previousStart),
+            until: formatDateYmd(previousEnd)
+        },
+        label: days === 1 ? 'vs previous day' : `vs previous ${days} days`
+    };
+}
+
 function getRollingComparisonRange(datePreset, referenceDate = new Date()) {
     const normalized = String(datePreset || '').toLowerCase();
     const presetLengths = {
@@ -571,12 +627,16 @@ function getRollingComparisonRange(datePreset, referenceDate = new Date()) {
     };
 }
 
-async function fetchInsightsBreakdown(accountId, accessToken, datePreset, breakdowns, fields) {
+async function fetchInsightsBreakdown(accountId, accessToken, dateFilter, breakdowns, fields) {
+    const dateParams = typeof dateFilter === 'string'
+        ? { date_preset: dateFilter }
+        : (dateFilter.params || { date_preset: dateFilter.datePreset || 'last_90d' });
+
     const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
         params: {
             access_token: accessToken,
             fields,
-            date_preset: datePreset,
+            ...dateParams,
             breakdowns
         }
     });
@@ -636,7 +696,7 @@ export async function getAdAccounts(req, res) {
 export async function getAdInsights(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_90d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -644,9 +704,9 @@ export async function getAdInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-overview-v2', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-overview-v2', [req.user.userId, accountId, dateFilter.dateKey]);
         const payload = await withMetaCache(cacheKey, META_CACHE_TTL.overview, async () => {
-            const comparisonRange = getRollingComparisonRange(datePreset);
+            const comparisonRange = dateFilter.comparisonRange;
             const requests = [
                 // Relevance diagnostics: always use last_30d — Meta requires ~500 impressions
                 // before providing quality/engagement/conversion rankings; short windows (7d)
@@ -662,14 +722,14 @@ export async function getAdInsights(req, res) {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,reach,clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas,website_purchase_roas,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,outbound_clicks,unique_outbound_clicks,inline_link_clicks,cost_per_inline_link_click,social_spend',
-                        date_preset: datePreset
+                        ...dateFilter.params
                     }
                 }),
                 axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,clicks,reach,ctr',
-                        date_preset: datePreset,
+                        ...dateFilter.params,
                         time_increment: 1
                     }
                 }),
@@ -684,7 +744,7 @@ export async function getAdInsights(req, res) {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,clicks,reach',
-                        date_preset: datePreset,
+                        ...dateFilter.params,
                         breakdowns: 'device_platform'
                     }
                 }),
@@ -692,7 +752,7 @@ export async function getAdInsights(req, res) {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,clicks,reach,ctr',
-                        date_preset: datePreset,
+                        ...dateFilter.params,
                         breakdowns: 'publisher_platform,platform_position'
                     }
                 })
@@ -924,7 +984,7 @@ export async function getAdInsights(req, res) {
 export async function getDemographics(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_90d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -932,9 +992,9 @@ export async function getDemographics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-demographics', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-demographics', [req.user.userId, accountId, dateFilter.dateKey]);
         const demographics = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
-            const rows = await fetchInsightsBreakdown(accountId, accessToken, datePreset, 'age,gender', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas');
+            const rows = await fetchInsightsBreakdown(accountId, accessToken, dateFilter, 'age,gender', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas');
             return rows
                 .map((row) => ({
                     age: row?.age || 'Unknown',
@@ -966,7 +1026,7 @@ export async function getDemographics(req, res) {
 export async function getPlacements(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_90d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -974,11 +1034,11 @@ export async function getPlacements(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-placements', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-placements', [req.user.userId, accountId, dateFilter.dateKey]);
         const [placements, positions] = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
             const [platforms, platformPositions] = await Promise.all([
-                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'publisher_platform', 'spend,impressions,clicks,reach'),
-                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'publisher_platform,platform_position', 'spend,impressions,clicks,reach,ctr')
+                fetchInsightsBreakdown(accountId, accessToken, dateFilter, 'publisher_platform', 'spend,impressions,clicks,reach'),
+                fetchInsightsBreakdown(accountId, accessToken, dateFilter, 'publisher_platform,platform_position', 'spend,impressions,clicks,reach,ctr')
             ]);
 
             return [platforms, platformPositions];
@@ -994,7 +1054,7 @@ export async function getPlacements(req, res) {
 export async function getGeography(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_90d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -1002,11 +1062,11 @@ export async function getGeography(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-geography', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-geography', [req.user.userId, accountId, dateFilter.dateKey]);
         const [countries, regions] = await withMetaCache(cacheKey, META_CACHE_TTL.breakdowns, async () => {
             const [countryData, regionData] = await Promise.all([
-                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'country', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas'),
-                fetchInsightsBreakdown(accountId, accessToken, datePreset, 'region', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas')
+                fetchInsightsBreakdown(accountId, accessToken, dateFilter, 'country', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas'),
+                fetchInsightsBreakdown(accountId, accessToken, dateFilter, 'region', 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values,cost_per_action_type,purchase_roas')
             ]);
 
             return [
@@ -1028,30 +1088,35 @@ export async function getGeography(req, res) {
 export async function getCampaigns(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_30d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
             return res.status(401).json({ success: false, error: 'Access token not found' });
         }
 
+        // Build the nested insights modifier for fields syntax
+        const insightsModifier = dateFilter.isCustom
+            ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})`
+            : `insights.date_preset(${dateFilter.datePreset})`;
+
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
         const campaignsPayload = await withMetaCache(
-            buildMetaCacheKey('meta-campaigns-v3', [req.user.userId, accountId, datePreset]),
+            buildMetaCacheKey('meta-campaigns-v3', [req.user.userId, accountId, dateFilter.dateKey]),
             META_CACHE_TTL.campaigns,
             async () => {
                 const [campaignsRes, adsPreviewRes] = await Promise.allSettled([
                     axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                         params: {
                             access_token: accessToken,
-                            fields: 'id,name,status,effective_status,configured_status,objective,buying_type,smart_promotion_type,special_ad_categories,bid_strategy,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas}',
+                            fields: 'id,name,status,effective_status,configured_status,objective,buying_type,smart_promotion_type,special_ad_categories,bid_strategy,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget,' + insightsModifier + '{spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas}',
                             limit: 500
                         }
                     }),
                     axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                         params: {
                             access_token: accessToken,
-                            fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_hash,image_url,thumbnail_url,object_story_spec,asset_feed_spec},insights.date_preset(' + datePreset + '){spend}',
+                            fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_hash,image_url,thumbnail_url,object_story_spec,asset_feed_spec},' + insightsModifier + '{spend}',
                             limit: 500
                         }
                     })
@@ -1090,7 +1155,7 @@ export async function getCampaigns(req, res) {
                             axios.get(`${GRAPH_API_BASE}/${campaignId}/ads`, {
                                 params: {
                                     access_token: accessToken,
-                                    fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_hash,image_url,thumbnail_url,object_story_spec,asset_feed_spec},insights.date_preset(' + datePreset + '){spend}',
+                                    fields: 'id,name,campaign_id,updated_time,created_time,creative{id,name,image_hash,image_url,thumbnail_url,object_story_spec,asset_feed_spec},' + insightsModifier + '{spend}',
                                     limit: 12
                                 }
                             })
@@ -1235,7 +1300,7 @@ export async function getCampaigns(req, res) {
                         active: campaigns.filter((campaign) => campaign.effectiveStatus === 'ACTIVE').length,
                         byType,
                         byStatus,
-                        datePreset
+                        datePreset: dateFilter.dateKey
                     }
                 };
             }
@@ -1258,10 +1323,10 @@ export async function getCampaignDrilldown(req, res) {
     try {
         const { adAccountId, campaignId } = req.params;
         const {
-            datePreset = 'last_30d',
             creativeOffset = '0',
             creativeLimit = '4'
         } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -1271,14 +1336,16 @@ export async function getCampaignDrilldown(req, res) {
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
         const offset = Math.max(0, parseInt(String(creativeOffset || '0'), 10) || 0);
         const limit = Math.min(12, Math.max(1, parseInt(String(creativeLimit || '4'), 10) || 4));
-        const cacheKey = buildMetaCacheKey('meta-campaign-drilldown-v2', [req.user.userId, accountId, campaignId, datePreset, offset, limit]);
+        const cacheKey = buildMetaCacheKey('meta-campaign-drilldown-v2', [req.user.userId, accountId, campaignId, dateFilter.dateKey, offset, limit]);
         const payload = await withMetaCache(cacheKey, META_CACHE_TTL.deep, async () => {
-            const comparisonRange = getRollingComparisonRange(datePreset);
+            const comparisonRange = dateFilter.comparisonRange;
             const currentRange = comparisonRange?.current || null;
             const previousRange = comparisonRange?.previous || null;
-            const currentPeriodLabel = String(datePreset || '').toLowerCase() === 'today'
-                ? 'Today'
-                : `Current ${String(datePreset || '').replace('last_', '').replace('d', '-day').replace('maximum', 'full').toLowerCase()}`;
+            const currentPeriodLabel = dateFilter.isCustom
+                ? `${dateFilter.startDate} → ${dateFilter.endDate}`
+                : String(dateFilter.datePreset || '').toLowerCase() === 'today'
+                    ? 'Today'
+                    : `Current ${String(dateFilter.datePreset || '').replace('last_', '').replace('d', '-day').replace('maximum', 'full').toLowerCase()}`;
             const aggregateFields = 'spend,impressions,reach,clicks,inline_link_clicks,outbound_clicks,cpc,cpm,ctr,frequency,actions,action_values,cost_per_action_type,purchase_roas,video_play_actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions';
             const campaignFiltering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
 
@@ -1295,7 +1362,7 @@ export async function getCampaignDrilldown(req, res) {
                         fields: aggregateFields,
                         filtering: campaignFiltering,
                         level: 'campaign',
-                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : dateFilter.params),
                         limit: 1
                     }
                 }),
@@ -1305,7 +1372,7 @@ export async function getCampaignDrilldown(req, res) {
                         fields: 'spend',
                         filtering: campaignFiltering,
                         level: 'campaign',
-                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                        ...(currentRange ? { time_range: JSON.stringify(currentRange) } : dateFilter.params),
                         time_increment: 1,
                         limit: 500
                     }
@@ -1402,14 +1469,14 @@ export async function getCampaignDrilldown(req, res) {
                         params: {
                             access_token: accessToken,
                             fields: aggregateFields,
-                            ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset })
+                            ...(currentRange ? { time_range: JSON.stringify(currentRange) } : dateFilter.params)
                         }
                     }),
                     axios.get(`${GRAPH_API_BASE}/${adId}/insights`, {
                         params: {
                             access_token: accessToken,
                             fields: 'spend',
-                            ...(currentRange ? { time_range: JSON.stringify(currentRange) } : { date_preset: datePreset }),
+                            ...(currentRange ? { time_range: JSON.stringify(currentRange) } : dateFilter.params),
                             time_increment: 1
                         }
                     }),
@@ -1607,7 +1674,7 @@ export async function getCampaignDrilldown(req, res) {
                     hasMore: offset + limit < orderedAdsMeta.length,
                     nextOffset: offset + limit < orderedAdsMeta.length ? offset + limit : null
                 },
-                datePreset
+                datePreset: dateFilter.dateKey
             };
         });
 
@@ -1733,7 +1800,7 @@ export async function getPageInsights(req, res) {
 export async function getConversionFunnel(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_90d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -1742,14 +1809,14 @@ export async function getConversionFunnel(req, res) {
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
         const payload = await withMetaCache(
-            buildMetaCacheKey('meta-funnel', [req.user.userId, accountId, datePreset]),
+            buildMetaCacheKey('meta-funnel', [req.user.userId, accountId, dateFilter.dateKey]),
             META_CACHE_TTL.funnel,
             async () => {
                 const response = await axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     params: {
                         access_token: accessToken,
                         fields: 'actions,action_values,cost_per_action_type,spend',
-                        date_preset: datePreset
+                        ...dateFilter.params
                     }
                 });
 
@@ -1826,7 +1893,7 @@ export async function getConversionFunnel(req, res) {
                     dropoffRate: bottleneck.dropoffRate,
                     insight: `${bottleneck.dropoffRate}% of users drop off at ${bottleneck.label}`
                 } : null,
-                datePreset
+                datePreset: dateFilter.dateKey
                 };
             }
         );
@@ -1844,7 +1911,7 @@ export async function getConversionFunnel(req, res) {
 export async function getCampaignIntelligence(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_30d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -1852,11 +1919,15 @@ export async function getCampaignIntelligence(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-intelligence-v3', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-intelligence-v3', [req.user.userId, accountId, dateFilter.dateKey]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
         }
+
+        const insightsModifier = dateFilter.isCustom
+            ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})`
+            : `insights.date_preset(${dateFilter.datePreset})`;
 
         // Fetch multiple breakdowns in parallel
         const [campaignsRes, hourlyRes, weekdayRes, placementMatrixRes] = await Promise.allSettled([
@@ -1864,7 +1935,7 @@ export async function getCampaignIntelligence(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,effective_status,configured_status,objective,daily_budget,lifetime_budget,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cpc,cpm,ctr,frequency,purchase_roas}',
+                    fields: 'id,name,status,effective_status,configured_status,objective,daily_budget,lifetime_budget,' + insightsModifier + '{spend,impressions,reach,clicks,actions,action_values,cpc,cpm,ctr,frequency,purchase_roas}',
                     limit: 500
                 }
             }),
@@ -1873,7 +1944,7 @@ export async function getCampaignIntelligence(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'spend,impressions,clicks,actions',
-                    date_preset: datePreset,
+                    ...dateFilter.params,
                     time_increment: 1,
                     breakdowns: 'hourly_stats_aggregated_by_advertiser_time_zone'
                 }
@@ -1883,7 +1954,7 @@ export async function getCampaignIntelligence(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'spend,impressions,clicks,ctr,actions',
-                    date_preset: datePreset,
+                    ...dateFilter.params,
                     time_increment: 1
                 }
             }),
@@ -1892,7 +1963,7 @@ export async function getCampaignIntelligence(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'spend,impressions,clicks,reach,actions,action_values',
-                    date_preset: datePreset,
+                    ...dateFilter.params,
                     breakdowns: 'publisher_platform,platform_position'
                 }
             })
@@ -2105,7 +2176,7 @@ export async function getCampaignIntelligence(req, res) {
                     bestDay: bestDay ? `${bestDay.day} has ${bestDay.ctr}% CTR` : null,
                     bestPlacement: bestPlacement ? `${bestPlacement.platform} ${bestPlacement.position} has ${bestPlacement.roas}x ROAS` : null
                 },
-                datePreset
+                datePreset: dateFilter.dateKey
         };
 
         setMetaCacheEntry(cacheKey, payload, META_CACHE_TTL.intelligence);
@@ -2122,7 +2193,7 @@ export async function getCampaignIntelligence(req, res) {
 export async function getAdvancedAnalytics(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_30d' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -2130,7 +2201,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v8', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v8', [req.user.userId, accountId, dateFilter.dateKey]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2357,7 +2428,7 @@ export async function getAdvancedAnalytics(req, res) {
             includeStorySpec
                 ? 'creative{id,name,image_url,thumbnail_url,object_story_spec}'
                 : 'creative{id,name,image_url,thumbnail_url}',
-            `insights.date_preset(${datePreset}){impressions,clicks,ctr,cpc,cpm,spend,actions,action_values${includeVideoPlays ? ',video_play_actions' : ''}${includeVideoRetention ? ',video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions' : ''},frequency}`
+            `${dateFilter.isCustom ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})` : `insights.date_preset(${dateFilter.datePreset})`}{impressions,clicks,ctr,cpc,cpm,spend,actions,action_values${includeVideoPlays ? ',video_play_actions' : ''}${includeVideoRetention ? ',video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions' : ''},frequency}`
         ].join(',');
 
         const fetchAdvancedAds = async () => {
@@ -2420,7 +2491,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/adsets`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,effective_status,created_time,start_time,daily_budget,lifetime_budget,optimization_goal,bid_strategy,targeting,campaign{id,name,objective},insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,actions,frequency,ctr,cpc}',
+                    fields: 'id,name,status,effective_status,created_time,start_time,daily_budget,lifetime_budget,optimization_goal,bid_strategy,targeting,campaign{id,name,objective},' + (dateFilter.isCustom ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})` : `insights.date_preset(${dateFilter.datePreset})`) + '{spend,reach,impressions,clicks,actions,frequency,ctr,cpc}',
                     limit: 500
                 }
             }),
@@ -2428,7 +2499,7 @@ export async function getAdvancedAnalytics(req, res) {
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,reach,impressions,clicks,ctr,cpc,cpm,actions,action_values,frequency}',
+                    fields: 'id,name,status,effective_status,configured_status,objective,' + (dateFilter.isCustom ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})` : `insights.date_preset(${dateFilter.datePreset})`) + '{spend,reach,impressions,clicks,ctr,cpc,cpm,actions,action_values,frequency}',
                     limit: 500
                 }
             }),
@@ -2437,7 +2508,7 @@ export async function getAdvancedAnalytics(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'spend,impressions,clicks,ctr,cpc,cpm,frequency,actions',
-                    date_preset: datePreset,
+                    ...dateFilter.params,
                     time_increment: 1
                 }
             }),
@@ -2446,7 +2517,7 @@ export async function getAdvancedAnalytics(req, res) {
                 params: {
                     access_token: accessToken,
                     fields: 'spend,impressions,clicks,reach,ctr,actions,action_values',
-                    date_preset: datePreset,
+                    ...dateFilter.params,
                     breakdowns: 'publisher_platform,platform_position'
                 }
             })
@@ -3092,7 +3163,9 @@ export async function getAdvancedAnalytics(req, res) {
 
         if (adsetsRes.status === 'fulfilled') {
             const adsets = adsetsRes.value.data.data || [];
-            const selectedWindowDays = getPresetWindowDays(datePreset);
+            const selectedWindowDays = dateFilter.isCustom
+                ? Math.round((new Date(dateFilter.endDate) - new Date(dateFilter.startDate)) / 86400000) + 1
+                : getPresetWindowDays(dateFilter.datePreset);
 
             learningPhase = adsets.map(adset => {
                 const status = adset.effective_status || adset.status;
@@ -3535,7 +3608,7 @@ export async function getAdvancedAnalytics(req, res) {
                     placementsAnalyzed: placementIntent.length,
                     hasRetargetingData: retargetingLift !== null
                 },
-                datePreset
+                datePreset: dateFilter.dateKey
         };
 
         setMetaCacheEntry(cacheKey, payload, META_CACHE_TTL.advanced);
@@ -3553,7 +3626,8 @@ export async function getAdvancedAnalytics(req, res) {
 export async function getDeepInsights(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_30d', campaignId = null, section = 'all' } = req.query;
+        const { campaignId = null, section = 'all' } = req.query;
+        const dateFilter = resolveDateFilter(req.query);
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -3567,11 +3641,15 @@ export async function getDeepInsights(req, res) {
         const includeFunnel = ['all', 'core', 'funnel'].includes(normalizedSection);
         const includePlacements = ['all', 'core', 'placements', 'diagnostics'].includes(normalizedSection);
         const includeVideo = ['all', 'video', 'diagnostics'].includes(normalizedSection);
-        const cacheKey = buildMetaCacheKey('meta-deep-v6', [req.user.userId, accountId, datePreset, campaignId || 'all', normalizedSection]);
+        const cacheKey = buildMetaCacheKey('meta-deep-v6', [req.user.userId, accountId, dateFilter.dateKey, campaignId || 'all', normalizedSection]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
         }
+
+        const insightsModifier = dateFilter.isCustom
+            ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})`
+            : `insights.date_preset(${dateFilter.datePreset})`;
 
         let deepAccountProfile = {
             type: 'general',
@@ -3591,7 +3669,7 @@ export async function getDeepInsights(req, res) {
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,impressions,clicks,actions,action_values,cost_per_action_type,outbound_clicks}',
+                        fields: 'id,name,status,effective_status,configured_status,objective,' + insightsModifier + '{spend,impressions,clicks,actions,action_values,cost_per_action_type,outbound_clicks}',
                         limit: 500
                     }
                 })
@@ -3601,7 +3679,7 @@ export async function getDeepInsights(req, res) {
                     params: {
                         access_token: accessToken,
                         fields: 'clicks,actions,outbound_clicks',
-                        date_preset: datePreset
+                        ...dateFilter.params
                     }
                 })
                 : Promise.resolve({ data: { data: [] } }),
@@ -3610,7 +3688,7 @@ export async function getDeepInsights(req, res) {
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values',
-                        date_preset: datePreset,
+                        ...dateFilter.params,
                         breakdowns: 'publisher_platform,platform_position,device_platform'
                     }
                 })
@@ -3619,7 +3697,7 @@ export async function getDeepInsights(req, res) {
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'id,name,status,effective_status,created_time,updated_time,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url},insights.date_preset(' + datePreset + '){impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
+                        fields: 'id,name,status,effective_status,created_time,updated_time,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url},' + insightsModifier + '{impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
                         limit: 100
                     }
                 })
@@ -4342,7 +4420,7 @@ export async function getDeepInsights(req, res) {
                 placementDiagnostics: placementDiagnostics.slice(0, 60),
                 placementSummary,
                 section: normalizedSection,
-                datePreset
+                datePreset: dateFilter.dateKey
         };
 
         setMetaCacheEntry(cacheKey, payload, META_CACHE_TTL.deep);

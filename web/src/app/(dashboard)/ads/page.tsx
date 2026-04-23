@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { adsApi } from '@/lib/api';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 import {
     PageExportMenu,
     appendDatasetTables,
@@ -207,7 +208,8 @@ function buildMetaAdsOverviewMetrics({
     clickMetrics,
     conversions,
     actionValues,
-    costPerAction
+    costPerAction,
+    trendLabel
 }: {
     accountProfile: any;
     summary: any;
@@ -216,6 +218,7 @@ function buildMetaAdsOverviewMetrics({
     conversions: any[];
     actionValues: any[];
     costPerAction: any[];
+    trendLabel: string;
 }) {
     const purchaseMetric = findMetricEntry(conversions, ['purchase']);
     const purchaseValueMetric = findMetricEntry(actionValues, ['purchase']);
@@ -236,7 +239,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: IndianRupee,
                 color: '#10b981',
                 trend: summary.comparison?.spendTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Total amount spent on ads for this account'
             },
             {
@@ -245,7 +248,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: TrendingUp,
                 color: '#22c55e',
                 trend: summary.comparison?.roasTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Return on ad spend from tracked purchases'
             },
             {
@@ -254,7 +257,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: CreditCard,
                 color: '#8b5cf6',
                 trend: summary.comparison?.purchaseValueTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Tracked revenue value attributed to ads'
             },
             {
@@ -263,7 +266,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Package,
                 color: '#f59e0b',
                 trend: summary.comparison?.purchasesTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Tracked purchase actions attributed to ads'
             },
             {
@@ -272,7 +275,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: DollarSign,
                 color: '#ef4444',
                 trend: summary.comparison?.costPerPurchaseTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Average spend required to drive one purchase'
             },
@@ -282,7 +285,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: MousePointer,
                 color: '#0ea5e9',
                 trend: summary.comparison?.ctrTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Click-through rate across all ads'
             }
         ],
@@ -293,7 +296,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: IndianRupee,
                 color: '#10b981',
                 trend: summary.comparison?.spendTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Total amount spent on ads for this account'
             },
             {
@@ -302,7 +305,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Target,
                 color: '#6366f1',
                 trend: summary.comparison?.leadsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Tracked lead conversions from campaigns'
             },
             {
@@ -311,7 +314,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: DollarSign,
                 color: '#f97316',
                 trend: summary.comparison?.costPerLeadTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Average spend required to drive one lead'
             },
@@ -321,7 +324,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: MousePointer,
                 color: '#0ea5e9',
                 trend: summary.comparison?.ctrTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Click-through rate across all ads'
             },
             {
@@ -330,7 +333,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: CreditCard,
                 color: '#ef4444',
                 trend: summary.comparison?.cpcTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Average cost per click'
             },
@@ -340,7 +343,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Eye,
                 color: '#ec4899',
                 trend: summary.comparison?.impressionsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of times your ads were shown on screen'
             },
             {
@@ -349,7 +352,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Users,
                 color: '#8b5cf6',
                 trend: summary.comparison?.reachTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of unique people who saw your ads'
             },
             {
@@ -358,7 +361,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: BarChart3,
                 color: '#14b8a6',
                 trend: summary.comparison?.cpmTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Cost per 1,000 impressions'
             }
@@ -370,7 +373,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: IndianRupee,
                 color: '#10b981',
                 trend: summary.comparison?.spendTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Total amount spent on ads for this account'
             },
             {
@@ -379,7 +382,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: ArrowRight,
                 color: '#0ea5e9',
                 trend: summary.comparison?.clicksTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Clicks that sent people off Meta to your destination'
             },
             {
@@ -388,7 +391,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: DollarSign,
                 color: '#8b5cf6',
                 trend: summary.comparison?.cpcTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Average cost per click to your destination'
             },
@@ -398,7 +401,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: MousePointer,
                 color: '#f59e0b',
                 trend: summary.comparison?.ctrTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Click-through rate across all ads'
             },
             {
@@ -407,7 +410,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: BarChart3,
                 color: '#14b8a6',
                 trend: summary.comparison?.cpmTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Cost per 1,000 impressions'
             },
@@ -417,7 +420,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Users,
                 color: '#6366f1',
                 trend: summary.comparison?.reachTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of unique people who saw your ads'
             },
             {
@@ -426,7 +429,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Eye,
                 color: '#ec4899',
                 trend: summary.comparison?.impressionsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of times your ads were shown on screen'
             }
         ],
@@ -437,7 +440,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Users,
                 color: '#8b5cf6',
                 trend: summary.comparison?.reachTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of unique people who saw your ads'
             },
             {
@@ -446,7 +449,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Eye,
                 color: '#0ea5e9',
                 trend: summary.comparison?.impressionsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of times your ads were shown on screen'
             },
             {
@@ -455,7 +458,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: DollarSign,
                 color: '#ec4899',
                 trend: summary.comparison?.cpmTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Cost per 1,000 impressions'
             },
@@ -465,7 +468,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Activity,
                 color: '#14b8a6',
                 trend: summary.comparison?.frequencyTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Average number of times each person saw your ad'
             },
             {
@@ -474,7 +477,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: IndianRupee,
                 color: '#10b981',
                 trend: summary.comparison?.spendTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Total amount spent on ads for this account'
             },
             {
@@ -483,7 +486,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: MousePointer,
                 color: '#f59e0b',
                 trend: summary.comparison?.ctrTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Click-through rate across all ads'
             }
         ],
@@ -494,7 +497,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: IndianRupee,
                 color: '#10b981',
                 trend: summary.comparison?.spendTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Total amount spent on ads for this account'
             },
             {
@@ -503,7 +506,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Activity,
                 color: '#ec4899',
                 trend: summary.comparison?.engagementsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Tracked engagement actions from campaigns'
             },
             {
@@ -512,7 +515,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: DollarSign,
                 color: '#f97316',
                 trend: summary.comparison?.costPerEngagementTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 trendInvert: true,
                 tooltip: 'Average spend required to drive one engagement'
             },
@@ -522,7 +525,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Users,
                 color: '#6366f1',
                 trend: summary.comparison?.reachTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of unique people who saw your ads'
             },
             {
@@ -531,7 +534,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Eye,
                 color: '#0ea5e9',
                 trend: summary.comparison?.impressionsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of times your ads were shown on screen'
             },
             {
@@ -540,7 +543,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: MousePointer,
                 color: '#f59e0b',
                 trend: summary.comparison?.clicksTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Click-through rate across all ads'
             }
         ],
@@ -551,7 +554,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: IndianRupee,
                 color: '#10b981',
                 trend: summary.comparison?.spendTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Total amount spent on ads for this account'
             },
             {
@@ -574,7 +577,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: MousePointer,
                 color: '#f59e0b',
                 trend: summary.comparison?.ctrTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Click-through rate across all ads'
             },
             {
@@ -583,7 +586,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Users,
                 color: '#6366f1',
                 trend: summary.comparison?.reachTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of unique people who saw your ads'
             },
             {
@@ -592,7 +595,7 @@ function buildMetaAdsOverviewMetrics({
                 icon: Eye,
                 color: '#ec4899',
                 trend: summary.comparison?.impressionsTrend,
-                trendLabel: summary.comparison?.label,
+                trendLabel: trendLabel,
                 tooltip: 'Number of times your ads were shown on screen'
             }
         ]
@@ -605,7 +608,7 @@ function buildMetaAdsOverviewMetrics({
             icon: IndianRupee,
             color: '#10b981',
             trend: summary.comparison?.spendTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             tooltip: 'Total amount spent on ads for this account'
         },
         {
@@ -614,7 +617,7 @@ function buildMetaAdsOverviewMetrics({
             icon: Eye,
             color: '#0ea5e9',
             trend: summary.comparison?.impressionsTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             tooltip: 'Number of times your ads were shown on screen'
         },
         {
@@ -623,7 +626,7 @@ function buildMetaAdsOverviewMetrics({
             icon: Users,
             color: '#8b5cf6',
             trend: summary.comparison?.reachTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             tooltip: 'Number of unique people who saw your ads'
         },
         {
@@ -632,7 +635,7 @@ function buildMetaAdsOverviewMetrics({
             icon: MousePointer,
             color: '#f59e0b',
             trend: summary.comparison?.clicksTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             tooltip: 'Number of clicks on your ads'
         },
         {
@@ -641,7 +644,7 @@ function buildMetaAdsOverviewMetrics({
             icon: Target,
             color: '#22c55e',
             trend: summary.comparison?.ctrTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             tooltip: 'Click-through rate across all ads'
         },
         {
@@ -650,7 +653,7 @@ function buildMetaAdsOverviewMetrics({
             icon: CreditCard,
             color: '#ef4444',
             trend: summary.comparison?.cpcTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             trendInvert: true,
             tooltip: 'Average cost per click'
         },
@@ -660,7 +663,7 @@ function buildMetaAdsOverviewMetrics({
             icon: BarChart3,
             color: '#14b8a6',
             trend: summary.comparison?.cpmTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             trendInvert: true,
             tooltip: 'Cost per 1,000 impressions'
         },
@@ -670,7 +673,7 @@ function buildMetaAdsOverviewMetrics({
             icon: Activity,
             color: '#ec4899',
             trend: summary.comparison?.frequencyTrend,
-            trendLabel: summary.comparison?.label,
+            trendLabel: trendLabel,
             tooltip: 'Average number of times each person saw your ad'
         }
     ];
@@ -1582,17 +1585,18 @@ function CampaignDrilldownDrawer({
                                         style={{
                                             padding: '10px 24px',
                                             borderRadius: 12,
-                                            border: '1px solid rgba(99,102,241,0.3)',
-                                            background: 'rgba(99,102,241,0.12)',
-                                            color: '#c7d2fe',
+                                            border: 'none',
+                                            background: 'var(--primary)',
+                                            color: '#ffffff',
                                             fontSize: 13,
                                             fontWeight: 700,
                                             cursor: loadingMore ? 'not-allowed' : 'pointer',
-                                            opacity: loadingMore ? 0.6 : 1,
-                                            transition: 'all 0.15s ease'
+                                            opacity: loadingMore ? 0.7 : 1,
+                                            transition: 'all 0.15s ease',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                         }}
                                     >
-                                        {loadingMore ? 'Loading more...' : 'Load 4 More Creatives'}
+                                        {loadingMore ? 'Loading more...' : 'Load More Creatives'}
                                     </button>
                                 </div>
                             )}
@@ -1835,7 +1839,36 @@ const TAB_META: Record<string, { label: string; tooltip: string }> = {
 export default function AdsPage() {
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'intelligence' | 'advanced' | 'deep' | 'campaigns' | 'demographics' | 'geo'>('overview');
-    const [datePreset, setDatePreset] = useState<'today' | 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d' | 'maximum'>('today');
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 6); // default: last 7 days
+    const toYMD = (d: Date) => d.toLocaleDateString('en-CA');
+    const [dateRange, setDateRange] = useState({ startDate: toYMD(defaultStart), endDate: toYMD(defaultEnd) });
+
+    // Derive a datePreset string for the API (if the range matches a known preset, use it; otherwise pass custom dates)
+    const datePreset = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const endD = new Date(dateRange.endDate);
+        endD.setHours(0, 0, 0, 0);
+        const startD = new Date(dateRange.startDate);
+        startD.setHours(0, 0, 0, 0);
+        const daySpan = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+        const isEndToday = endD.getTime() === today.getTime();
+        const isEndYesterday = endD.getTime() === today.getTime() - 86400000;
+
+        if (daySpan === 1 && isEndToday) return 'today';
+        if (daySpan === 1 && isEndYesterday) return 'yesterday';
+        if (daySpan === 7 && isEndToday) return 'last_7d';
+        if (daySpan === 14 && isEndToday) return 'last_14d';
+        if (daySpan === 30 && isEndToday) return 'last_30d';
+        if (daySpan === 90 && isEndToday) return 'last_90d';
+        return 'custom'; // custom range — pass startDate/endDate to API
+    }, [dateRange]);
+
+    // Custom date params to pass to API calls
+    const customStartDate = datePreset === 'custom' ? dateRange.startDate : undefined;
+    const customEndDate = datePreset === 'custom' ? dateRange.endDate : undefined;
     const [campaignSearch, setCampaignSearch] = useState('');
     const [campaignTypeFilter, setCampaignTypeFilter] = useState('all');
     const [campaignStatusFilter, setCampaignStatusFilter] = useState('all');
@@ -1854,7 +1887,7 @@ export default function AdsPage() {
     const [videoFilters, setVideoFilters] = useState({ search: '', status: 'all', confidence: 'all', diagnosis: 'all', sort: 'quality_desc', page: 1 });
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
-    const creativePageSize = 4;
+    const creativePageSize = 10;
 
     // Fetch accounts
     const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -1871,10 +1904,10 @@ export default function AdsPage() {
 
     // Fetch detailed insights
     const { data: insightsData, isLoading: insightsLoading } = useQuery({
-        queryKey: ['ad-insights', effectiveAccount, datePreset],
+        queryKey: ['ad-insights', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getAdInsights(effectiveAccount, datePreset);
+            const res = await adsApi.getAdInsights(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount,
@@ -1882,10 +1915,10 @@ export default function AdsPage() {
     });
 
     const { data: demographicsData, isLoading: demographicsLoading } = useQuery({
-        queryKey: ['ad-demographics', effectiveAccount, datePreset],
+        queryKey: ['ad-demographics', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDemographics(effectiveAccount, datePreset);
+            const res = await adsApi.getDemographics(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'demographics',
@@ -1893,10 +1926,10 @@ export default function AdsPage() {
     });
 
     const { data: geographyData, isLoading: geographyLoading } = useQuery({
-        queryKey: ['ad-geography', effectiveAccount, datePreset],
+        queryKey: ['ad-geography', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getGeography(effectiveAccount, datePreset);
+            const res = await adsApi.getGeography(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && (activeTab === 'geo' || activeTab === 'demographics'),
@@ -1905,10 +1938,10 @@ export default function AdsPage() {
 
     // Fetch campaigns
     const { data: campaignsData } = useQuery({
-        queryKey: ['campaigns', effectiveAccount, datePreset],
+        queryKey: ['campaigns', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getCampaigns(effectiveAccount, datePreset);
+            const res = await adsApi.getCampaigns(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'campaigns'
@@ -1921,11 +1954,11 @@ export default function AdsPage() {
         fetchNextPage: fetchMoreCampaignCreatives,
         hasNextPage: campaignDrilldownHasNextPage
     } = useInfiniteQuery({
-        queryKey: ['campaign-drilldown', effectiveAccount, selectedCampaignId, datePreset, creativePageSize],
+        queryKey: ['campaign-drilldown', effectiveAccount, selectedCampaignId, datePreset, dateRange.startDate, dateRange.endDate, creativePageSize],
         initialPageParam: 0,
         queryFn: async ({ pageParam }) => {
             if (!effectiveAccount || !selectedCampaignId) return null;
-            const res = await adsApi.getCampaignDrilldown(effectiveAccount, selectedCampaignId, datePreset, Number(pageParam || 0), creativePageSize);
+            const res = await adsApi.getCampaignDrilldown(effectiveAccount, selectedCampaignId, datePreset, Number(pageParam || 0), creativePageSize, customStartDate, customEndDate);
             return res.data;
         },
         getNextPageParam: (lastPage) => {
@@ -1937,10 +1970,10 @@ export default function AdsPage() {
 
     // Fetch conversion funnel
     const { data: funnelData, isLoading: funnelLoading } = useQuery({
-        queryKey: ['funnel', effectiveAccount, datePreset],
+        queryKey: ['funnel', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getConversionFunnel(effectiveAccount, datePreset);
+            const res = await adsApi.getConversionFunnel(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'funnel'
@@ -1948,10 +1981,10 @@ export default function AdsPage() {
 
     // Fetch campaign intelligence
     const { data: intelligenceData, isLoading: intelligenceLoading } = useQuery({
-        queryKey: ['intelligence', effectiveAccount, datePreset],
+        queryKey: ['intelligence', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getCampaignIntelligence(effectiveAccount, datePreset);
+            const res = await adsApi.getCampaignIntelligence(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'intelligence'
@@ -1959,10 +1992,10 @@ export default function AdsPage() {
 
     // Fetch advanced analytics
     const { data: advancedData, isLoading: advancedLoading } = useQuery({
-        queryKey: ['advanced', effectiveAccount, datePreset],
+        queryKey: ['advanced', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getAdvancedAnalytics(effectiveAccount, datePreset);
+            const res = await adsApi.getAdvancedAnalytics(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'advanced'
@@ -1970,20 +2003,20 @@ export default function AdsPage() {
 
     // Fetch deep insights (Nurture Funnel, Bounce Gap, Video Hook, Placement Arbitrage)
     const { data: deepInsightsData, isLoading: deepInsightsLoading, error: deepInsightsError } = useQuery({
-        queryKey: ['deep-insights', 'funnel', effectiveAccount, datePreset],
+        queryKey: ['deep-insights', 'funnel', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'funnel');
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'funnel', customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'funnel',
         retry: 1
     });
     const { data: deepDiagnosticsData, isLoading: deepDiagnosticsLoading, error: deepDiagnosticsError } = useQuery({
-        queryKey: ['deep-insights', 'diagnostics', effectiveAccount, datePreset],
+        queryKey: ['deep-insights', 'diagnostics', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'diagnostics');
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'diagnostics', customStartDate, customEndDate);
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'deep',
@@ -2081,23 +2114,21 @@ export default function AdsPage() {
         clickMetrics,
         conversions,
         actionValues,
-        costPerAction
+        costPerAction,
+        trendLabel: spendComparisonLabel
     });
     const showRoasSection = ['sales', 'mixed'].includes(accountProfile?.type) || Number(roas.purchaseRoas || 0) > 0 || Number(roas.websitePurchaseRoas || 0) > 0;
     const showConversionsSection = accountProfile?.type !== 'awareness';
     const showDiagnosticsSection = accountProfile?.type !== 'app_promotion';
     const showVideoRetentionSection = ['awareness', 'engagement', 'mixed'].includes(accountProfile?.type) || Object.values(videoViews || {}).some((value) => Number(value || 0) > 0);
-    const spendComparisonLabel = datePreset === 'last_7d'
-        ? 'Current 7 days vs previous 7 days'
-        : datePreset === 'last_30d'
-            ? 'Current 30 days vs previous 30 days'
-            : datePreset === 'last_14d'
-                ? 'Current 14 days vs previous 14 days'
-                : datePreset === 'last_90d'
-                    ? 'Current 90 days vs previous 90 days'
-                    : datePreset === 'today'
-                        ? 'Today vs yesterday'
-                    : 'Selected period';
+    const spendComparisonLabel = useMemo(() => {
+        const startD = new Date(dateRange.startDate);
+        const endD = new Date(dateRange.endDate);
+        const daySpan = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+        if (daySpan === 1 && datePreset === 'today') return 'Today vs yesterday';
+        if (daySpan === 1) return 'Selected day vs previous day';
+        return `Current ${daySpan} days vs previous ${daySpan} days`;
+    }, [dateRange, datePreset]);
     const campaignTypeOptions = useMemo(() => {
         const options = new Map<string, string>();
         campaigns.forEach((campaign: any) => {
@@ -2498,20 +2529,22 @@ export default function AdsPage() {
             latestAdvanced,
             latestDeepInsights
         ] = await Promise.all([
-            adsApi.getAdInsights(effectiveAccount, datePreset).then((res) => res.data).catch(() => insightsData),
-            adsApi.getDemographics(effectiveAccount, datePreset).then((res) => res.data).catch(() => demographicsData),
-            adsApi.getPlacements(effectiveAccount, datePreset).then((res) => res.data).catch(() => null),
-            adsApi.getGeography(effectiveAccount, datePreset).then((res) => res.data).catch(() => geographyData),
-            adsApi.getCampaigns(effectiveAccount, datePreset).then((res) => res.data).catch(() => campaignsData),
-            adsApi.getConversionFunnel(effectiveAccount, datePreset).then((res) => res.data).catch(() => funnelData),
-            adsApi.getCampaignIntelligence(effectiveAccount, datePreset).then((res) => res.data).catch(() => intelligenceData),
-            adsApi.getAdvancedAnalytics(effectiveAccount, datePreset).then((res) => res.data).catch(() => advancedData),
-            adsApi.getDeepInsights(effectiveAccount, datePreset).then((res) => res.data).catch(() => deepInsightsData)
+            adsApi.getAdInsights(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => insightsData),
+            adsApi.getDemographics(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => demographicsData),
+            adsApi.getPlacements(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => null),
+            adsApi.getGeography(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => geographyData),
+            adsApi.getCampaigns(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => campaignsData),
+            adsApi.getConversionFunnel(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => funnelData),
+            adsApi.getCampaignIntelligence(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => intelligenceData),
+            adsApi.getAdvancedAnalytics(effectiveAccount, datePreset, customStartDate, customEndDate).then((res) => res.data).catch(() => advancedData),
+            adsApi.getDeepInsights(effectiveAccount, datePreset, 'all', customStartDate, customEndDate).then((res) => res.data).catch(() => deepInsightsData)
         ]);
 
         const accountName = selectedAccountMeta?.name || selectedAccountMeta?.account_name || `Account ${effectiveAccount}`;
         const reportTitle = `${accountName} Meta Ads Report`;
-        const reportSubtitle = `${toTitleCase(datePreset)} performance export for ${effectiveAccount}`;
+        const reportSubtitle = datePreset === 'custom'
+            ? `${dateRange.startDate} to ${dateRange.endDate} performance export for ${effectiveAccount}`
+            : `${toTitleCase(datePreset)} performance export for ${effectiveAccount}`;
         const tables = buildAdsExportTables({
             accountName,
             accountId: effectiveAccount,
@@ -2548,37 +2581,11 @@ export default function AdsPage() {
                         <p className="page-subtitle">Facebook & Instagram advertising performance</p>
                     </div>
                     
-                    {/* Date Preset Selector */}
-                    <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
-                        {[
-                            { value: 'today', label: 'Today' },
-                            { value: 'last_7d', label: '7 Days' },
-                            { value: 'last_14d', label: '14 Days' },
-                            { value: 'last_30d', label: '30 Days' },
-                            { value: 'last_90d', label: '90 Days' },
-                            { value: 'maximum', label: 'Max' }
-                        ].map((preset) => (
-                            <button
-                                key={preset.value}
-                                onClick={() => setDatePreset(preset.value as any)}
-                                style={{
-                                    padding: '6px 14px',
-                                    fontSize: 13,
-                                    fontWeight: datePreset === preset.value ? 600 : 500,
-                                    borderRadius: 6,
-                                    background: datePreset === preset.value ? 'var(--primary)' : 'transparent',
-                                    color: datePreset === preset.value ? 'white' : 'var(--muted)',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                {preset.label}
-                            </button>
-                        ))}
+                    {/* Date Range Selector */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                        <PageExportMenu onExport={handlePageExport} />
                     </div>
-                    <PageExportMenu onExport={handlePageExport} />
                 </div>
             </div>
 
