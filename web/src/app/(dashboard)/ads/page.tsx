@@ -1825,10 +1825,20 @@ export default function AdsPage() {
 
     // Fetch deep insights (Nurture Funnel, Bounce Gap, Video Hook, Placement Arbitrage)
     const { data: deepInsightsData, isLoading: deepInsightsLoading, error: deepInsightsError } = useQuery({
-        queryKey: ['deep-insights', 'core', effectiveAccount, datePreset],
+        queryKey: ['deep-insights', 'funnel', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'core');
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'funnel');
+            return res.data;
+        },
+        enabled: !!effectiveAccount && activeTab === 'deep',
+        retry: 1
+    });
+    const { data: deepPlacementData, isLoading: deepPlacementLoading, error: deepPlacementError } = useQuery({
+        queryKey: ['deep-insights', 'placements', effectiveAccount, datePreset],
+        queryFn: async () => {
+            if (!effectiveAccount) return null;
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'placements');
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'deep',
@@ -2312,10 +2322,18 @@ export default function AdsPage() {
             helper: videoViews.views_75 > 0 ? `${((Number(videoViews.views_100 || 0) / Number(videoViews.views_75 || 1)) * 100).toFixed(1)}% of 75% viewers completed` : 'Completed the video'
         }
     ];
-    const deepProfileType = deepInsightsData?.data?.accountProfile?.type || 'general';
-    const deepPlacementSummary = deepInsightsData?.data?.placementSummary || null;
-    const deepPlacementRows = deepInsightsData?.data?.placementDiagnostics || [];
+    const deepProfileType = deepPlacementData?.data?.accountProfile?.type || deepInsightsData?.data?.accountProfile?.type || 'general';
+    const deepPlacementSummary = deepPlacementData?.data?.placementSummary || null;
+    const deepPlacementRows = deepPlacementData?.data?.placementDiagnostics || [];
     const deepVideoSummary = deepVideoData?.data?.videoSummary || null;
+    const deepFunnelData = deepInsightsData?.data || {};
+    const deepDiagnosticsLoading = deepInsightsLoading && deepPlacementLoading && deepVideoLoading;
+    const deepHasAnySectionData = Boolean(
+        deepInsightsData?.data?.bounceGapAnalysis
+        || (deepInsightsData?.data?.campaignFunnels || []).length
+        || deepPlacementSummary
+        || deepVideoSummary
+    );
     const campaignDrilldownPageList = campaignDrilldownPages?.pages?.filter(Boolean) || [];
     const selectedCampaignDrilldown = campaignDrilldownPageList[0]?.data
         ? {
@@ -5004,15 +5022,21 @@ export default function AdsPage() {
             {/* ==================== DEEP INSIGHTS TAB ==================== */}
             {activeTab === 'deep' && (
                 <div style={{ display: 'grid', gap: 20 }}>
-                    {deepInsightsLoading ? (
+                    {deepDiagnosticsLoading ? (
                         <div style={{ textAlign: 'center', padding: 40 }}>
                             <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
                             <p className="text-muted">Running deep analysis...</p>
                         </div>
-                    ) : deepInsightsData?.data ? (
+                    ) : deepHasAnySectionData ? (
                         <>
+                            {deepInsightsError && !deepInsightsData?.data?.bounceGapAnalysis && !(deepInsightsData?.data?.campaignFunnels || []).length && (
+                                <div style={{ padding: '16px 18px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.18)', color: 'var(--muted)', fontSize: 13 }}>
+                                    Funnel diagnostics did not finish for this refresh, so the tab is showing the sections that returned faster.
+                                </div>
+                            )}
+
                             {/* Bounce Gap Analysis - Overall */}
-                            {deepInsightsData.data.bounceGapAnalysis && (
+                            {deepFunnelData.bounceGapAnalysis && (
                                 <SectionCard
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Click-to-Landing Gap <InfoTooltip text="Uses Meta's real outbound clicks and landing-page-view events. This is the handoff loss between a paid click and the page actually loading enough for the landing-page-view event to fire." /></span>}
                                     subtitle="A sales account should watch how much paid click traffic is lost before the landing page actually loads"
@@ -5024,11 +5048,11 @@ export default function AdsPage() {
                                                 width: 140,
                                                 height: 140,
                                                 borderRadius: '50%',
-                                                background: deepInsightsData.data.bounceGapAnalysis.severity === 'critical'
+                                                background: deepFunnelData.bounceGapAnalysis.severity === 'critical'
                                                     ? 'linear-gradient(135deg, #ef4444, #f87171)'
-                                                    : deepInsightsData.data.bounceGapAnalysis.severity === 'warning'
+                                                    : deepFunnelData.bounceGapAnalysis.severity === 'warning'
                                                         ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
-                                                        : deepInsightsData.data.bounceGapAnalysis.severity === 'acceptable'
+                                                        : deepFunnelData.bounceGapAnalysis.severity === 'acceptable'
                                                             ? 'linear-gradient(135deg, #0ea5e9, #38bdf8)'
                                                             : 'linear-gradient(135deg, #10b981, #34d399)',
                                                 display: 'flex',
@@ -5039,47 +5063,47 @@ export default function AdsPage() {
                                                 boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
                                             }}>
                                                 <div style={{ fontSize: 28, fontWeight: 700, color: 'white' }}>
-                                                    {deepInsightsData.data.bounceGapAnalysis.bounceGap}%
+                                                    {deepFunnelData.bounceGapAnalysis.bounceGap}%
                                                 </div>
                                                 <div style={{ fontSize: 11, color: 'white', opacity: 0.9 }}>
                                                     Click Loss
                                                 </div>
                                             </div>
                                             <div style={{ marginTop: 12, fontWeight: 600, textTransform: 'capitalize' }}>
-                                                {deepInsightsData.data.bounceGapAnalysis.severity}
+                                                {deepFunnelData.bounceGapAnalysis.severity}
                                             </div>
                                         </div>
 
                                         {/* Details */}
                                         <div>
                                             <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: 'rgba(148, 163, 184, 0.08)', fontSize: 12, color: 'var(--muted)' }}>
-                                                <strong>Traffic source:</strong> {deepInsightsData.data.bounceGapAnalysis.trafficMetricLabel}. {deepInsightsData.data.bounceGapAnalysis.trafficMetricNote}
+                                                <strong>Traffic source:</strong> {deepFunnelData.bounceGapAnalysis.trafficMetricLabel}. {deepFunnelData.bounceGapAnalysis.trafficMetricNote}
                                             </div>
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
                                                 <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                                    <div className="text-muted" style={{ fontSize: 11 }}>{deepInsightsData.data.bounceGapAnalysis.trafficMetricLabel}</div>
-                                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(deepInsightsData.data.bounceGapAnalysis.outboundClicks)}</div>
+                                                    <div className="text-muted" style={{ fontSize: 11 }}>{deepFunnelData.bounceGapAnalysis.trafficMetricLabel}</div>
+                                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(deepFunnelData.bounceGapAnalysis.outboundClicks)}</div>
                                                 </div>
                                                 <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                                     <div className="text-muted" style={{ fontSize: 11 }}>Landing Page Views</div>
-                                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(deepInsightsData.data.bounceGapAnalysis.landingPageViews)}</div>
+                                                    <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(deepFunnelData.bounceGapAnalysis.landingPageViews)}</div>
                                                 </div>
                                                 <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                                     <div className="text-muted" style={{ fontSize: 11 }}>Users Lost</div>
                                                     <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}>
-                                                        {formatNumber(deepInsightsData.data.bounceGapAnalysis.outboundClicks - deepInsightsData.data.bounceGapAnalysis.landingPageViews)}
+                                                        {formatNumber(deepFunnelData.bounceGapAnalysis.outboundClicks - deepFunnelData.bounceGapAnalysis.landingPageViews)}
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div style={{ padding: '12px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 8, marginBottom: 12 }}>
-                                                <div style={{ fontWeight: 600, marginBottom: 4 }}>{deepInsightsData.data.bounceGapAnalysis.message}</div>
-                                                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{deepInsightsData.data.bounceGapAnalysis.recommendation}</div>
+                                                <div style={{ fontWeight: 600, marginBottom: 4 }}>{deepFunnelData.bounceGapAnalysis.message}</div>
+                                                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{deepFunnelData.bounceGapAnalysis.recommendation}</div>
                                             </div>
 
-                                            {(deepInsightsData.data.bounceGapAnalysis.possibleReasons || []).length > 0 && (
+                                            {(deepFunnelData.bounceGapAnalysis.possibleReasons || []).length > 0 && (
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                                    {deepInsightsData.data.bounceGapAnalysis.possibleReasons.map((reason: string, i: number) => (
+                                                    {deepFunnelData.bounceGapAnalysis.possibleReasons.map((reason: string, i: number) => (
                                                         <span key={i} style={{
                                                             padding: '4px 12px',
                                                             background: 'rgba(239, 68, 68, 0.1)',
@@ -5098,48 +5122,48 @@ export default function AdsPage() {
                             )}
 
                             {/* Per-Campaign Funnel Comparison */}
-                            {(deepInsightsData.data.campaignFunnels || []).length > 0 && (
+                            {(deepFunnelData.campaignFunnels || []).length > 0 && (
                                 <SectionCard
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Campaign Funnel Benchmarking <InfoTooltip text="Compares campaigns using real Meta funnel events. If a campaign has no landing-page-view event, the table will show a dash instead of estimating that step." /></span>}
                                     subtitle="Compare real funnel handoff and purchase efficiency across campaigns to see which ones turn traffic into revenue"
                                 >
-                                    {deepInsightsData.data.overallFunnel && (
+                                    {deepFunnelData.overallFunnel && (
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
                                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                                 <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
-                                                    {deepInsightsData.data.overallFunnel.trafficMetricLabel}
-                                                    <InfoTooltip text={deepInsightsData.data.overallFunnel.trafficMetricNote} />
+                                                    {deepFunnelData.overallFunnel.trafficMetricLabel}
+                                                    <InfoTooltip text={deepFunnelData.overallFunnel.trafficMetricNote} />
                                                 </div>
-                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.trafficClicks || 0)}</div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(deepFunnelData.overallFunnel.totals.trafficClicks || 0)}</div>
                                             </div>
                                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                                 <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
                                                     Traffic → LPV
                                                     <InfoTooltip text="Weighted account-level handoff from traffic clicks to landing-page views, using campaign traffic volume as the denominator." />
                                                 </div>
-                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepInsightsData.data.overallFunnel.weightedRates.trafficToLpvRate}%</div>
-                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.landingPageViews || 0)} / {formatNumber(deepInsightsData.data.overallFunnel.totals.trafficClicks || 0)}</div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepFunnelData.overallFunnel.weightedRates.trafficToLpvRate}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepFunnelData.overallFunnel.totals.landingPageViews || 0)} / {formatNumber(deepFunnelData.overallFunnel.totals.trafficClicks || 0)}</div>
                                             </div>
                                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                                 <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
                                                     LPV → ATC
                                                     <InfoTooltip text="Weighted account-level conversion from landing-page views to add-to-cart events." />
                                                 </div>
-                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepInsightsData.data.overallFunnel.weightedRates.lpvToAtcRate}%</div>
-                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.addToCart || 0)} / {formatNumber(deepInsightsData.data.overallFunnel.totals.landingPageViews || 0)}</div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepFunnelData.overallFunnel.weightedRates.lpvToAtcRate}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepFunnelData.overallFunnel.totals.addToCart || 0)} / {formatNumber(deepFunnelData.overallFunnel.totals.landingPageViews || 0)}</div>
                                             </div>
                                             <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                                 <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
                                                     ATC → Purchase
                                                     <InfoTooltip text="Weighted account-level conversion from add-to-cart to purchase." />
                                                 </div>
-                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepInsightsData.data.overallFunnel.weightedRates.atcToPurchaseRate}%</div>
-                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.purchases || 0)} / {formatNumber(deepInsightsData.data.overallFunnel.totals.addToCart || 0)}</div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepFunnelData.overallFunnel.weightedRates.atcToPurchaseRate}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepFunnelData.overallFunnel.totals.purchases || 0)} / {formatNumber(deepFunnelData.overallFunnel.totals.addToCart || 0)}</div>
                                             </div>
                                         </div>
                                     )}
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                                        {(deepInsightsData.data.overallFunnel?.confidenceFlags || []).map((flag: string) => (
+                                        {(deepFunnelData.overallFunnel?.confidenceFlags || []).map((flag: string) => (
                                             <span key={flag} style={{ padding: '5px 10px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.14)', color: '#cbd5e1', fontSize: 11, fontWeight: 600 }}>
                                                 {flag}
                                             </span>
@@ -5185,7 +5209,7 @@ export default function AdsPage() {
                                         />
                                     </div>
                                     {/* Comparison Header if we have best/worst */}
-                                    {deepInsightsData.data.compareFunnels && (
+                                    {deepFunnelData.compareFunnels && (
                                         <div style={{
                                             display: 'grid',
                                             gridTemplateColumns: '1fr auto 1fr',
@@ -5199,18 +5223,18 @@ export default function AdsPage() {
                                             <div style={{ textAlign: 'center' }}>
                                                 <div style={{ color: '#10b981', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>🏆 BEST PERFORMER</div>
                                                 <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
-                                                    {deepInsightsData.data.compareFunnels.best?.campaignName}
+                                                    {deepFunnelData.compareFunnels.best?.campaignName}
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
                                                     <div>
                                                         <div style={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}>
-                                                            {deepInsightsData.data.compareFunnels.best?.conversions.roas}x
+                                                            {deepFunnelData.compareFunnels.best?.conversions.roas}x
                                                         </div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)' }}>ROAS</div>
                                                     </div>
                                                     <div>
                                                         <div style={{ fontSize: 20, fontWeight: 700, color: '#6366f1' }}>
-                                                            {deepInsightsData.data.compareFunnels.best?.conversions.atcToPurchaseRate}%
+                                                            {deepFunnelData.compareFunnels.best?.conversions.atcToPurchaseRate}%
                                                         </div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)' }}>Cart→Purchase</div>
                                                     </div>
@@ -5220,10 +5244,10 @@ export default function AdsPage() {
                                             {/* VS */}
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                                 <div style={{ fontWeight: 700, color: 'var(--muted)' }}>VS</div>
-                                                {deepInsightsData.data.compareFunnels.comparison && (
+                                                {deepFunnelData.compareFunnels.comparison && (
                                                     <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 8 }}>
-                                                        {Number(deepInsightsData.data.compareFunnels.comparison.roasDiff || 0) >= 0 ? '+' : ''}{deepInsightsData.data.compareFunnels.comparison.roasDiff}x ROAS<br />
-                                                        {Number(deepInsightsData.data.compareFunnels.comparison.atcRateDiff || 0) >= 0 ? '+' : ''}{deepInsightsData.data.compareFunnels.comparison.atcRateDiff}% ATC to buy
+                                                        {Number(deepFunnelData.compareFunnels.comparison.roasDiff || 0) >= 0 ? '+' : ''}{deepFunnelData.compareFunnels.comparison.roasDiff}x ROAS<br />
+                                                        {Number(deepFunnelData.compareFunnels.comparison.atcRateDiff || 0) >= 0 ? '+' : ''}{deepFunnelData.compareFunnels.comparison.atcRateDiff}% ATC to buy
                                                     </div>
                                                 )}
                                             </div>
@@ -5232,18 +5256,18 @@ export default function AdsPage() {
                                             <div style={{ textAlign: 'center' }}>
                                                 <div style={{ color: '#ef4444', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>⚠️ NEEDS WORK</div>
                                                 <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
-                                                    {deepInsightsData.data.compareFunnels.worst?.campaignName}
+                                                    {deepFunnelData.compareFunnels.worst?.campaignName}
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
                                                     <div>
                                                         <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}>
-                                                            {deepInsightsData.data.compareFunnels.worst?.conversions.roas}x
+                                                            {deepFunnelData.compareFunnels.worst?.conversions.roas}x
                                                         </div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)' }}>ROAS</div>
                                                     </div>
                                                     <div>
                                                         <div style={{ fontSize: 20, fontWeight: 700, color: '#f59e0b' }}>
-                                                            {deepInsightsData.data.compareFunnels.worst?.conversions.atcToPurchaseRate}%
+                                                            {deepFunnelData.compareFunnels.worst?.conversions.atcToPurchaseRate}%
                                                         </div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)' }}>Cart→Purchase</div>
                                                     </div>
@@ -5251,10 +5275,10 @@ export default function AdsPage() {
                                             </div>
                                         </div>
                                     )}
-                                    {deepInsightsData.data.compareFunnels?.note && (
+                                    {deepFunnelData.compareFunnels?.note && (
                                         <div style={{ marginTop: -12, marginBottom: 16, padding: '10px 12px', borderRadius: 8, background: 'rgba(148, 163, 184, 0.08)', fontSize: 12, color: 'var(--muted)' }}>
-                                            <strong>Comparison note:</strong> {deepInsightsData.data.compareFunnels.note}
-                                            {deepInsightsData.data.compareFunnels.methodologyLabel ? ` ${deepInsightsData.data.compareFunnels.methodologyLabel}.` : ''}
+                                            <strong>Comparison note:</strong> {deepFunnelData.compareFunnels.note}
+                                            {deepFunnelData.compareFunnels.methodologyLabel ? ` ${deepFunnelData.compareFunnels.methodologyLabel}.` : ''}
                                         </div>
                                     )}
 
@@ -5612,6 +5636,12 @@ export default function AdsPage() {
                                 </SectionCard>
                             ) : null}
 
+                            {deepPlacementError && !deepPlacementSummary && (
+                                <div style={{ padding: '16px 18px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.18)', color: 'var(--muted)', fontSize: 13 }}>
+                                    Placement diagnostics did not finish for this refresh, so the other diagnostics sections are shown first.
+                                </div>
+                            )}
+
                             {/* Placement Diagnostics */}
                             {deepPlacementSummary && (
                                 <SectionCard
@@ -5818,7 +5848,10 @@ export default function AdsPage() {
                         </div>
                     ) : (
                         <div style={{ textAlign: 'center', padding: 40 }}>
-                            <p className="text-muted">No deep insights data available for this account.</p>
+                            <p className="text-muted">Diagnostics could not load any section for this account just now.</p>
+                            <p className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
+                                This refresh likely timed out across multiple Meta diagnostics requests. Retry once the account load settles.
+                            </p>
                         </div>
                     )}
                 </div>

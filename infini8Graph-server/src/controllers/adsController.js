@@ -3522,11 +3522,12 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const normalizedSection = ['core', 'video', 'all'].includes(String(section || '').toLowerCase())
+        const normalizedSection = ['core', 'funnel', 'placements', 'video', 'all'].includes(String(section || '').toLowerCase())
             ? String(section).toLowerCase()
             : 'all';
-        const includeCore = normalizedSection !== 'video';
-        const includeVideo = normalizedSection !== 'core';
+        const includeFunnel = ['all', 'core', 'funnel'].includes(normalizedSection);
+        const includePlacements = ['all', 'core', 'placements'].includes(normalizedSection);
+        const includeVideo = ['all', 'video'].includes(normalizedSection);
         const cacheKey = buildMetaCacheKey('meta-deep-v6', [req.user.userId, accountId, datePreset, campaignId || 'all', normalizedSection]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
@@ -3547,7 +3548,7 @@ export async function getDeepInsights(req, res) {
             placementArbitrageRes,
             videoRetentionRes
         ] = await Promise.allSettled([
-            includeCore
+            includeFunnel
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                     timeout: 12000,
                     params: {
@@ -3557,7 +3558,7 @@ export async function getDeepInsights(req, res) {
                     }
                 })
                 : Promise.resolve({ data: { data: [] } }),
-            includeCore
+            includeFunnel
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     timeout: 10000,
                     params: {
@@ -3567,7 +3568,7 @@ export async function getDeepInsights(req, res) {
                     }
                 })
                 : Promise.resolve({ data: { data: [] } }),
-            includeCore
+            includePlacements
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     timeout: 12000,
                     params: {
@@ -3595,7 +3596,7 @@ export async function getDeepInsights(req, res) {
         let overallFunnel = null;
         let funnelComparison = null;
 
-        if (includeCore && campaignFunnelRes.status === 'fulfilled') {
+        if (includeFunnel && campaignFunnelRes.status === 'fulfilled') {
             const campaigns = campaignFunnelRes.value.data.data || [];
             deepAccountProfile = buildAccountProfile(campaigns, {});
 
@@ -3823,7 +3824,7 @@ export async function getDeepInsights(req, res) {
         // ==================== 2. OVERALL BOUNCE GAP ====================
         let bounceGapAnalysis = null;
 
-        if (includeCore && accountFunnelRes.status === 'fulfilled') {
+        if (includeFunnel && accountFunnelRes.status === 'fulfilled') {
             const data = accountFunnelRes.value.data.data?.[0] || {};
             const actions = data.actions || [];
 
@@ -4060,7 +4061,7 @@ export async function getDeepInsights(req, res) {
         let placementDiagnostics = [];
         let placementSummary = null;
 
-        if (includeCore && placementArbitrageRes.status === 'fulfilled') {
+        if (includePlacements && placementArbitrageRes.status === 'fulfilled') {
             const placements = placementArbitrageRes.value.data.data || [];
             const profileType = deepAccountProfile?.type || 'general';
 

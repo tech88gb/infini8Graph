@@ -194,7 +194,7 @@ export const adsApi = {
         api.get(`/ads/accounts/${adAccountId}/intelligence?datePreset=${datePreset}`, { timeout: 45000 }),
     getAdvancedAnalytics: (adAccountId: string, datePreset = 'last_30d') =>
         api.get(`/ads/accounts/${adAccountId}/advanced?datePreset=${datePreset}`, { timeout: 45000 }),
-    getDeepInsights: (adAccountId: string, datePreset = 'last_30d', section: 'all' | 'core' | 'video' = 'all') =>
+    getDeepInsights: (adAccountId: string, datePreset = 'last_30d', section: 'all' | 'core' | 'funnel' | 'placements' | 'video' = 'all') =>
         api.get(`/ads/accounts/${adAccountId}/deep-insights?datePreset=${datePreset}&section=${section}`, {
             timeout: section === 'video' ? 30000 : section === 'all' ? 45000 : 20000
         })
