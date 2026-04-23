@@ -3175,21 +3175,43 @@ export async function getAdvancedAnalytics(req, res) {
                 const coldConvRate = coldMetrics.clicks > 0 ? (coldMetrics.conversions / coldMetrics.clicks * 100) : 0;
                 const retargetConvRate = retargetMetrics.clicks > 0 ? (retargetMetrics.conversions / retargetMetrics.clicks * 100) : 0;
                 const lift = coldConvRate > 0 ? ((retargetConvRate - coldConvRate) / coldConvRate * 100) : 0;
+                const coldCpa = coldMetrics.conversions > 0 ? (coldMetrics.spend / coldMetrics.conversions) : null;
+                const retargetCpa = retargetMetrics.conversions > 0 ? (retargetMetrics.spend / retargetMetrics.conversions) : null;
+                const cpaDelta = coldCpa && retargetCpa && coldCpa > 0
+                    ? ((coldCpa - retargetCpa) / coldCpa * 100)
+                    : null;
 
                 let insight = '';
                 let status = 'neutral';
+                let confidence = 'low';
+                let confidenceLabel = 'Low confidence';
+                let sampleNote = 'Retargeting has a small sample in this window, so treat the lift as directional.';
+
+                if (retargetMetrics.clicks >= 1000 && retargetMetrics.conversions >= 20) {
+                    confidence = 'high';
+                    confidenceLabel = 'High confidence';
+                    sampleNote = 'Retargeting has enough click and conversion volume for a more stable read.';
+                } else if (retargetMetrics.clicks >= 300 && retargetMetrics.conversions >= 5) {
+                    confidence = 'medium';
+                    confidenceLabel = 'Medium confidence';
+                    sampleNote = 'Retargeting shows a usable signal, but the sample is still modest.';
+                }
 
                 if (lift > 50) {
-                    insight = 'Retargeting is significantly boosting conversions - your acquisition is working well';
+                    insight = confidence === 'high'
+                        ? 'Retargeting is clearly converting more efficiently than cold traffic in this period.'
+                        : 'Retargeting looks stronger than cold traffic, but the sample is not large enough to treat this as conclusive.';
                     status = 'excellent';
                 } else if (lift > 20) {
-                    insight = 'Retargeting provides moderate lift - normal performance';
+                    insight = confidence === 'low'
+                        ? 'Retargeting appears to be helping, but the sample is still small.'
+                        : 'Retargeting is delivering a healthy efficiency lift versus cold traffic.';
                     status = 'good';
                 } else if (lift > 0) {
-                    insight = 'Retargeting provides minimal lift - acquisition quality may be low';
+                    insight = 'Retargeting is only slightly ahead of cold traffic, so audience quality or sequencing may need work.';
                     status = 'warning';
                 } else {
-                    insight = 'Retargeting performing worse than cold - problem is likely acquisition traffic quality';
+                    insight = 'Retargeting is underperforming cold traffic in this window, which can point to weak audience quality, offer mismatch, or a noisy sample.';
                     status = 'critical';
                 }
 
@@ -3201,19 +3223,23 @@ export async function getAdvancedAnalytics(req, res) {
                         conversions: coldMetrics.conversions,
                         spend: coldMetrics.spend,
                         conversionRate: coldConvRate.toFixed(3),
-                        cpa: coldMetrics.conversions > 0 ? (coldMetrics.spend / coldMetrics.conversions).toFixed(2) : null
+                        cpa: coldCpa ? coldCpa.toFixed(2) : null
                     },
                     retarget: {
                         clicks: retargetMetrics.clicks,
                         conversions: retargetMetrics.conversions,
                         spend: retargetMetrics.spend,
                         conversionRate: retargetConvRate.toFixed(3),
-                        cpa: retargetMetrics.conversions > 0 ? (retargetMetrics.spend / retargetMetrics.conversions).toFixed(2) : null
+                        cpa: retargetCpa ? retargetCpa.toFixed(2) : null
                     },
                     lift: lift.toFixed(1),
+                    cpaDelta: cpaDelta !== null ? cpaDelta.toFixed(1) : null,
                     denominator: 'clicks',
                     status,
-                    insight
+                    insight,
+                    confidence,
+                    confidenceLabel,
+                    sampleNote
                 };
             }
         }
