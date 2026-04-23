@@ -3514,7 +3514,7 @@ export async function getAdvancedAnalytics(req, res) {
 export async function getDeepInsights(req, res) {
     try {
         const { adAccountId } = req.params;
-        const { datePreset = 'last_30d', campaignId = null } = req.query;
+        const { datePreset = 'last_30d', campaignId = null, section = 'all' } = req.query;
         const accessToken = await authService.getAccessToken(req.user.userId);
 
         if (!accessToken) {
@@ -3522,7 +3522,12 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-deep-v5', [req.user.userId, accountId, datePreset, campaignId || 'all']);
+        const normalizedSection = ['core', 'video', 'all'].includes(String(section || '').toLowerCase())
+            ? String(section).toLowerCase()
+            : 'all';
+        const includeCore = normalizedSection !== 'video';
+        const includeVideo = normalizedSection !== 'core';
+        const cacheKey = buildMetaCacheKey('meta-deep-v6', [req.user.userId, accountId, datePreset, campaignId || 'all', normalizedSection]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -3542,39 +3547,47 @@ export async function getDeepInsights(req, res) {
             placementArbitrageRes,
             videoRetentionRes
         ] = await Promise.allSettled([
-            // Campaign-level funnel data (for per-campaign funnel breakdown)
-            axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,impressions,reach,clicks,actions,action_values,cost_per_action_type,inline_link_clicks,outbound_clicks,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions}',
-                    limit: 500
-                }
-            }),
-            // Account-level funnel data (overall bounce gap calculation)
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,clicks,actions,action_values,cost_per_action_type,inline_link_clicks,outbound_clicks,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions',
-                    date_preset: datePreset
-                }
-            }),
-            // Detailed placement breakdown with all metrics for arbitrage detection
-            axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values',
-                    date_preset: datePreset,
-                    breakdowns: 'publisher_platform,platform_position,device_platform'
-                }
-            }),
-            // Ad-level video retention data (for Hook Analysis)
-            axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'id,name,status,effective_status,created_time,updated_time,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url,object_story_spec},insights.date_preset(' + datePreset + '){impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
-                    limit: 100
-                }
-            })
+            includeCore
+                ? axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
+                    timeout: 12000,
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,impressions,clicks,actions,action_values,cost_per_action_type,outbound_clicks}',
+                        limit: 500
+                    }
+                })
+                : Promise.resolve({ data: { data: [] } }),
+            includeCore
+                ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    timeout: 10000,
+                    params: {
+                        access_token: accessToken,
+                        fields: 'clicks,actions,outbound_clicks',
+                        date_preset: datePreset
+                    }
+                })
+                : Promise.resolve({ data: { data: [] } }),
+            includeCore
+                ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
+                    timeout: 12000,
+                    params: {
+                        access_token: accessToken,
+                        fields: 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values',
+                        date_preset: datePreset,
+                        breakdowns: 'publisher_platform,platform_position,device_platform'
+                    }
+                })
+                : Promise.resolve({ data: { data: [] } }),
+            includeVideo
+                ? axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
+                    timeout: 12000,
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,status,effective_status,created_time,updated_time,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url},insights.date_preset(' + datePreset + '){impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
+                        limit: 100
+                    }
+                })
+                : Promise.resolve({ data: { data: [] } })
         ]);
 
         // ==================== 1. NURTURE EFFICIENCY FUNNEL (Per-Campaign) ====================
@@ -3582,7 +3595,7 @@ export async function getDeepInsights(req, res) {
         let overallFunnel = null;
         let funnelComparison = null;
 
-        if (campaignFunnelRes.status === 'fulfilled') {
+        if (includeCore && campaignFunnelRes.status === 'fulfilled') {
             const campaigns = campaignFunnelRes.value.data.data || [];
             deepAccountProfile = buildAccountProfile(campaigns, {});
 
@@ -3810,7 +3823,7 @@ export async function getDeepInsights(req, res) {
         // ==================== 2. OVERALL BOUNCE GAP ====================
         let bounceGapAnalysis = null;
 
-        if (accountFunnelRes.status === 'fulfilled') {
+        if (includeCore && accountFunnelRes.status === 'fulfilled') {
             const data = accountFunnelRes.value.data.data?.[0] || {};
             const actions = data.actions || [];
 
@@ -3877,7 +3890,7 @@ export async function getDeepInsights(req, res) {
         // ==================== 3. VIDEO HOOK ANALYSIS (Retention Milestones) ====================
         let videoHookAnalysis = [];
 
-        if (videoRetentionRes.status === 'fulfilled') {
+        if (includeVideo && videoRetentionRes.status === 'fulfilled') {
             const ads = videoRetentionRes.value.data.data || [];
 
             videoHookAnalysis = ads
@@ -4047,7 +4060,7 @@ export async function getDeepInsights(req, res) {
         let placementDiagnostics = [];
         let placementSummary = null;
 
-        if (placementArbitrageRes.status === 'fulfilled') {
+        if (includeCore && placementArbitrageRes.status === 'fulfilled') {
             const placements = placementArbitrageRes.value.data.data || [];
             const profileType = deepAccountProfile?.type || 'general';
 
@@ -4292,6 +4305,7 @@ export async function getDeepInsights(req, res) {
                 } : null,
                 placementDiagnostics: placementDiagnostics.slice(0, 60),
                 placementSummary,
+                section: normalizedSection,
                 datePreset
         };
 
