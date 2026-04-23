@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -1148,18 +1148,18 @@ function CampaignDrilldownDrawer({
                 width: 'min(1120px, 100vw)',
                 height: '100vh',
                 overflowY: 'auto',
-                background: 'linear-gradient(180deg, #f8fafc, #ffffff)',
-                color: '#0f172a',
-                borderLeft: '1px solid rgba(148,163,184,0.18)',
-                boxShadow: '-20px 0 60px rgba(15, 23, 42, 0.18)',
+                background: 'linear-gradient(180deg, #0f1219, #0b0d14)',
+                color: '#e2e8f0',
+                borderLeft: '1px solid rgba(148,163,184,0.12)',
+                boxShadow: '-20px 0 60px rgba(0, 0, 0, 0.5)',
                 padding: 24
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 20 }}>
                     <div>
-                        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 6 }}>
                             Campaign Drilldown
                         </div>
-                        <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a' }}>{campaign?.name || 'Loading campaign...'}</h2>
+                        <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#f1f5f9' }}>{campaign?.name || 'Loading campaign...'}</h2>
                         <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--muted)', maxWidth: 720 }}>
                             Click any creative preview to open its spend graph. Current period is compared against the previous matching window when the active preset supports it.
                         </p>
@@ -1168,9 +1168,9 @@ function CampaignDrilldownDrawer({
                         type="button"
                         onClick={onClose}
                         style={{
-                            border: '1px solid rgba(148,163,184,0.22)',
-                            background: '#fff',
-                            color: '#0f172a',
+                            border: '1px solid rgba(148,163,184,0.18)',
+                            background: 'rgba(255,255,255,0.06)',
+                            color: '#e2e8f0',
                             width: 40,
                             height: 40,
                             borderRadius: 999,
@@ -1192,7 +1192,7 @@ function CampaignDrilldownDrawer({
                     </div>
                 ) : campaign ? (
                     <div style={{ display: 'grid', gap: 18 }}>
-                        <div style={{ background: '#fff', borderRadius: 24, border: '1px solid rgba(148,163,184,0.14)', padding: 20, boxShadow: '0 18px 40px rgba(15,23,42,0.06)' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 24, border: '1px solid rgba(148,163,184,0.1)', padding: 20, boxShadow: '0 18px 40px rgba(0,0,0,0.2)' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(280px, 0.75fr)', gap: 20, alignItems: 'stretch' }}>
                                 <div>
                                 <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
@@ -1211,7 +1211,7 @@ function CampaignDrilldownDrawer({
                                             <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(37,99,235,0.1)', color: '#1d4ed8', fontSize: 11, fontWeight: 700 }}>
                                                 {campaign.typeLabel || 'General'}
                                             </span>
-                                            <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#334155', fontSize: 11, fontWeight: 700 }}>
+                                            <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(148,163,184,0.16)', color: '#cbd5e1', fontSize: 11, fontWeight: 700 }}>
                                                 {campaign.status?.replace(/_/g, ' ') || 'UNKNOWN'}
                                             </span>
                                             <span style={{ padding: '4px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.12)', color: '#047857', fontSize: 11, fontWeight: 700 }}>
@@ -1222,7 +1222,7 @@ function CampaignDrilldownDrawer({
                                             {campaign.objectiveLabel} • Updated {formatShortDate(campaign.updatedTime)}
                                         </div>
                                         <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                            <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(15,23,42,0.06)', color: '#0f172a', fontSize: 12, fontWeight: 700 }}>
+                                            <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(15,23,42,0.3)', color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>
                                                 {creativeSummary.adsCount || 0} ads
                                             </span>
                                             <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#4338ca', fontSize: 12, fontWeight: 700 }}>
@@ -1243,27 +1243,57 @@ function CampaignDrilldownDrawer({
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
                                     <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.12)' }}>
                                         <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Spend</div>
-                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{formatCurrency(campaign.metrics?.spend || 0)}</div>
+                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9' }}>{formatCurrency(campaign.metrics?.spend || 0)}</div>
                                         <div style={{ fontSize: 12, color: '#64748b' }}>{spendTrend.comparisonLabel || 'Selected period'} {formatSignedPercent(campaign.comparison?.spendDeltaPct)}</div>
                                     </div>
                                     <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.12)' }}>
                                         <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{campaign.primaryMetric?.label || 'Results'}</div>
-                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{formatNumber(campaign.primaryMetric?.value || 0)}</div>
+                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9' }}>{formatNumber(campaign.primaryMetric?.value || 0)}</div>
                                         <div style={{ fontSize: 12, color: '#64748b' }}>{campaign.primaryMetric?.costValue ? `${campaign.primaryMetric.costLabel}: ${formatCurrency(campaign.primaryMetric.costValue)}` : 'No cost baseline yet'}</div>
                                     </div>
                                     <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.16)' }}>
                                         <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>CTR / Clicks</div>
-                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{formatPercent(campaign.metrics?.ctr || 0)}</div>
+                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9' }}>{formatPercent(campaign.metrics?.ctr || 0)}</div>
                                         <div style={{ fontSize: 12, color: '#64748b' }}>{formatNumber(campaign.metrics?.linkClicks || 0)} link clicks</div>
                                     </div>
                                     <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.16)' }}>
                                         <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>ROAS / Frequency</div>
-                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{formatRoas(campaign.metrics?.purchaseRoas || 0)}</div>
+                                        <div style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9' }}>{formatRoas(campaign.metrics?.purchaseRoas || 0)}</div>
                                         <div style={{ fontSize: 12, color: '#64748b' }}>{Number(campaign.metrics?.frequency || 0).toFixed(2)}x frequency</div>
                                     </div>
                                 </div>
 
-                                <div style={{ padding: '12px 14px', borderRadius: 14, background: 'linear-gradient(180deg, rgba(248,250,252,0.9), rgba(255,255,255,0.95))', border: '1px solid rgba(148,163,184,0.16)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+                                    <div style={{ padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>CPM</div>
+                                        <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{campaign.metrics?.cpm ? formatCurrency(campaign.metrics.cpm) : '—'}</div>
+                                        <div style={{ fontSize: 11, color: '#64748b' }}>Cost per 1K imp</div>
+                                    </div>
+                                    <div style={{ padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>CPC</div>
+                                        <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{campaign.metrics?.cpc ? formatCurrency(campaign.metrics.cpc) : '—'}</div>
+                                        <div style={{ fontSize: 11, color: '#64748b' }}>Cost per click</div>
+                                    </div>
+                                    <div style={{ padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Reach</div>
+                                        <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{formatNumber(campaign.metrics?.reach || 0)}</div>
+                                        <div style={{ fontSize: 11, color: '#64748b' }}>Unique people</div>
+                                    </div>
+                                    <div style={{ padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)' }}>
+                                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Impressions</div>
+                                        <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{formatNumber(campaign.metrics?.impressions || 0)}</div>
+                                        <div style={{ fontSize: 11, color: '#64748b' }}>Total shown</div>
+                                    </div>
+                                    {(campaign.metrics?.purchases || 0) > 0 && (
+                                        <div style={{ padding: '12px 14px', borderRadius: 14, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.12)' }}>
+                                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Revenue</div>
+                                            <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{formatCurrency(campaign.metrics?.purchaseValue || 0)}</div>
+                                            <div style={{ fontSize: 11, color: '#64748b' }}>{formatNumber(campaign.metrics?.purchases || 0)} purchases</div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
                                         <div>
                                             <div style={{ fontSize: 18, fontWeight: 700 }}>Spend Trends</div>
@@ -1310,10 +1340,10 @@ function CampaignDrilldownDrawer({
                             </div>
                         </div>
 
-                        <div style={{ background: '#fff', borderRadius: 20, border: '1px solid rgba(148,163,184,0.14)', padding: 18 }}>
+                        <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 20, border: '1px solid rgba(148,163,184,0.08)', padding: 18 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
                                 <div>
-                                    <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>
+                                    <div style={{ fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>
                                         Latest Creatives ({creatives.length}{pagination?.total ? ` / ${pagination.total}` : ''})
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
@@ -1321,7 +1351,7 @@ function CampaignDrilldownDrawer({
                                     </div>
                                 </div>
                                 {pagination?.total > 0 && (
-                                    <div style={{ padding: '7px 10px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#334155', fontSize: 12, fontWeight: 700 }}>
+                                    <div style={{ padding: '7px 10px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#cbd5e1', fontSize: 12, fontWeight: 700 }}>
                                         Showing {Math.min(creatives.length, pagination.total)} of {pagination.total}
                                     </div>
                                 )}
@@ -1330,7 +1360,7 @@ function CampaignDrilldownDrawer({
                             {creatives.length ? (
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
                                     {creatives.map((creative: any) => (
-                                        <div key={creative.adId} style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(148,163,184,0.16)', background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))' }}>
+                                        <div key={creative.adId} style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(148,163,184,0.1)', background: 'rgba(255,255,255,0.03)' }}>
                                             <button
                                                 type="button"
                                                 onClick={() => onCreativeSelect(creative)}
@@ -1379,14 +1409,14 @@ function CampaignDrilldownDrawer({
 
                                             <div style={{ padding: 16 }}>
                                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                                                    <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(37,99,235,0.08)', color: '#1d4ed8', fontSize: 11, fontWeight: 700 }}>
+                                                    <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(37,99,235,0.12)', color: '#93c5fd', fontSize: 11, fontWeight: 700 }}>
                                                         Spend {formatCurrency(creative.metrics?.spend || 0)}
                                                     </span>
-                                                    <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#334155', fontSize: 11, fontWeight: 700 }}>
+                                                    <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(148,163,184,0.12)', color: '#cbd5e1', fontSize: 11, fontWeight: 700 }}>
                                                         {spendTrend.comparisonLabel || 'Selected period'} {formatSignedPercent(creative.comparison?.spendDeltaPct)}
                                                     </span>
                                                     {creative.assetCount > 1 && (
-                                                        <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontSize: 11, fontWeight: 700 }}>
+                                                        <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.14)', color: '#fbbf24', fontSize: 11, fontWeight: 700 }}>
                                                             {creative.assetCount} assets
                                                         </span>
                                                     )}
@@ -1394,15 +1424,15 @@ function CampaignDrilldownDrawer({
 
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
                                                     <div style={{ padding: '10px 10px', borderRadius: 12, background: 'rgba(15,23,42,0.04)' }}>
-                                                        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{formatNumber(creative.primaryMetric?.value || 0)}</div>
+                                                        <div style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9' }}>{formatNumber(creative.primaryMetric?.value || 0)}</div>
                                                         <div style={{ fontSize: 10, color: '#64748b' }}>{creative.primaryMetric?.label || 'Results'}</div>
                                                     </div>
                                                     <div style={{ padding: '10px 10px', borderRadius: 12, background: 'rgba(15,23,42,0.04)' }}>
-                                                        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{formatPercent(creative.metrics?.ctr || 0)}</div>
+                                                        <div style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9' }}>{formatPercent(creative.metrics?.ctr || 0)}</div>
                                                         <div style={{ fontSize: 10, color: '#64748b' }}>CTR</div>
                                                     </div>
                                                     <div style={{ padding: '10px 10px', borderRadius: 12, background: 'rgba(15,23,42,0.04)' }}>
-                                                        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                                                        <div style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9' }}>
                                                             {creative.primaryMetric?.costValue ? formatCurrency(creative.primaryMetric.costValue) : '—'}
                                                         </div>
                                                         <div style={{ fontSize: 10, color: '#64748b' }}>{creative.primaryMetric?.costLabel || 'Cost / Result'}</div>
@@ -1448,9 +1478,20 @@ function CampaignDrilldownDrawer({
                                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
                                     <button
                                         type="button"
-                                        className="btn btn-secondary"
                                         onClick={onLoadMore}
                                         disabled={loadingMore}
+                                        style={{
+                                            padding: '10px 24px',
+                                            borderRadius: 12,
+                                            border: '1px solid rgba(99,102,241,0.3)',
+                                            background: 'rgba(99,102,241,0.12)',
+                                            color: '#c7d2fe',
+                                            fontSize: 13,
+                                            fontWeight: 700,
+                                            cursor: loadingMore ? 'not-allowed' : 'pointer',
+                                            opacity: loadingMore ? 0.6 : 1,
+                                            transition: 'all 0.15s ease'
+                                        }}
                                     >
                                         {loadingMore ? 'Loading more...' : 'Load 4 More Creatives'}
                                     </button>
@@ -1700,6 +1741,11 @@ export default function AdsPage() {
     const [campaignTypeFilter, setCampaignTypeFilter] = useState('all');
     const [campaignStatusFilter, setCampaignStatusFilter] = useState('all');
     const [campaignSort, setCampaignSort] = useState('spend_desc');
+    const [campaignMinRoas, setCampaignMinRoas] = useState('');
+    const [campaignMinCtr, setCampaignMinCtr] = useState('');
+    const [campaignMaxCpm, setCampaignMaxCpm] = useState('');
+    const [campaignMinSpend, setCampaignMinSpend] = useState('');
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [campaignPage, setCampaignPage] = useState(1);
     const [scaleFilters, setScaleFilters] = useState({ search: '', objective: 'all', status: 'active', sort: 'score_desc', page: 1 });
     const [cqiFilters, setCqiFilters] = useState({ search: '', objective: 'all', status: 'active', confidence: 'all', sort: 'score_desc', page: 1 });
@@ -1973,7 +2019,15 @@ export default function AdsPage() {
             const matchesSearch = !search || String(campaign?.name || '').toLowerCase().includes(search);
             const matchesType = campaignTypeFilter === 'all' || campaign?.type === campaignTypeFilter;
             const matchesStatus = campaignStatusFilter === 'all' || campaign?.effectiveStatus === campaignStatusFilter;
-            return matchesSearch && matchesType && matchesStatus;
+            const minRoasVal = parseFloat(campaignMinRoas);
+            const matchesRoas = !minRoasVal || (campaign?.metrics?.purchaseRoas || 0) >= minRoasVal;
+            const minCtrVal = parseFloat(campaignMinCtr);
+            const matchesCtr = !minCtrVal || (campaign?.metrics?.ctr || 0) >= minCtrVal;
+            const maxCpmVal = parseFloat(campaignMaxCpm);
+            const matchesCpm = !maxCpmVal || (campaign?.metrics?.cpm || 0) <= maxCpmVal || (campaign?.metrics?.cpm || 0) === 0;
+            const minSpendVal = parseFloat(campaignMinSpend);
+            const matchesSpend = !minSpendVal || (campaign?.metrics?.spend || 0) >= minSpendVal;
+            return matchesSearch && matchesType && matchesStatus && matchesRoas && matchesCtr && matchesCpm && matchesSpend;
         });
 
         const sortValue = (campaign: any) => {
@@ -2010,7 +2064,7 @@ export default function AdsPage() {
             }
             return Number(sortValue(b)) - Number(sortValue(a));
         });
-    }, [campaigns, campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort]);
+    }, [campaigns, campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend]);
     const campaignPageSize = 50;
     const campaignTotalPages = Math.max(1, Math.ceil(filteredCampaigns.length / campaignPageSize));
     const campaignPageStart = (campaignPage - 1) * campaignPageSize;
@@ -2190,7 +2244,7 @@ export default function AdsPage() {
     const pagedVideoRows = paginateItems(filteredVideoRows, videoFilters.page, sectionPageSize);
     useEffect(() => {
         setCampaignPage(1);
-    }, [campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, datePreset, effectiveAccount]);
+    }, [campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend, datePreset, effectiveAccount]);
 
     useEffect(() => {
         setScaleFilters((current) => ({ ...current, page: 1 }));
@@ -2920,6 +2974,105 @@ export default function AdsPage() {
                                     <option value="name_asc">Sort: Name A-Z</option>
                                 </select>
                             </div>
+
+                            {/* Advanced metric filters */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                                    style={{
+                                        background: showAdvancedFilters ? 'rgba(99,102,241,0.14)' : 'rgba(255,255,255,0.04)',
+                                        border: `1px solid ${showAdvancedFilters ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`,
+                                        color: showAdvancedFilters ? '#c7d2fe' : 'var(--muted)',
+                                        padding: '8px 14px',
+                                        borderRadius: 10,
+                                        cursor: 'pointer',
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                                    {showAdvancedFilters ? 'Hide metric filters' : 'Metric filters'}
+                                    {(campaignMinRoas || campaignMinCtr || campaignMaxCpm || campaignMinSpend) && (
+                                        <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 800, marginLeft: 2 }}>
+                                            {[campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend].filter(Boolean).length}
+                                        </span>
+                                    )}
+                                </button>
+                                {(campaignMinRoas || campaignMinCtr || campaignMaxCpm || campaignMinSpend) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setCampaignMinRoas(''); setCampaignMinCtr(''); setCampaignMaxCpm(''); setCampaignMinSpend(''); }}
+                                        style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 8px' }}
+                                    >
+                                        Clear all filters
+                                    </button>
+                                )}
+                            </div>
+                            {showAdvancedFilters && (
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                                    gap: 12,
+                                    padding: '16px 18px',
+                                    borderRadius: 14,
+                                    background: 'rgba(99,102,241,0.04)',
+                                    border: '1px solid rgba(99,102,241,0.1)'
+                                }}>
+                                    <label style={{ display: 'grid', gap: 5 }}>
+                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min ROAS</span>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            value={campaignMinRoas}
+                                            onChange={(e) => setCampaignMinRoas(e.target.value)}
+                                            placeholder="e.g. 2.0"
+                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
+                                        />
+                                    </label>
+                                    <label style={{ display: 'grid', gap: 5 }}>
+                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min CTR %</span>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            value={campaignMinCtr}
+                                            onChange={(e) => setCampaignMinCtr(e.target.value)}
+                                            placeholder="e.g. 1.5"
+                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
+                                        />
+                                    </label>
+                                    <label style={{ display: 'grid', gap: 5 }}>
+                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Max CPM</span>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min="0"
+                                            value={campaignMaxCpm}
+                                            onChange={(e) => setCampaignMaxCpm(e.target.value)}
+                                            placeholder="e.g. 500"
+                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
+                                        />
+                                    </label>
+                                    <label style={{ display: 'grid', gap: 5 }}>
+                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min Spend</span>
+                                        <input
+                                            type="number"
+                                            step="100"
+                                            min="0"
+                                            value={campaignMinSpend}
+                                            onChange={(e) => setCampaignMinSpend(e.target.value)}
+                                            placeholder="e.g. 1000"
+                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
+                                        />
+                                    </label>
+                                </div>
+                            )}
 
                             <div style={{ overflowX: 'auto' }}>
                                 <table className="table">
