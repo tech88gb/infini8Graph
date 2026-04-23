@@ -3709,20 +3709,23 @@ export default function AdsPage() {
                                                 </div>
 
                                                 {/* Arrow with dropoff */}
-                                                {i < (funnelData.data.funnel?.length || 0) - 1 && (
-                                                    <div style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 8,
-                                                        padding: '8px 0',
-                                                        color: stage.dropoffRate > 50 ? '#ef4444' : stage.dropoffRate < 0 ? '#10b981' : '#94a3b8'
-                                                    }}>
-                                                        <ArrowRight size={16} style={{ transform: 'rotate(90deg)' }} />
-                                                        <span style={{ fontSize: 12, fontWeight: 500 }}>
-                                                            {stage.dropoffRate < 0 ? `+${Math.abs(stage.dropoffRate)}% increase` : `${stage.dropoffRate}% drop off`}
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                {i < (funnelData.data.funnel?.length || 0) - 1 && (() => {
+                                                    const nextStage = funnelData.data.funnel[i + 1];
+                                                    return (
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: 8,
+                                                            padding: '8px 0',
+                                                            color: nextStage.dropoffRate > 50 ? '#ef4444' : nextStage.dropoffRate < 0 ? '#10b981' : '#94a3b8'
+                                                        }}>
+                                                            <ArrowRight size={16} style={{ transform: 'rotate(90deg)' }} />
+                                                            <span style={{ fontSize: 12, fontWeight: 500 }}>
+                                                                {nextStage.dropoffRate < 0 ? `+${Math.abs(nextStage.dropoffRate)}% increase` : `${nextStage.dropoffRate}% drop off`}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         );
                                     })}
