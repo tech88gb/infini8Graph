@@ -134,6 +134,65 @@ function getConfidenceTone(label: string) {
     return { bg: 'rgba(148, 163, 184, 0.16)', color: '#cbd5e1' };
 }
 
+function getMaturityTone(label: string) {
+    if (label === 'Established') return { bg: 'rgba(16, 185, 129, 0.14)', color: '#86efac' };
+    if (label === 'Building') return { bg: 'rgba(245, 158, 11, 0.14)', color: '#fcd34d' };
+    return { bg: 'rgba(148, 163, 184, 0.16)', color: '#cbd5e1' };
+}
+
+function normalizeObjectiveGroup(value?: string | null) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'general';
+    if (normalized.includes('sales') || normalized.includes('conversion') || normalized.includes('catalog') || normalized.includes('purchase')) return 'sales';
+    if (normalized.includes('lead') || normalized.includes('message')) return 'leads';
+    if (normalized.includes('traffic') || normalized.includes('click')) return 'traffic';
+    if (normalized.includes('awareness') || normalized.includes('reach') || normalized.includes('video')) return 'awareness';
+    if (normalized.includes('engagement')) return 'engagement';
+    if (normalized.includes('app')) return 'app_promotion';
+    return normalized;
+}
+
+function getObjectiveFilterLabel(value: string) {
+    switch (value) {
+        case 'sales':
+            return 'Sales';
+        case 'leads':
+            return 'Lead Gen';
+        case 'traffic':
+            return 'Traffic';
+        case 'awareness':
+            return 'Awareness';
+        case 'engagement':
+            return 'Engagement';
+        case 'app_promotion':
+            return 'App Promotion';
+        default:
+            return toTitleCase(value);
+    }
+}
+
+function statusMatchesFilter(status: string | undefined | null, filter: string) {
+    const normalized = String(status || '').toUpperCase();
+    if (filter === 'all') return true;
+    if (filter === 'active') return normalized === 'ACTIVE';
+    if (filter === 'inactive') return normalized !== 'ACTIVE';
+    if (filter === 'paused') return normalized.includes('PAUSED');
+    return normalized === filter.toUpperCase();
+}
+
+function paginateItems<T>(items: T[], page: number, pageSize: number) {
+    const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+    const currentPage = Math.min(Math.max(page, 1), totalPages);
+    const start = (currentPage - 1) * pageSize;
+    return {
+        page: currentPage,
+        totalPages,
+        start,
+        end: Math.min(start + pageSize, items.length),
+        items: items.slice(start, start + pageSize)
+    };
+}
+
 function findMetricEntry(entries: any[] = [], candidates: string[] = []) {
     return entries.find((entry: any) => {
         const type = String(entry?.type || entry?.action_type || '').toLowerCase();
@@ -1437,6 +1496,112 @@ function SectionCard({ title, subtitle, children, collapsible = false, defaultOp
     );
 }
 
+function FilterSelect({
+    label,
+    value,
+    onChange,
+    options,
+    tooltip
+}: {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    options: Array<{ value: string; label: string }>;
+    tooltip?: string;
+}) {
+    return (
+        <label style={{ display: 'grid', gap: 6, minWidth: 150 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>
+                {label}
+                {tooltip && <InfoTooltip text={tooltip} />}
+            </span>
+            <select
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                style={{
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'var(--background)',
+                    color: 'var(--foreground)',
+                    fontSize: 12
+                }}
+            >
+                {options.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+            </select>
+        </label>
+    );
+}
+
+function FilterInput({
+    label,
+    value,
+    onChange,
+    placeholder,
+    tooltip
+}: {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    tooltip?: string;
+}) {
+    return (
+        <label style={{ display: 'grid', gap: 6, minWidth: 220, flex: 1 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>
+                {label}
+                {tooltip && <InfoTooltip text={tooltip} />}
+            </span>
+            <input
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder={placeholder}
+                style={{
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'var(--background)',
+                    color: 'var(--foreground)',
+                    fontSize: 12
+                }}
+            />
+        </label>
+    );
+}
+
+function SectionPager({
+    page,
+    totalPages,
+    count,
+    pageSize,
+    onPageChange
+}: {
+    page: number;
+    totalPages: number;
+    count: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+}) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                Showing {count === 0 ? '0' : `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, count)}`} of {count}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+                    Prev
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Page {page} of {totalPages}</span>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+                    Next
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function RankingBadge({ value, type }: { value: string; type: 'quality' | 'engagement' | 'conversion' }) {
     const normalizedValue = (value || 'UNKNOWN').toUpperCase();
     const isUnknown = normalizedValue === 'UNKNOWN' || normalizedValue === '' || normalizedValue === 'N/A';
@@ -1536,6 +1701,12 @@ export default function AdsPage() {
     const [campaignStatusFilter, setCampaignStatusFilter] = useState('all');
     const [campaignSort, setCampaignSort] = useState('spend_desc');
     const [campaignPage, setCampaignPage] = useState(1);
+    const [scaleFilters, setScaleFilters] = useState({ search: '', objective: 'all', status: 'active', sort: 'score_desc', page: 1 });
+    const [cqiFilters, setCqiFilters] = useState({ search: '', objective: 'all', status: 'active', confidence: 'all', sort: 'score_desc', page: 1 });
+    const [creativeFilters, setCreativeFilters] = useState({ search: '', status: 'all', format: 'all', diagnosis: 'all', sort: 'score_desc', page: 1 });
+    const [deliveryFilters, setDeliveryFilters] = useState({ search: '', objective: 'all', status: 'active', readiness: 'all', sort: 'spend_desc', page: 1 });
+    const [funnelFilters, setFunnelFilters] = useState({ search: '', objective: 'all', status: 'active', sort: 'roas_desc', page: 1 });
+    const [videoFilters, setVideoFilters] = useState({ search: '', status: 'all', confidence: 'all', diagnosis: 'all', sort: 'quality_desc', page: 1 });
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
     const creativePageSize = 4;
@@ -1837,15 +2008,244 @@ export default function AdsPage() {
     const campaignRangeLabel = filteredCampaigns.length > 0
         ? `${campaignPageStart + 1}-${Math.min(campaignPageStart + campaignPageSize, filteredCampaigns.length)}`
         : '0-0';
+    const sectionPageSize = 8;
+    const intelligenceCampaignRows = useMemo(() => (intelligenceData?.data?.campaigns || []).filter((campaign: any) => campaign?.spend > 0), [intelligenceData]);
+    const intelligenceObjectiveOptions = useMemo(() => {
+        const values = Array.from(new Set(intelligenceCampaignRows.map((campaign: any) => normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective)))) as string[];
+        return [{ value: 'all', label: 'All objectives' }, ...values.map((value) => ({ value, label: getObjectiveFilterLabel(value) }))];
+    }, [intelligenceCampaignRows]);
+    const filteredScaleCampaigns = useMemo(() => {
+        const search = scaleFilters.search.trim().toLowerCase();
+        const rows = intelligenceCampaignRows.filter((campaign: any) => {
+            const objectiveGroup = normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective);
+            return (!search || String(campaign.name || '').toLowerCase().includes(search))
+                && (scaleFilters.objective === 'all' || objectiveGroup === scaleFilters.objective)
+                && statusMatchesFilter(campaign.status, scaleFilters.status);
+        });
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (scaleFilters.sort) {
+                case 'roas_desc':
+                    return Number(b.roas || 0) - Number(a.roas || 0);
+                case 'spend_desc':
+                    return Number(b.spend || 0) - Number(a.spend || 0);
+                case 'purchases_desc':
+                    return Number(b.purchases || 0) - Number(a.purchases || 0);
+                case 'ctr_desc':
+                    return Number(b.ctr || 0) - Number(a.ctr || 0);
+                default:
+                    return Number(b.efficiencyScore || 0) - Number(a.efficiencyScore || 0);
+            }
+        });
+    }, [intelligenceCampaignRows, scaleFilters]);
+    const pagedScaleCampaigns = paginateItems(filteredScaleCampaigns, scaleFilters.page, sectionPageSize);
+
+    const cqiRows = useMemo(() => (advancedData?.data?.campaignQualityIndex || advancedData?.data?.leadQualityScore)?.campaigns || [], [advancedData]);
+    const cqiObjectiveOptions = useMemo(() => {
+        const values = Array.from(new Set(cqiRows.map((campaign: any) => normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective)))) as string[];
+        return [{ value: 'all', label: 'All objectives' }, ...values.map((value) => ({ value, label: getObjectiveFilterLabel(value) }))];
+    }, [cqiRows]);
+    const filteredCqiCampaigns = useMemo(() => {
+        const search = cqiFilters.search.trim().toLowerCase();
+        const rows = cqiRows.filter((campaign: any) => {
+            const objectiveGroup = normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective);
+            return (!search || String(campaign.name || '').toLowerCase().includes(search))
+                && (cqiFilters.objective === 'all' || objectiveGroup === cqiFilters.objective)
+                && statusMatchesFilter(campaign.status, cqiFilters.status)
+                && (cqiFilters.confidence === 'all' || String(campaign.metrics?.confidenceLabel || '').toLowerCase() === cqiFilters.confidence);
+        });
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (cqiFilters.sort) {
+                case 'roas_desc':
+                    return Number(b.metrics?.roas || 0) - Number(a.metrics?.roas || 0);
+                case 'ctr_desc':
+                    return Number(b.metrics?.ctr || 0) - Number(a.metrics?.ctr || 0);
+                case 'spend_desc':
+                    return Number(b.spend || 0) - Number(a.spend || 0);
+                default:
+                    return Number(b.lqs || 0) - Number(a.lqs || 0);
+            }
+        });
+    }, [cqiRows, cqiFilters]);
+    const pagedCqiCampaigns = paginateItems(filteredCqiCampaigns, cqiFilters.page, sectionPageSize);
+
+    const creativeRows = useMemo(() => advancedData?.data?.creativeForensics || [], [advancedData]);
+    const filteredCreativeRows = useMemo(() => {
+        const search = creativeFilters.search.trim().toLowerCase();
+        const rows = creativeRows.filter((creative: any) =>
+            (!search || String(creative.name || '').toLowerCase().includes(search))
+            && statusMatchesFilter(creative.effectiveStatus || creative.status, creativeFilters.status)
+            && (creativeFilters.format === 'all' || String(creative.format || (creative.hasVideo ? 'video' : 'static')) === creativeFilters.format)
+            && (creativeFilters.diagnosis === 'all' || String(creative.pattern?.type || 'mixed') === creativeFilters.diagnosis)
+        );
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (creativeFilters.sort) {
+                case 'roas_desc':
+                    return Number(b.roas || 0) - Number(a.roas || 0);
+                case 'spend_desc':
+                    return Number(b.spend || 0) - Number(a.spend || 0);
+                case 'results_desc':
+                    return Number(b.conversions || 0) - Number(a.conversions || 0);
+                default:
+                    return Number(b.performanceScore || 0) - Number(a.performanceScore || 0);
+            }
+        });
+    }, [creativeRows, creativeFilters]);
+    const pagedCreativeRows = paginateItems(filteredCreativeRows, creativeFilters.page, sectionPageSize);
+
+    const deliveryRows = useMemo(() => advancedData?.data?.learningPhase || [], [advancedData]);
+    const deliveryObjectiveOptions = useMemo(() => {
+        const values = Array.from(new Set(deliveryRows.map((row: any) => normalizeObjectiveGroup(row.campaignObjective || row.objectiveType)))) as string[];
+        return [{ value: 'all', label: 'All objectives' }, ...values.map((value) => ({ value, label: getObjectiveFilterLabel(value) }))];
+    }, [deliveryRows]);
+    const filteredDeliveryRows = useMemo(() => {
+        const search = deliveryFilters.search.trim().toLowerCase();
+        const rows = deliveryRows.filter((row: any) => {
+            const objectiveGroup = normalizeObjectiveGroup(row.campaignObjective || row.objectiveType);
+            const readiness = String(row.learningStatus?.status || 'unknown');
+            return (!search || String(row.name || '').toLowerCase().includes(search))
+                && (deliveryFilters.objective === 'all' || objectiveGroup === deliveryFilters.objective)
+                && statusMatchesFilter(row.effectiveStatus, deliveryFilters.status)
+                && (deliveryFilters.readiness === 'all' || readiness === deliveryFilters.readiness);
+        });
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (deliveryFilters.sort) {
+                case 'pace_desc':
+                    return Number(b.weeklyPace || 0) - Number(a.weeklyPace || 0);
+                case 'days_desc':
+                    return Number(b.daysActive || 0) - Number(a.daysActive || 0);
+                default:
+                    return Number(b.spend || 0) - Number(a.spend || 0);
+            }
+        });
+    }, [deliveryRows, deliveryFilters]);
+    const pagedDeliveryRows = paginateItems(filteredDeliveryRows, deliveryFilters.page, sectionPageSize);
+
+    const funnelRows = useMemo(() => deepInsightsData?.data?.campaignFunnels || [], [deepInsightsData]);
+    const funnelObjectiveOptions = useMemo(() => {
+        const values = Array.from(new Set(funnelRows.map((campaign: any) => normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective)))) as string[];
+        return [{ value: 'all', label: 'All objectives' }, ...values.map((value) => ({ value, label: getObjectiveFilterLabel(value) }))];
+    }, [funnelRows]);
+    const filteredFunnelRows = useMemo(() => {
+        const search = funnelFilters.search.trim().toLowerCase();
+        const rows = funnelRows.filter((campaign: any) => {
+            const objectiveGroup = normalizeObjectiveGroup(campaign.objectiveGroup || campaign.objective);
+            return (!search || String(campaign.campaignName || '').toLowerCase().includes(search))
+                && (funnelFilters.objective === 'all' || objectiveGroup === funnelFilters.objective)
+                && statusMatchesFilter(campaign.status, funnelFilters.status);
+        });
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (funnelFilters.sort) {
+                case 'click_loss_asc':
+                    return Number(a.dropoffs?.bounceGap ?? Number.MAX_SAFE_INTEGER) - Number(b.dropoffs?.bounceGap ?? Number.MAX_SAFE_INTEGER);
+                case 'atc_desc':
+                    return Number(b.conversions?.atcToPurchaseRate || 0) - Number(a.conversions?.atcToPurchaseRate || 0);
+                case 'spend_desc':
+                    return Number(b.spend || 0) - Number(a.spend || 0);
+                default:
+                    return Number(b.conversions?.roas || 0) - Number(a.conversions?.roas || 0);
+            }
+        });
+    }, [funnelRows, funnelFilters]);
+    const pagedFunnelRows = paginateItems(filteredFunnelRows, funnelFilters.page, sectionPageSize);
+
+    const videoRows = useMemo(() => deepInsightsData?.data?.videoHookAnalysis || [], [deepInsightsData]);
+    const filteredVideoRows = useMemo(() => {
+        const search = videoFilters.search.trim().toLowerCase();
+        const rows = videoRows.filter((video: any) =>
+            (!search || String(video.adName || '').toLowerCase().includes(search))
+            && statusMatchesFilter(video.isActive ? 'ACTIVE' : 'INACTIVE', videoFilters.status)
+            && (videoFilters.confidence === 'all' || String(video.confidenceLabel || '').toLowerCase() === videoFilters.confidence)
+            && (videoFilters.diagnosis === 'all' || String(video.pattern || '').toLowerCase().includes(videoFilters.diagnosis))
+        );
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (videoFilters.sort) {
+                case 'hook_desc':
+                    return Number(b.retention?.hookRate || 0) - Number(a.retention?.hookRate || 0);
+                case 'spend_desc':
+                    return Number(b.spend || 0) - Number(a.spend || 0);
+                case 'results_desc':
+                    return Number(b.conversions || 0) - Number(a.conversions || 0);
+                default:
+                    return Number(b.qualityScore || 0) - Number(a.qualityScore || 0);
+            }
+        });
+    }, [videoRows, videoFilters]);
+    const pagedVideoRows = paginateItems(filteredVideoRows, videoFilters.page, sectionPageSize);
     useEffect(() => {
         setCampaignPage(1);
     }, [campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        setScaleFilters((current) => ({ ...current, page: 1 }));
+    }, [scaleFilters.search, scaleFilters.objective, scaleFilters.status, scaleFilters.sort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        setCqiFilters((current) => ({ ...current, page: 1 }));
+    }, [cqiFilters.search, cqiFilters.objective, cqiFilters.status, cqiFilters.confidence, cqiFilters.sort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        setCreativeFilters((current) => ({ ...current, page: 1 }));
+    }, [creativeFilters.search, creativeFilters.status, creativeFilters.format, creativeFilters.diagnosis, creativeFilters.sort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        setDeliveryFilters((current) => ({ ...current, page: 1 }));
+    }, [deliveryFilters.search, deliveryFilters.objective, deliveryFilters.status, deliveryFilters.readiness, deliveryFilters.sort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        setFunnelFilters((current) => ({ ...current, page: 1 }));
+    }, [funnelFilters.search, funnelFilters.objective, funnelFilters.status, funnelFilters.sort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
+        setVideoFilters((current) => ({ ...current, page: 1 }));
+    }, [videoFilters.search, videoFilters.status, videoFilters.confidence, videoFilters.diagnosis, videoFilters.sort, datePreset, effectiveAccount]);
 
     useEffect(() => {
         if (campaignPage > campaignTotalPages) {
             setCampaignPage(campaignTotalPages);
         }
     }, [campaignPage, campaignTotalPages]);
+
+    useEffect(() => {
+        if (scaleFilters.page > pagedScaleCampaigns.totalPages) {
+            setScaleFilters((current) => ({ ...current, page: pagedScaleCampaigns.totalPages }));
+        }
+    }, [scaleFilters.page, pagedScaleCampaigns.totalPages]);
+
+    useEffect(() => {
+        if (cqiFilters.page > pagedCqiCampaigns.totalPages) {
+            setCqiFilters((current) => ({ ...current, page: pagedCqiCampaigns.totalPages }));
+        }
+    }, [cqiFilters.page, pagedCqiCampaigns.totalPages]);
+
+    useEffect(() => {
+        if (creativeFilters.page > pagedCreativeRows.totalPages) {
+            setCreativeFilters((current) => ({ ...current, page: pagedCreativeRows.totalPages }));
+        }
+    }, [creativeFilters.page, pagedCreativeRows.totalPages]);
+
+    useEffect(() => {
+        if (deliveryFilters.page > pagedDeliveryRows.totalPages) {
+            setDeliveryFilters((current) => ({ ...current, page: pagedDeliveryRows.totalPages }));
+        }
+    }, [deliveryFilters.page, pagedDeliveryRows.totalPages]);
+
+    useEffect(() => {
+        if (funnelFilters.page > pagedFunnelRows.totalPages) {
+            setFunnelFilters((current) => ({ ...current, page: pagedFunnelRows.totalPages }));
+        }
+    }, [funnelFilters.page, pagedFunnelRows.totalPages]);
+
+    useEffect(() => {
+        if (videoFilters.page > pagedVideoRows.totalPages) {
+            setVideoFilters((current) => ({ ...current, page: pagedVideoRows.totalPages }));
+        }
+    }, [videoFilters.page, pagedVideoRows.totalPages]);
 
     useEffect(() => {
         setSelectedCampaignId(null);
@@ -3339,10 +3739,52 @@ export default function AdsPage() {
                                         <div className="text-muted" style={{ fontSize: 12, marginBottom: 14 }}>
                                             A high score means the campaign is combining efficiency with enough delivery volume to trust the result. Low-spend campaigns can still have strong ROAS, but they will show lower confidence until they prove at scale.
                                         </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                            <FilterInput
+                                                label="Find campaign"
+                                                value={scaleFilters.search}
+                                                onChange={(value) => setScaleFilters((current) => ({ ...current, search: value }))}
+                                                placeholder="Search campaign name"
+                                                tooltip="Filter the ranked list by campaign name inside the selected date range."
+                                            />
+                                            <FilterSelect
+                                                label="Objective"
+                                                value={scaleFilters.objective}
+                                                onChange={(value) => setScaleFilters((current) => ({ ...current, objective: value }))}
+                                                options={intelligenceObjectiveOptions}
+                                                tooltip="Keep the ranking apples-to-apples by narrowing to a single objective family."
+                                            />
+                                            <FilterSelect
+                                                label="Status"
+                                                value={scaleFilters.status}
+                                                onChange={(value) => setScaleFilters((current) => ({ ...current, status: value }))}
+                                                options={[
+                                                    { value: 'active', label: 'Active only' },
+                                                    { value: 'all', label: 'All statuses' },
+                                                    { value: 'inactive', label: 'Inactive only' }
+                                                ]}
+                                                tooltip="Use Active only to focus on campaigns you can actually scale right now."
+                                            />
+                                            <FilterSelect
+                                                label="Sort"
+                                                value={scaleFilters.sort}
+                                                onChange={(value) => setScaleFilters((current) => ({ ...current, sort: value }))}
+                                                options={[
+                                                    { value: 'score_desc', label: 'Performance score' },
+                                                    { value: 'roas_desc', label: 'ROAS' },
+                                                    { value: 'spend_desc', label: 'Spend' },
+                                                    { value: 'purchases_desc', label: 'Purchases' },
+                                                    { value: 'ctr_desc', label: 'CTR' }
+                                                ]}
+                                                tooltip="Top 8 are shown per page. Change sort if you want to bias toward efficiency, spend depth, or pure result volume."
+                                            />
+                                        </div>
 
                                         <div style={{ display: 'grid', gap: 12 }}>
-                                            {campaigns.slice(0, 5).map((c: any, i: number) => {
+                                            {pagedScaleCampaigns.items.map((c: any, i: number) => {
                                                 const scoreTone = getScoreTone(c.efficiencyScore || 0);
+                                                const confidenceTone = getConfidenceTone(c.confidenceLabel || 'Low confidence');
+                                                const maturityTone = getMaturityTone(c.maturity?.label || 'Early');
                                                 return (
                                                     <div key={c.id} style={{
                                                         display: 'grid',
@@ -3358,24 +3800,30 @@ export default function AdsPage() {
                                                             width: 36,
                                                             height: 36,
                                                             borderRadius: '50%',
-                                                            background: COLORS[i % COLORS.length],
+                                                            background: COLORS[(pagedScaleCampaigns.start + i) % COLORS.length],
                                                             color: 'white',
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
                                                             fontWeight: 700
                                                         }}>
-                                                            {i + 1}
+                                                            {pagedScaleCampaigns.start + i + 1}
                                                         </div>
 
                                                         <div style={{ minWidth: 0 }}>
                                                             <div style={{ fontWeight: 700, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
                                                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                                                 <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#a5b4fc', fontSize: 12 }}>
-                                                                    {toTitleCase((c.objective || '').replace('OUTCOME_', '').toLowerCase()) || 'Unknown Objective'}
+                                                                    {c.objectiveLabel || toTitleCase((c.objective || '').replace('OUTCOME_', '').toLowerCase()) || 'Unknown Objective'}
                                                                 </span>
                                                                 <span style={{ padding: '4px 8px', borderRadius: 999, background: c.status === 'ACTIVE' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.16)', color: c.status === 'ACTIVE' ? '#86efac' : '#cbd5e1', fontSize: 12 }}>
                                                                     {c.status}
+                                                                </span>
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: confidenceTone.bg, color: confidenceTone.color, fontSize: 12, fontWeight: 600 }}>
+                                                                    {c.confidenceLabel || 'Low confidence'}
+                                                                </span>
+                                                                <span style={{ padding: '4px 8px', borderRadius: 999, background: maturityTone.bg, color: maturityTone.color, fontSize: 12, fontWeight: 600 }}>
+                                                                    {c.maturity?.label || 'Early'}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -3389,7 +3837,7 @@ export default function AdsPage() {
                                                             <div>
                                                                 <div className="text-muted" style={{ fontSize: 11 }}>Purchases</div>
                                                                 <div style={{ fontWeight: 700 }}>{formatNumber(c.purchases || 0)}</div>
-                                                                <div className="text-muted" style={{ fontSize: 11 }}>CVR {formatCompactPercent(c.conversionRate || 0)}</div>
+                                                                <div className="text-muted" style={{ fontSize: 11 }}>CVR {formatCompactPercent(c.conversionRate || 0)} from {formatNumber(c.purchases || 0)} / {formatNumber(c.clicks || 0)} clicks</div>
                                                             </div>
                                                             <div>
                                                                 <div className="text-muted" style={{ fontSize: 11 }}>ROAS</div>
@@ -3423,6 +3871,18 @@ export default function AdsPage() {
                                                 );
                                             })}
                                         </div>
+                                        {!pagedScaleCampaigns.items.length && (
+                                            <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                                No campaigns match the current scale filters for this date range.
+                                            </div>
+                                        )}
+                                        <SectionPager
+                                            page={pagedScaleCampaigns.page}
+                                            totalPages={pagedScaleCampaigns.totalPages}
+                                            count={filteredScaleCampaigns.length}
+                                            pageSize={sectionPageSize}
+                                            onPageChange={(page) => setScaleFilters((current) => ({ ...current, page }))}
+                                        />
                                     </SectionCard>
                                 );
                             })()}
@@ -3666,6 +4126,57 @@ export default function AdsPage() {
                             {/* Campaign Quality Index */}
                             {(advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore) && (
                                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Campaign Quality Index <InfoTooltip text="CQI is a blended campaign-quality score built from real CTR, click-to-conversion rate, CPA efficiency, spend confidence, and a frequency penalty. Read it as a practical campaign quality read, not as a pure lead score." /></span>} subtitle="Ranks campaigns by traffic quality, conversion efficiency, and cost discipline">
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                        <FilterInput
+                                            label="Find campaign"
+                                            value={cqiFilters.search}
+                                            onChange={(value) => setCqiFilters((current) => ({ ...current, search: value }))}
+                                            placeholder="Search CQI campaign"
+                                            tooltip="Search within the campaigns included in the selected CQI date range."
+                                        />
+                                        <FilterSelect
+                                            label="Objective"
+                                            value={cqiFilters.objective}
+                                            onChange={(value) => setCqiFilters((current) => ({ ...current, objective: value }))}
+                                            options={cqiObjectiveOptions}
+                                            tooltip="Narrow CQI to one objective family so score comparisons stay more apples-to-apples."
+                                        />
+                                        <FilterSelect
+                                            label="Status"
+                                            value={cqiFilters.status}
+                                            onChange={(value) => setCqiFilters((current) => ({ ...current, status: value }))}
+                                            options={[
+                                                { value: 'active', label: 'Active only' },
+                                                { value: 'all', label: 'All statuses' },
+                                                { value: 'inactive', label: 'Inactive only' }
+                                            ]}
+                                            tooltip="Use Active only to focus on campaigns you can act on right now."
+                                        />
+                                        <FilterSelect
+                                            label="Confidence"
+                                            value={cqiFilters.confidence}
+                                            onChange={(value) => setCqiFilters((current) => ({ ...current, confidence: value }))}
+                                            options={[
+                                                { value: 'all', label: 'All confidence' },
+                                                { value: 'high confidence', label: 'High confidence' },
+                                                { value: 'medium confidence', label: 'Medium confidence' },
+                                                { value: 'low confidence', label: 'Low confidence' }
+                                            ]}
+                                            tooltip="Confidence reflects how much spend, clicks, and conversion evidence are behind the CQI read."
+                                        />
+                                        <FilterSelect
+                                            label="Sort"
+                                            value={cqiFilters.sort}
+                                            onChange={(value) => setCqiFilters((current) => ({ ...current, sort: value }))}
+                                            options={[
+                                                { value: 'score_desc', label: 'CQI score' },
+                                                { value: 'roas_desc', label: 'ROAS' },
+                                                { value: 'ctr_desc', label: 'CTR' },
+                                                { value: 'spend_desc', label: 'Spend' }
+                                            ]}
+                                            tooltip="Top 8 are shown per page, with sort deciding which campaigns surface first."
+                                        />
+                                    </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24 }}>
                                         <div style={{ textAlign: 'center' }}>
                                             <div style={{
@@ -3678,7 +4189,10 @@ export default function AdsPage() {
                                             <div className="text-muted" style={{ fontSize: 12 }}>Average CQI</div>
                                         </div>
                                         <div style={{ display: 'grid', gap: 8 }}>
-                                            {((advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore).campaigns || []).slice(0, 5).map((c: any) => (
+                                            {pagedCqiCampaigns.items.map((c: any) => {
+                                                const confidenceTone = getConfidenceTone(c.metrics?.confidenceLabel || 'Low confidence');
+                                                const maturityTone = getMaturityTone(c.maturity?.label || 'Early');
+                                                return (
                                                 <div key={c.id} style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -3703,11 +4217,16 @@ export default function AdsPage() {
                                                     </div>
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ fontWeight: 500, fontSize: 13 }}>{c.name}</div>
+                                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.12)', color: '#a5b4fc', fontSize: 10 }}>{c.objectiveLabel || getObjectiveFilterLabel(normalizeObjectiveGroup(c.objective))}</span>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: confidenceTone.bg, color: confidenceTone.color, fontSize: 10, fontWeight: 700 }}>{c.metrics.confidenceLabel || 'Low confidence'}</span>
+                                                            <span style={{ padding: '3px 8px', borderRadius: 999, background: maturityTone.bg, color: maturityTone.color, fontSize: 10, fontWeight: 700 }}>{c.maturity?.label || 'Early'}</span>
+                                                        </div>
                                                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                                                             CTR: {c.metrics.ctr}% • Click CVR: {c.metrics.conversionRate}% • CPA: {c.metrics.cpa ? formatCurrency(parseFloat(c.metrics.cpa)) : '—'}
                                                         </div>
                                                         <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
-                                                            ROAS: {c.metrics.roas ? formatRoas(c.metrics.roas) : '—'} • {c.metrics.confidenceLabel || 'Low confidence'}
+                                                            ROAS: {c.metrics.roas ? formatRoas(c.metrics.roas) : '—'} • {formatNumber(c.conversions || 0)} conversions from {formatNumber(c.clicks || 0)} clicks
                                                         </div>
                                                     </div>
                                                     <div style={{ textAlign: 'right' }}>
@@ -3717,9 +4236,22 @@ export default function AdsPage() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            );
+                                            })}
+                                            {!pagedCqiCampaigns.items.length && (
+                                                <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                                    No campaigns match the current CQI filters for this date range.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
+                                    <SectionPager
+                                        page={pagedCqiCampaigns.page}
+                                        totalPages={pagedCqiCampaigns.totalPages}
+                                        count={filteredCqiCampaigns.length}
+                                        pageSize={sectionPageSize}
+                                        onPageChange={(page) => setCqiFilters((current) => ({ ...current, page }))}
+                                    />
                                 </SectionCard>
                             )}
 
@@ -3735,11 +4267,71 @@ export default function AdsPage() {
                                 <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
                                     The label is a diagnosis, not a vanity badge. Winners combine conversion proof and efficiency, and now also need to be active for at least 3 days with at least ₹2,000 spent. Traffic mismatch means the ad earns clicks but not enough downstream action. Early read means it simply has not spent enough yet to judge fairly.
                                 </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                    <FilterInput
+                                        label="Find creative"
+                                        value={creativeFilters.search}
+                                        onChange={(value) => setCreativeFilters((current) => ({ ...current, search: value }))}
+                                        placeholder="Search creative name"
+                                        tooltip="Search creative cards by ad name in the selected date range."
+                                    />
+                                    <FilterSelect
+                                        label="Status"
+                                        value={creativeFilters.status}
+                                        onChange={(value) => setCreativeFilters((current) => ({ ...current, status: value }))}
+                                        options={[
+                                            { value: 'all', label: 'All statuses' },
+                                            { value: 'active', label: 'Active only' },
+                                            { value: 'inactive', label: 'Inactive only' }
+                                        ]}
+                                        tooltip="Use Active only when you want the creative forensics view to focus on live ads."
+                                    />
+                                    <FilterSelect
+                                        label="Format"
+                                        value={creativeFilters.format}
+                                        onChange={(value) => setCreativeFilters((current) => ({ ...current, format: value }))}
+                                        options={[
+                                            { value: 'all', label: 'All formats' },
+                                            { value: 'video', label: 'Video only' },
+                                            { value: 'static', label: 'Static only' }
+                                        ]}
+                                        tooltip="Separate video ads from static units when retention signals would otherwise dominate the read."
+                                    />
+                                    <FilterSelect
+                                        label="Diagnosis"
+                                        value={creativeFilters.diagnosis}
+                                        onChange={(value) => setCreativeFilters((current) => ({ ...current, diagnosis: value }))}
+                                        options={[
+                                            { value: 'all', label: 'All diagnoses' },
+                                            { value: 'winner', label: 'Winner' },
+                                            { value: 'mixed', label: 'Mixed read' },
+                                            { value: 'traffic_mismatch', label: 'Traffic mismatch' },
+                                            { value: 'burning_spend', label: 'Burning spend' },
+                                            { value: 'early_read', label: 'Early read' },
+                                            { value: 'hook_issue', label: 'Hook weakness' }
+                                        ]}
+                                        tooltip="Filter to the specific creative diagnosis you want to investigate."
+                                    />
+                                    <FilterSelect
+                                        label="Sort"
+                                        value={creativeFilters.sort}
+                                        onChange={(value) => setCreativeFilters((current) => ({ ...current, sort: value }))}
+                                        options={[
+                                            { value: 'score_desc', label: 'Creative score' },
+                                            { value: 'roas_desc', label: 'ROAS' },
+                                            { value: 'spend_desc', label: 'Spend' },
+                                            { value: 'results_desc', label: 'Results' }
+                                        ]}
+                                        tooltip="Top 8 are shown per page. Sort determines which creative cards surface first."
+                                    />
+                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                                    {(advancedData.data.creativeForensics || []).slice(0, 8).map((ad: any) => {
+                                    {pagedCreativeRows.items.map((ad: any) => {
                                         const pattern = ad.pattern || { label: 'Mixed Read', color: '#64748b', insight: 'Mixed performance signals.', action: 'Keep monitoring.' };
                                         const performanceScore = parseFloat(ad.performanceScore || 0);
                                         const shouldContainPreview = ad.previewSource === 'thumbnail';
+                                        const confidenceTone = getConfidenceTone(ad.confidenceLabel || 'Low confidence');
+                                        const maturityTone = getMaturityTone(ad.maturity?.label || 'Early');
 
                                         return (
                                             <div key={ad.id} style={{
@@ -3808,7 +4400,7 @@ export default function AdsPage() {
                                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                                             {ad.hasVideo && (
                                                                 <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(15,23,42,0.78)', color: '#cbd5e1', fontSize: 10 }}>
-                                                                    Video
+                                                                    {ad.formatLabel || 'Video'}
                                                                 </span>
                                                             )}
                                                             {ad.fatigue?.status !== 'healthy' && (
@@ -3852,8 +4444,16 @@ export default function AdsPage() {
                                                     <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
                                                         Spend {formatCurrency(ad.spend)} • Freq {ad.frequency}x • {ad.isActive ? 'Active' : 'Inactive'} {ad.daysActive}d
                                                     </div>
-                                                    <div style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
-                                                        ROAS {ad.roas ? formatRoas(ad.roas) : '—'} • {ad.confidenceLabel || 'Low confidence'}
+                                                    <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                        <span style={{ padding: '3px 8px', borderRadius: 999, background: confidenceTone.bg, color: confidenceTone.color, fontSize: 10, fontWeight: 700 }}>
+                                                            {ad.confidenceLabel || 'Low confidence'}
+                                                        </span>
+                                                        <span style={{ padding: '3px 8px', borderRadius: 999, background: maturityTone.bg, color: maturityTone.color, fontSize: 10, fontWeight: 700 }}>
+                                                            {ad.maturity?.label || 'Early'}
+                                                        </span>
+                                                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                            ROAS {ad.roas ? formatRoas(ad.roas) : '—'} • {formatNumber(ad.conversions)} results from {formatNumber(ad.clicks || 0)} clicks
+                                                        </span>
                                                     </div>
 
                                                     {ad.hasVideo && ad.videoMetrics && (
@@ -3898,6 +4498,18 @@ export default function AdsPage() {
                                         );
                                     })}
                                 </div>
+                                {!pagedCreativeRows.items.length && (
+                                    <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                        No creatives match the current diagnostics filters for this date range.
+                                    </div>
+                                )}
+                                <SectionPager
+                                    page={pagedCreativeRows.page}
+                                    totalPages={pagedCreativeRows.totalPages}
+                                    count={filteredCreativeRows.length}
+                                    pageSize={sectionPageSize}
+                                    onPageChange={(page) => setCreativeFilters((current) => ({ ...current, page }))}
+                                />
                                 </>
                                 ) : (
                                     <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.45)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--muted)' }}>
@@ -3941,8 +4553,62 @@ export default function AdsPage() {
                                     <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
                                         This section is based on each ad set&apos;s <strong>objective</strong> and <strong>optimization goal</strong>. Conversion-style ad sets are judged on optimization-event pace. Awareness-style ad sets are judged on delivery stability, not a fake 50-conversion target.
                                     </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                        <FilterInput
+                                            label="Find ad set"
+                                            value={deliveryFilters.search}
+                                            onChange={(value) => setDeliveryFilters((current) => ({ ...current, search: value }))}
+                                            placeholder="Search ad set name"
+                                            tooltip="Search delivery-readiness rows by ad set name within the selected date range."
+                                        />
+                                        <FilterSelect
+                                            label="Objective"
+                                            value={deliveryFilters.objective}
+                                            onChange={(value) => setDeliveryFilters((current) => ({ ...current, objective: value }))}
+                                            options={deliveryObjectiveOptions}
+                                            tooltip="Filter to one objective family so delivery-readiness benchmarks stay comparable."
+                                        />
+                                        <FilterSelect
+                                            label="Status"
+                                            value={deliveryFilters.status}
+                                            onChange={(value) => setDeliveryFilters((current) => ({ ...current, status: value }))}
+                                            options={[
+                                                { value: 'active', label: 'Active only' },
+                                                { value: 'all', label: 'All statuses' },
+                                                { value: 'paused', label: 'Paused only' },
+                                                { value: 'inactive', label: 'Inactive only' }
+                                            ]}
+                                            tooltip="Focus on Active only if you want the list to reflect rows you can scale or fix now."
+                                        />
+                                        <FilterSelect
+                                            label="Readiness"
+                                            value={deliveryFilters.readiness}
+                                            onChange={(value) => setDeliveryFilters((current) => ({ ...current, readiness: value }))}
+                                            options={[
+                                                { value: 'all', label: 'All readiness states' },
+                                                { value: 'active', label: 'Stable delivery' },
+                                                { value: 'delivery_active', label: 'Delivery stable' },
+                                                { value: 'delivery_learning', label: 'New delivery' },
+                                                { value: 'learning', label: 'Learning' },
+                                                { value: 'limited', label: 'Learning limited' },
+                                                { value: 'unknown', label: 'Unknown / paused' }
+                                            ]}
+                                            tooltip="Filter by the underlying readiness state so you can separate stable rows from learning or paused ones."
+                                        />
+                                        <FilterSelect
+                                            label="Sort"
+                                            value={deliveryFilters.sort}
+                                            onChange={(value) => setDeliveryFilters((current) => ({ ...current, sort: value }))}
+                                            options={[
+                                                { value: 'spend_desc', label: 'Spend' },
+                                                { value: 'pace_desc', label: 'Goal pace' },
+                                                { value: 'days_desc', label: 'Days live' }
+                                            ]}
+                                            tooltip="Top 8 are shown per page, and sort determines which ad sets surface first."
+                                        />
+                                    </div>
                                     <div style={{ display: 'grid', gap: 8 }}>
-                                        {(advancedData.data.learningPhase || []).slice(0, 10).map((adset: any) => {
+                                        {pagedDeliveryRows.items.map((adset: any) => {
                                             const status = adset.learningStatus || { icon: '❓', label: 'Unknown', color: '#94a3b8' };
                                             const progressRing = status.status === 'learning' || status.status === 'limited' || status.status === 'delivery_learning';
                                             const ringValue = progressRing
@@ -4114,6 +4780,18 @@ export default function AdsPage() {
                                             );
                                         })}
                                     </div>
+                                    {!pagedDeliveryRows.items.length && (
+                                        <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                            No ad sets match the current delivery filters for this date range.
+                                        </div>
+                                    )}
+                                    <SectionPager
+                                        page={pagedDeliveryRows.page}
+                                        totalPages={pagedDeliveryRows.totalPages}
+                                        count={filteredDeliveryRows.length}
+                                        pageSize={sectionPageSize}
+                                        onPageChange={(page) => setDeliveryFilters((current) => ({ ...current, page }))}
+                                    />
                                     <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 8, fontSize: 12 }}>
                                         <strong>Why this matters:</strong> Learning and learning-limited are ad set delivery states. Use event pace for conversion-style goals, but use delivery stability for awareness-style goals. Otherwise you end up penalizing the wrong campaigns with the wrong benchmark.
                                     </div>
@@ -4353,9 +5031,12 @@ export default function AdsPage() {
 
                                         {/* Details */}
                                         <div>
+                                            <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: 'rgba(148, 163, 184, 0.08)', fontSize: 12, color: 'var(--muted)' }}>
+                                                <strong>Traffic source:</strong> {deepInsightsData.data.bounceGapAnalysis.trafficMetricLabel}. {deepInsightsData.data.bounceGapAnalysis.trafficMetricNote}
+                                            </div>
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
                                                 <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
-                                                    <div className="text-muted" style={{ fontSize: 11 }}>Link Clicks</div>
+                                                    <div className="text-muted" style={{ fontSize: 11 }}>{deepInsightsData.data.bounceGapAnalysis.trafficMetricLabel}</div>
                                                     <div style={{ fontSize: 20, fontWeight: 700 }}>{formatNumber(deepInsightsData.data.bounceGapAnalysis.outboundClicks)}</div>
                                                 </div>
                                                 <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
@@ -4401,6 +5082,87 @@ export default function AdsPage() {
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Campaign Funnel Benchmarking <InfoTooltip text="Compares campaigns using real Meta funnel events. If a campaign has no landing-page-view event, the table will show a dash instead of estimating that step." /></span>}
                                     subtitle="Compare real funnel handoff and purchase efficiency across campaigns to see which ones turn traffic into revenue"
                                 >
+                                    {deepInsightsData.data.overallFunnel && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
+                                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                                                <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
+                                                    {deepInsightsData.data.overallFunnel.trafficMetricLabel}
+                                                    <InfoTooltip text={deepInsightsData.data.overallFunnel.trafficMetricNote} />
+                                                </div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.trafficClicks || 0)}</div>
+                                            </div>
+                                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                                                <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
+                                                    Traffic → LPV
+                                                    <InfoTooltip text="Weighted account-level handoff from traffic clicks to landing-page views, using campaign traffic volume as the denominator." />
+                                                </div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepInsightsData.data.overallFunnel.weightedRates.trafficToLpvRate}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.landingPageViews || 0)} / {formatNumber(deepInsightsData.data.overallFunnel.totals.trafficClicks || 0)}</div>
+                                            </div>
+                                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                                                <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
+                                                    LPV → ATC
+                                                    <InfoTooltip text="Weighted account-level conversion from landing-page views to add-to-cart events." />
+                                                </div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepInsightsData.data.overallFunnel.weightedRates.lpvToAtcRate}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.addToCart || 0)} / {formatNumber(deepInsightsData.data.overallFunnel.totals.landingPageViews || 0)}</div>
+                                            </div>
+                                            <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
+                                                <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center' }}>
+                                                    ATC → Purchase
+                                                    <InfoTooltip text="Weighted account-level conversion from add-to-cart to purchase." />
+                                                </div>
+                                                <div style={{ fontSize: 22, fontWeight: 700 }}>{deepInsightsData.data.overallFunnel.weightedRates.atcToPurchaseRate}%</div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)' }}>{formatNumber(deepInsightsData.data.overallFunnel.totals.purchases || 0)} / {formatNumber(deepInsightsData.data.overallFunnel.totals.addToCart || 0)}</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                        {(deepInsightsData.data.overallFunnel?.confidenceFlags || []).map((flag: string) => (
+                                            <span key={flag} style={{ padding: '5px 10px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.14)', color: '#cbd5e1', fontSize: 11, fontWeight: 600 }}>
+                                                {flag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                        <FilterInput
+                                            label="Find campaign"
+                                            value={funnelFilters.search}
+                                            onChange={(value) => setFunnelFilters((current) => ({ ...current, search: value }))}
+                                            placeholder="Search funnel campaign"
+                                            tooltip="Search campaign funnels by campaign name for the selected date range."
+                                        />
+                                        <FilterSelect
+                                            label="Objective"
+                                            value={funnelFilters.objective}
+                                            onChange={(value) => setFunnelFilters((current) => ({ ...current, objective: value }))}
+                                            options={funnelObjectiveOptions}
+                                            tooltip="Use this to compare campaigns inside the same objective family instead of mixing awareness and sales traffic."
+                                        />
+                                        <FilterSelect
+                                            label="Status"
+                                            value={funnelFilters.status}
+                                            onChange={(value) => setFunnelFilters((current) => ({ ...current, status: value }))}
+                                            options={[
+                                                { value: 'active', label: 'Active only' },
+                                                { value: 'all', label: 'All statuses' },
+                                                { value: 'inactive', label: 'Inactive only' }
+                                            ]}
+                                            tooltip="Active only is the safest default when you want benchmark cards and table rows to stay operationally relevant."
+                                        />
+                                        <FilterSelect
+                                            label="Sort"
+                                            value={funnelFilters.sort}
+                                            onChange={(value) => setFunnelFilters((current) => ({ ...current, sort: value }))}
+                                            options={[
+                                                { value: 'roas_desc', label: 'ROAS' },
+                                                { value: 'atc_desc', label: 'ATC → Purchase' },
+                                                { value: 'click_loss_asc', label: 'Lowest click loss' },
+                                                { value: 'spend_desc', label: 'Spend' }
+                                            ]}
+                                            tooltip="Top 8 are shown per page. Changing sort lets you bias toward efficiency, click quality, or spend depth."
+                                        />
+                                    </div>
                                     {/* Comparison Header if we have best/worst */}
                                     {deepInsightsData.data.compareFunnels && (
                                         <div style={{
@@ -4439,8 +5201,8 @@ export default function AdsPage() {
                                                 <div style={{ fontWeight: 700, color: 'var(--muted)' }}>VS</div>
                                                 {deepInsightsData.data.compareFunnels.comparison && (
                                                     <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 8 }}>
-                                                        +{deepInsightsData.data.compareFunnels.comparison.roasDiff}x ROAS<br />
-                                                        +{deepInsightsData.data.compareFunnels.comparison.atcRateDiff}% ATC to buy
+                                                        {Number(deepInsightsData.data.compareFunnels.comparison.roasDiff || 0) >= 0 ? '+' : ''}{deepInsightsData.data.compareFunnels.comparison.roasDiff}x ROAS<br />
+                                                        {Number(deepInsightsData.data.compareFunnels.comparison.atcRateDiff || 0) >= 0 ? '+' : ''}{deepInsightsData.data.compareFunnels.comparison.atcRateDiff}% ATC to buy
                                                     </div>
                                                 )}
                                             </div>
@@ -4468,6 +5230,12 @@ export default function AdsPage() {
                                             </div>
                                         </div>
                                     )}
+                                    {deepInsightsData.data.compareFunnels?.note && (
+                                        <div style={{ marginTop: -12, marginBottom: 16, padding: '10px 12px', borderRadius: 8, background: 'rgba(148, 163, 184, 0.08)', fontSize: 12, color: 'var(--muted)' }}>
+                                            <strong>Comparison note:</strong> {deepInsightsData.data.compareFunnels.note}
+                                            {deepInsightsData.data.compareFunnels.methodologyLabel ? ` ${deepInsightsData.data.compareFunnels.methodologyLabel}.` : ''}
+                                        </div>
+                                    )}
 
                                     {/* Campaign Funnel Table */}
                                     <div style={{ overflowX: 'auto' }}>
@@ -4476,21 +5244,24 @@ export default function AdsPage() {
                                                 <tr>
                                                     <th>Campaign</th>
                                                     <th>Click Loss</th>
-                                                    <th>Link→LPV</th>
+                                                    <th>Traffic→LPV</th>
                                                     <th>LPV→ATC</th>
                                                     <th>ATC→Buy</th>
                                                     <th>ROAS</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {(deepInsightsData.data.campaignFunnels || []).slice(0, 10).map((c: any) => (
+                                                {pagedFunnelRows.items.map((c: any) => (
                                                     <tr key={c.campaignId}>
                                                         <td>
                                                             <div style={{ fontWeight: 500, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                                 {c.campaignName}
                                                             </div>
                                                             <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-                                                                {formatCurrency(c.spend)} spent
+                                                                {formatCurrency(c.spend)} spent • {c.objectiveLabel || getObjectiveFilterLabel(normalizeObjectiveGroup(c.objective))} • {c.status}
+                                                            </div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                {(c.confidenceFlags || []).join(' • ')}
                                                             </div>
                                                         </td>
                                                         <td>
@@ -4514,26 +5285,48 @@ export default function AdsPage() {
                                                             )}
                                                         </td>
                                                         <td style={{ fontSize: 13 }}>
-                                                            {c.funnel.linkClicks} → {c.funnel.landingPageViews > 0 ? c.funnel.landingPageViews : '—'}
+                                                            <div>{formatNumber(c.funnel.trafficClicks || 0)} → {c.funnel.landingPageViews > 0 ? formatNumber(c.funnel.landingPageViews) : '—'}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>{c.trafficMetric?.label || 'Traffic clicks'}</div>
                                                         </td>
                                                         <td style={{ fontSize: 13 }}>
-                                                            {c.funnel.landingPageViews > 0 ? c.funnel.landingPageViews : '—'} → {c.funnel.addToCart}
+                                                            <div>{c.funnel.landingPageViews > 0 ? formatNumber(c.funnel.landingPageViews) : '—'} → {formatNumber(c.funnel.addToCart || 0)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                {c.benchmarkDelta?.clickLoss !== null && c.benchmarkDelta?.clickLoss !== undefined ? `${formatSignedPercent(c.benchmarkDelta.clickLoss, 1)} vs median click-loss` : 'No median click-loss baseline'}
+                                                            </div>
                                                         </td>
                                                         <td>
                                                             <span style={{ fontWeight: 600, color: c.conversions.atcToPurchaseRate >= 50 ? '#10b981' : '#f59e0b' }}>
                                                                 {c.conversions.atcToPurchaseRate}%
                                                             </span>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                {c.funnel.purchase > 0 ? `${formatNumber(c.funnel.purchase)} / ${formatNumber(c.funnel.addToCart || 0)}` : 'No purchase signal'}
+                                                            </div>
                                                         </td>
                                                         <td>
                                                             <span style={{ fontWeight: 700, color: c.conversions.roas >= 1 ? '#10b981' : '#ef4444' }}>
                                                                 {c.conversions.roas}x
                                                             </span>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                                                                {c.benchmarkDelta?.roas !== null && c.benchmarkDelta?.roas !== undefined ? `${formatSignedPercent(c.benchmarkDelta.roas, 1)} vs median ROAS` : 'No ROAS baseline'}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
+                                    {!pagedFunnelRows.items.length && (
+                                        <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                            No campaign funnels match the current filters for this date range.
+                                        </div>
+                                    )}
+                                    <SectionPager
+                                        page={pagedFunnelRows.page}
+                                        totalPages={pagedFunnelRows.totalPages}
+                                        count={filteredFunnelRows.length}
+                                        pageSize={sectionPageSize}
+                                        onPageChange={(page) => setFunnelFilters((current) => ({ ...current, page }))}
+                                    />
                                 </SectionCard>
                             )}
 
@@ -4554,17 +5347,18 @@ export default function AdsPage() {
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                Avg Hook Rate (25%)
-                                                <InfoTooltip text="Average share of video plays that reached the 25% watch milestone. This is a practical read on whether the opening earned attention." />
+                                                Weighted Hook Rate (25%)
+                                                <InfoTooltip text={`Play-weighted share of video plays that reached the 25% watch milestone. This summary uses ${deepInsightsData.data.videoSummary.weightingLabel || 'weighted averages'} instead of a simple ad-by-ad average.`} />
                                             </div>
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>{deepInsightsData.data.videoSummary.avgHookRate}%</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                Avg Completion
-                                                <InfoTooltip text="Average share of plays that reached 100% watched. This is usually much lower than hook rate and should be read as a depth metric, not a goal on its own." />
+                                                Weighted Quality Score
+                                                <InfoTooltip text="A play-weighted blended quality score from hook rate, hold rate, completion rate, spend depth, and result volume. This is more useful than ranking on hook rate alone." />
                                             </div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepInsightsData.data.videoSummary.avgCompletionRate}%</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepInsightsData.data.videoSummary.weightedQualityScore}</div>
+                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hold {deepInsightsData.data.videoSummary.avgHoldRate}% • Complete {deepInsightsData.data.videoSummary.avgCompletionRate}%</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -4574,10 +5368,69 @@ export default function AdsPage() {
                                             <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{deepInsightsData.data.videoSummary.needsWork}</div>
                                         </div>
                                     </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                        <FilterInput
+                                            label="Find creative"
+                                            value={videoFilters.search}
+                                            onChange={(value) => setVideoFilters((current) => ({ ...current, search: value }))}
+                                            placeholder="Search video creative"
+                                            tooltip="Search the video diagnostics list by creative name."
+                                        />
+                                        <FilterSelect
+                                            label="Status"
+                                            value={videoFilters.status}
+                                            onChange={(value) => setVideoFilters((current) => ({ ...current, status: value }))}
+                                            options={[
+                                                { value: 'all', label: 'All statuses' },
+                                                { value: 'active', label: 'Active only' },
+                                                { value: 'inactive', label: 'Inactive only' }
+                                            ]}
+                                            tooltip="Use Active only if you want the top 8 to focus on creatives you can still improve or scale."
+                                        />
+                                        <FilterSelect
+                                            label="Confidence"
+                                            value={videoFilters.confidence}
+                                            onChange={(value) => setVideoFilters((current) => ({ ...current, confidence: value }))}
+                                            options={[
+                                                { value: 'all', label: 'All confidence' },
+                                                { value: 'high confidence', label: 'High confidence' },
+                                                { value: 'medium confidence', label: 'Medium confidence' },
+                                                { value: 'low confidence', label: 'Low confidence' }
+                                            ]}
+                                            tooltip="Confidence reflects how much play, spend, and result volume sit behind the video read."
+                                        />
+                                        <FilterSelect
+                                            label="Diagnosis"
+                                            value={videoFilters.diagnosis}
+                                            onChange={(value) => setVideoFilters((current) => ({ ...current, diagnosis: value }))}
+                                            options={[
+                                                { value: 'all', label: 'All diagnoses' },
+                                                { value: 'winner', label: 'Winner' },
+                                                { value: 'promising', label: 'Promising' },
+                                                { value: 'weak hook', label: 'Weak hook' },
+                                                { value: 'content weak', label: 'Content weak' },
+                                                { value: 'slow burn', label: 'Slow burn gem' },
+                                                { value: 'needs more data', label: 'Needs more data' }
+                                            ]}
+                                            tooltip="Filter to the video pattern you want to inspect first."
+                                        />
+                                        <FilterSelect
+                                            label="Sort"
+                                            value={videoFilters.sort}
+                                            onChange={(value) => setVideoFilters((current) => ({ ...current, sort: value }))}
+                                            options={[
+                                                { value: 'quality_desc', label: 'Quality score' },
+                                                { value: 'hook_desc', label: 'Hook rate' },
+                                                { value: 'spend_desc', label: 'Spend' },
+                                                { value: 'results_desc', label: 'Results' }
+                                            ]}
+                                            tooltip="Top 8 are shown per page. Quality score is the new default because it blends hook, hold, completion, spend, and results."
+                                        />
+                                    </div>
 
                                     {/* Video Cards */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-                                        {(deepInsightsData.data.videoHookAnalysis || []).slice(0, 8).map((v: any) => (
+                                        {pagedVideoRows.items.map((v: any) => (
                                             <div key={v.adId} style={{
                                                 background: 'linear-gradient(180deg, rgba(15,23,42,0.78), rgba(15,23,42,0.96))',
                                                 borderRadius: 14,
@@ -4644,6 +5497,17 @@ export default function AdsPage() {
 
                                                 <div style={{ padding: 14 }}>
                                                     <p style={{ fontSize: 12, color: '#dbe4f0', marginBottom: 12, lineHeight: 1.45 }}>{v.insight}</p>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                                                        <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(99, 102, 241, 0.14)', color: '#c7d2fe', fontSize: 10, fontWeight: 700 }}>
+                                                            Quality {v.qualityScore}
+                                                        </span>
+                                                        <span style={{ padding: '4px 8px', borderRadius: 999, background: getConfidenceTone(v.confidenceLabel || 'Low confidence').bg, color: getConfidenceTone(v.confidenceLabel || 'Low confidence').color, fontSize: 10, fontWeight: 700 }}>
+                                                            {v.confidenceLabel || 'Low confidence'}
+                                                        </span>
+                                                        <span style={{ padding: '4px 8px', borderRadius: 999, background: getMaturityTone(v.maturity?.label || 'Early').bg, color: getMaturityTone(v.maturity?.label || 'Early').color, fontSize: 10, fontWeight: 700 }}>
+                                                            {v.maturity?.label || 'Early'}
+                                                        </span>
+                                                    </div>
 
                                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 12 }}>
                                                         {(v.retentionCurve || []).map((point: any, i: number) => (
@@ -4681,14 +5545,31 @@ export default function AdsPage() {
                                                         <span>•</span>
                                                         <span>{v.isActive ? 'Active' : 'Inactive'} {v.daysActive}d</span>
                                                         <span>•</span>
-                                                        <span>Completion {v.retention.completionRate}%</span>
+                                                        <span>Completion {v.retention.completionRate}% from {formatNumber(v.retention.p100 || 0)} / {formatNumber(v.retention.videoPlays || 0)} plays</span>
                                                         <span>•</span>
                                                         <span>{v.previewSource === 'creative' ? 'Creative preview' : v.previewSource === 'thumbnail' ? 'Thumbnail preview' : 'No preview source'}</span>
                                                     </div>
+                                                    {(v.confidenceFlags || []).length > 0 && (
+                                                        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
+                                                            Flags: {(v.confidenceFlags || []).join(' • ')}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
+                                    {!pagedVideoRows.items.length && (
+                                        <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                            No video creatives match the current diagnostics filters for this date range.
+                                        </div>
+                                    )}
+                                    <SectionPager
+                                        page={pagedVideoRows.page}
+                                        totalPages={pagedVideoRows.totalPages}
+                                        count={filteredVideoRows.length}
+                                        pageSize={sectionPageSize}
+                                        onPageChange={(page) => setVideoFilters((current) => ({ ...current, page }))}
+                                    />
                                 </SectionCard>
                             )}
 
@@ -4852,16 +5733,30 @@ export default function AdsPage() {
                                                             </span>
                                                         </td>
                                                         <td>
-                                                            <span style={{
-                                                                padding: '4px 10px',
-                                                                borderRadius: 20,
-                                                                background: `${p.recommendationColor}20`,
-                                                                color: p.recommendationColor,
-                                                                fontSize: 11,
-                                                                fontWeight: 600
-                                                            }}>
-                                                                {p.recommendation}
-                                                            </span>
+                                                            <div style={{ display: 'grid', gap: 6 }}>
+                                                                <span style={{
+                                                                    padding: '4px 10px',
+                                                                    borderRadius: 20,
+                                                                    background: `${p.recommendationColor}20`,
+                                                                    color: p.recommendationColor,
+                                                                    fontSize: 11,
+                                                                    fontWeight: 600,
+                                                                    width: 'fit-content'
+                                                                }}>
+                                                                    {p.recommendation}
+                                                                </span>
+                                                                <span style={{
+                                                                    padding: '4px 10px',
+                                                                    borderRadius: 20,
+                                                                    background: getMaturityTone(p.maturity?.label || 'Early').bg,
+                                                                    color: getMaturityTone(p.maturity?.label || 'Early').color,
+                                                                    fontSize: 10,
+                                                                    fontWeight: 700,
+                                                                    width: 'fit-content'
+                                                                }}>
+                                                                    {p.maturity?.label || 'Early'}
+                                                                </span>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}

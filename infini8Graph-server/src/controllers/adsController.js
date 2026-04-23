@@ -269,6 +269,74 @@ function getCampaignTypeLabel(objective = '') {
     }
 }
 
+function getEvidenceLabel({ spend = 0, conversions = 0, clicks = 0, impressions = 0 } = {}) {
+    if (conversions >= 20 || spend >= 12000 || clicks >= 1500 || impressions >= 80000) return 'High confidence';
+    if (conversions >= 6 || spend >= 3500 || clicks >= 400 || impressions >= 20000) return 'Medium confidence';
+    return 'Low confidence';
+}
+
+function getMaturityBadge({ spend = 0, conversions = 0, clicks = 0, impressions = 0 } = {}) {
+    if (conversions >= 20 || spend >= 12000 || clicks >= 1500 || impressions >= 80000) {
+        return {
+            label: 'Established',
+            note: 'Enough spend and delivery volume to treat this as a mature signal for the selected window.'
+        };
+    }
+
+    if (conversions >= 6 || spend >= 3500 || clicks >= 400 || impressions >= 20000) {
+        return {
+            label: 'Building',
+            note: 'The signal is usable, but it still benefits from more spend or conversion depth.'
+        };
+    }
+
+    return {
+        label: 'Early',
+        note: 'This signal is still early and should be treated as directional.'
+    };
+}
+
+function calculateDeltaVsBaseline(value, baseline, higherIsBetter = true) {
+    const numericValue = parseMetricNumber(value);
+    const numericBaseline = parseMetricNumber(baseline);
+
+    if (numericBaseline <= 0) return null;
+
+    const rawDelta = higherIsBetter
+        ? ((numericValue - numericBaseline) / numericBaseline) * 100
+        : ((numericBaseline - numericValue) / numericBaseline) * 100;
+
+    return Number(rawDelta.toFixed(1));
+}
+
+function calculateWeightedAverage(items = [], valueSelector, weightSelector) {
+    const weightedSum = items.reduce((sum, item) => {
+        const value = parseMetricNumber(valueSelector(item));
+        const weight = parseMetricNumber(weightSelector(item));
+        return sum + (value * weight);
+    }, 0);
+    const totalWeight = items.reduce((sum, item) => sum + parseMetricNumber(weightSelector(item)), 0);
+    return totalWeight > 0 ? (weightedSum / totalWeight) : 0;
+}
+
+function buildFunnelConfidenceFlags({
+    spend = 0,
+    trafficClicks = 0,
+    landingPageViews = 0,
+    purchases = 0,
+    usesClickFallback = false
+} = {}) {
+    const flags = [];
+
+    if (trafficClicks < 300 || spend < 2000) flags.push('Low sample');
+    if (landingPageViews <= 0) flags.push('No LPV signal');
+    if (purchases <= 0) flags.push('No purchase signal');
+    if (landingPageViews > 0) flags.push('Pixel-dependent metric');
+    if (usesClickFallback) flags.push('Clicks fallback');
+
+    return flags;
+}
+
 function toTitleFromSnake(value = '') {
     return String(value || '')
         .toLowerCase()
@@ -1736,7 +1804,7 @@ export async function getCampaignIntelligence(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-intelligence', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-intelligence-v2', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -1804,6 +1872,8 @@ export async function getCampaignIntelligence(req, res) {
                     name: c.name,
                     status: c.status,
                     objective: c.objective,
+                    objectiveGroup: mapObjectiveGroup(c.objective),
+                    objectiveLabel: getCampaignTypeLabel(c.objective),
                     spend,
                     impressions: parseInt(insights.impressions || 0),
                     clicks,
@@ -1815,7 +1885,9 @@ export async function getCampaignIntelligence(req, res) {
                     roas,
                     costPerPurchase: purchaseCount > 0 ? spend / purchaseCount : null,
                     conversionRate: clicks > 0 ? (purchaseCount / clicks) * 100 : 0,
-                    budgetUtilization: budgetUtilization ? parseFloat(budgetUtilization) : null
+                    budgetUtilization: budgetUtilization ? parseFloat(budgetUtilization) : null,
+                    confidenceLabel: getEvidenceLabel({ spend, conversions: purchaseCount, clicks, impressions: parseInt(insights.impressions || 0) }),
+                    maturity: getMaturityBadge({ spend, conversions: purchaseCount, clicks, impressions: parseInt(insights.impressions || 0) })
                 };
             });
 
@@ -2004,7 +2076,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v6', [req.user.userId, accountId, datePreset]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v7', [req.user.userId, accountId, datePreset]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2049,11 +2121,8 @@ export async function getAdvancedAnalytics(req, res) {
                 : sorted[middle];
         };
 
-        const getConfidenceLabel = ({ spend = 0, conversions = 0, clicks = 0, impressions = 0 } = {}) => {
-            if (conversions >= 20 || spend >= 12000 || clicks >= 1500 || impressions >= 80000) return 'High confidence';
-            if (conversions >= 6 || spend >= 3500 || clicks >= 400 || impressions >= 20000) return 'Medium confidence';
-            return 'Low confidence';
-        };
+        const getConfidenceLabel = ({ spend = 0, conversions = 0, clicks = 0, impressions = 0 } = {}) =>
+            getEvidenceLabel({ spend, conversions, clicks, impressions });
 
         const getVideoSignalConfidence = ({ plays = 0, spend = 0, quartile25Views = 0, completes = 0 } = {}) => {
             let score = 0;
@@ -2636,6 +2705,8 @@ export async function getAdvancedAnalytics(req, res) {
                     id: ad.id,
                     name: ad.name,
                     status: ad.status,
+                    format: hasVideo ? 'video' : 'static',
+                    formatLabel: hasVideo ? 'Video' : 'Static',
                     thumbnail,
                     previewSource,
                     impressions,
@@ -2657,6 +2728,7 @@ export async function getAdvancedAnalytics(req, res) {
                     costPerConversion,
                     clickToConversionRate,
                     confidenceLabel,
+                    maturity: getMaturityBadge({ spend, conversions, clicks, impressions }),
                     hasVideo,
                     videoMetrics: hasVideo ? {
                         plays: videoPlays,
@@ -3273,8 +3345,12 @@ export async function getAdvancedAnalytics(req, res) {
                 return {
                     id: c.id,
                     name: c.name,
+                    status: c.status,
                     objective: c.objective,
+                    objectiveGroup: mapObjectiveGroup(c.objective),
+                    objectiveLabel: getCampaignTypeLabel(c.objective),
                     ctr,
+                    clicks,
                     conversionRate,
                     frequency,
                     spend,
@@ -3282,7 +3358,8 @@ export async function getAdvancedAnalytics(req, res) {
                     cpc,
                     cpa,
                     roas,
-                    confidenceLabel
+                    confidenceLabel,
+                    maturity: getMaturityBadge({ spend, conversions, clicks, impressions })
                 };
             });
 
@@ -3330,7 +3407,10 @@ export async function getAdvancedAnalytics(req, res) {
                 return {
                     id: c.id,
                     name: c.name,
+                    status: c.status,
                     objective: c.objective,
+                    objectiveGroup: c.objectiveGroup,
+                    objectiveLabel: c.objectiveLabel,
                     lqs: lqs.toFixed(1),
                     grade,
                     gradeColor,
@@ -3353,7 +3433,9 @@ export async function getAdvancedAnalytics(req, res) {
                         lowDataPenalty
                     },
                     spend: c.spend,
-                    conversions: c.conversions
+                    conversions: c.conversions,
+                    clicks: c.clicks,
+                    maturity: c.maturity
                 };
             }).sort((a, b) => parseFloat(b.lqs) - parseFloat(a.lqs));
 
@@ -3363,7 +3445,7 @@ export async function getAdvancedAnalytics(req, res) {
 
             leadQualityScore = {
                 average: avgLQS.toFixed(1),
-                campaigns: campaignLQS.slice(0, 10),
+                campaigns: campaignLQS.slice(0, 150),
                 topPerformer: campaignLQS[0] || null,
                 bottomPerformer: campaignLQS[campaignLQS.length - 1] || null
             };
@@ -3372,7 +3454,7 @@ export async function getAdvancedAnalytics(req, res) {
         const payload = {
                 fatigueAnalysis,
                 placementIntent: placementIntent.slice(0, 15),
-                creativeForensics: creativeForensics.slice(0, 20),
+                creativeForensics: creativeForensics.slice(0, 120),
                 creativeForensicsMeta,
                 learningPhase,
                 retargetingLift,
@@ -3411,7 +3493,7 @@ export async function getDeepInsights(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-deep-v3', [req.user.userId, accountId, datePreset, campaignId || 'all']);
+        const cacheKey = buildMetaCacheKey('meta-deep-v4', [req.user.userId, accountId, datePreset, campaignId || 'all']);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -3469,6 +3551,7 @@ export async function getDeepInsights(req, res) {
         // ==================== 1. NURTURE EFFICIENCY FUNNEL (Per-Campaign) ====================
         let campaignFunnels = [];
         let overallFunnel = null;
+        let funnelComparison = null;
 
         if (campaignFunnelRes.status === 'fulfilled') {
             const campaigns = campaignFunnelRes.value.data.data || [];
@@ -3495,8 +3578,10 @@ export async function getDeepInsights(req, res) {
                 };
 
                 // Get funnel metrics
-                const linkClicks = parseInt(insights.clicks || 0);
-                const outboundClicks = parseInt(insights.outbound_clicks?.[0]?.value || 0) || linkClicks;
+                const clicks = parseInt(insights.clicks || 0);
+                const outboundClicks = parseInt(insights.outbound_clicks?.[0]?.value || 0);
+                const usesClickFallback = outboundClicks <= 0 && clicks > 0;
+                const trafficClicks = outboundClicks > 0 ? outboundClicks : clicks;
                 const landingPageViews = getActionValue('landing_page_view');
                 const viewContent = getActionValue('view_content');
                 const addToCart = getActionValue('add_to_cart');
@@ -3504,11 +3589,13 @@ export async function getDeepInsights(req, res) {
                 const purchase = getActionValue('purchase');
                 const purchaseRevenue = getActionRevenue('purchase');
                 const spend = parseFloat(insights.spend || 0);
+                const objectiveGroup = mapObjectiveGroup(c.objective);
+                const objectiveLabel = getCampaignTypeLabel(c.objective);
 
                 // Calculate drop-off deltas (percentage of people lost at each stage)
                 const hasLandingPageViewData = landingPageViews > 0;
-                const bounceGap = hasLandingPageViewData && outboundClicks > 0
-                    ? ((outboundClicks - landingPageViews) / outboundClicks * 100)
+                const bounceGap = hasLandingPageViewData && trafficClicks > 0
+                    ? ((trafficClicks - landingPageViews) / trafficClicks * 100)
                     : null;
                 const lpvToVc = hasLandingPageViewData && viewContent > 0
                     ? ((landingPageViews - viewContent) / landingPageViews * 100)
@@ -3517,10 +3604,17 @@ export async function getDeepInsights(req, res) {
                 const atcToPurchase = addToCart > 0 && purchase > 0 ? ((addToCart - purchase) / addToCart * 100) : null;
 
                 // Conversion Velocity Score (higher = faster conversions)
-                const velocityScore = linkClicks > 0 ? ((purchase / linkClicks) * 100).toFixed(2) : 0;
+                const velocityScore = trafficClicks > 0 ? ((purchase / trafficClicks) * 100).toFixed(2) : 0;
 
                 // Calculate ROAS
                 const roas = spend > 0 ? (purchaseRevenue / spend) : 0;
+                const confidenceFlags = buildFunnelConfidenceFlags({
+                    spend,
+                    trafficClicks,
+                    landingPageViews,
+                    purchases: purchase,
+                    usesClickFallback
+                });
 
                 // Determine quality based on bounce gap
                 let bounceQuality = 'unknown';
@@ -3546,9 +3640,20 @@ export async function getDeepInsights(req, res) {
                     campaignName: c.name,
                     status: c.status,
                     objective: c.objective,
+                    objectiveGroup,
+                    objectiveLabel,
                     spend,
+                    trafficMetric: {
+                        source: usesClickFallback ? 'clicks_fallback' : 'outbound_clicks',
+                        label: usesClickFallback ? 'Clicks (fallback)' : 'Outbound Clicks',
+                        note: usesClickFallback
+                            ? 'Meta did not return outbound clicks for this campaign, so total clicks are being used as the closest available traffic denominator.'
+                            : 'Meta returned outbound clicks for this campaign, so the funnel starts with users who actually left Meta.'
+                    },
                     funnel: {
-                        linkClicks,
+                        trafficClicks,
+                        clicks,
+                        outboundClicks,
                         landingPageViews,
                         viewContent,
                         addToCart,
@@ -3571,12 +3676,101 @@ export async function getDeepInsights(req, res) {
                     },
                     dataQuality: {
                         hasLandingPageViewData
-                    }
+                    },
+                    maturity: getMaturityBadge({ spend, conversions: purchase, clicks: trafficClicks, impressions: parseInt(insights.impressions || 0) }),
+                    confidenceFlags
                 };
-            }).filter(c => c.funnel.linkClicks > 0); // Only campaigns with traffic
+            }).filter(c => c.funnel.trafficClicks > 0); // Only campaigns with traffic
 
             // Sort by ROAS descending for comparison
             campaignFunnels.sort((a, b) => b.conversions.roas - a.conversions.roas);
+
+            const comparisonCandidates = campaignFunnels.filter((campaign) =>
+                campaign.status === 'ACTIVE'
+                && campaign.spend >= 2000
+                && campaign.funnel.trafficClicks >= 100
+            );
+            const comparisonGroupCounts = comparisonCandidates.reduce((counts, campaign) => {
+                counts[campaign.objectiveGroup] = (counts[campaign.objectiveGroup] || 0) + 1;
+                return counts;
+            }, {});
+            const dominantComparisonGroup = getTopProfileGroup(comparisonGroupCounts);
+            let comparisonMode = 'active_same_objective';
+            let comparisonPool = comparisonCandidates.filter((campaign) => campaign.objectiveGroup === dominantComparisonGroup);
+
+            if (comparisonPool.length < 2) {
+                comparisonMode = 'active_mixed_objectives';
+                comparisonPool = comparisonCandidates;
+            }
+
+            if (comparisonPool.length < 2) {
+                comparisonMode = 'all_campaigns_fallback';
+                comparisonPool = campaignFunnels.filter((campaign) => campaign.spend > 0);
+            }
+
+            const benchmarkRoasMedian = getMedian(comparisonPool.map((campaign) => campaign.conversions.roas).filter((value) => value > 0));
+            const benchmarkBounceMedian = getMedian(comparisonPool.map((campaign) => campaign.dropoffs.bounceGap).filter((value) => value !== null));
+            const benchmarkAtcMedian = getMedian(comparisonPool.map((campaign) => campaign.conversions.atcToPurchaseRate).filter((value) => value > 0));
+
+            campaignFunnels = campaignFunnels.map((campaign) => ({
+                ...campaign,
+                benchmarkDelta: {
+                    roas: calculateDeltaVsBaseline(campaign.conversions.roas, benchmarkRoasMedian, true),
+                    clickLoss: campaign.dropoffs.bounceGap === null ? null : calculateDeltaVsBaseline(campaign.dropoffs.bounceGap, benchmarkBounceMedian, false),
+                    atcToPurchase: calculateDeltaVsBaseline(campaign.conversions.atcToPurchaseRate, benchmarkAtcMedian, true)
+                }
+            }));
+
+            const totalTrafficClicks = campaignFunnels.reduce((sum, campaign) => sum + (campaign.funnel.trafficClicks || 0), 0);
+            const totalLandingPageViews = campaignFunnels.reduce((sum, campaign) => sum + (campaign.funnel.landingPageViews || 0), 0);
+            const totalAddToCart = campaignFunnels.reduce((sum, campaign) => sum + (campaign.funnel.addToCart || 0), 0);
+            const totalPurchases = campaignFunnels.reduce((sum, campaign) => sum + (campaign.funnel.purchase || 0), 0);
+            const fallbackCampaignCount = campaignFunnels.filter((campaign) => campaign.trafficMetric?.source === 'clicks_fallback').length;
+
+            overallFunnel = {
+                trafficMetricLabel: fallbackCampaignCount > 0 ? 'Traffic Clicks' : 'Outbound Clicks',
+                trafficMetricNote: fallbackCampaignCount > 0
+                    ? `${fallbackCampaignCount} campaign${fallbackCampaignCount === 1 ? '' : 's'} used clicks fallback because Meta did not return outbound clicks for those rows.`
+                    : 'All campaigns in this summary used Meta outbound clicks as the traffic denominator.',
+                totals: {
+                    trafficClicks: totalTrafficClicks,
+                    landingPageViews: totalLandingPageViews,
+                    addToCart: totalAddToCart,
+                    purchases: totalPurchases
+                },
+                weightedRates: {
+                    trafficToLpvRate: totalTrafficClicks > 0 ? Number(((totalLandingPageViews / totalTrafficClicks) * 100).toFixed(1)) : 0,
+                    lpvToAtcRate: totalLandingPageViews > 0 ? Number(((totalAddToCart / totalLandingPageViews) * 100).toFixed(1)) : 0,
+                    atcToPurchaseRate: totalAddToCart > 0 ? Number(((totalPurchases / totalAddToCart) * 100).toFixed(1)) : 0
+                },
+                confidenceFlags: buildFunnelConfidenceFlags({
+                    spend: campaignFunnels.reduce((sum, campaign) => sum + (campaign.spend || 0), 0),
+                    trafficClicks: totalTrafficClicks,
+                    landingPageViews: totalLandingPageViews,
+                    purchases: totalPurchases,
+                    usesClickFallback: fallbackCampaignCount > 0
+                })
+            };
+
+            const orderedComparisonPool = [...comparisonPool].sort((a, b) => b.conversions.roas - a.conversions.roas);
+            funnelComparison = orderedComparisonPool.length >= 2 ? {
+                best: orderedComparisonPool[0],
+                worst: orderedComparisonPool[orderedComparisonPool.length - 1],
+                comparison: {
+                    roasDiff: (orderedComparisonPool[0].conversions.roas - orderedComparisonPool[orderedComparisonPool.length - 1].conversions.roas).toFixed(2),
+                    atcRateDiff: (orderedComparisonPool[0].conversions.atcToPurchaseRate - orderedComparisonPool[orderedComparisonPool.length - 1].conversions.atcToPurchaseRate).toFixed(1),
+                    bounceGapDiff: orderedComparisonPool[0].dropoffs.bounceGap !== null && orderedComparisonPool[orderedComparisonPool.length - 1].dropoffs.bounceGap !== null
+                        ? (orderedComparisonPool[orderedComparisonPool.length - 1].dropoffs.bounceGap - orderedComparisonPool[0].dropoffs.bounceGap).toFixed(1)
+                        : null
+                },
+                methodology: comparisonMode,
+                methodologyLabel: comparisonMode === 'active_same_objective'
+                    ? `Active ${getCampaignTypeLabel(dominantComparisonGroup)} campaigns with enough spend and traffic`
+                    : comparisonMode === 'active_mixed_objectives'
+                        ? 'Active campaigns with enough spend and traffic'
+                        : 'Fallback comparison across all campaigns with spend',
+                note: 'Best and worst cards are heuristic comparisons for the selected date range. Use the table and benchmark deltas below for the fuller read.'
+            } : null;
         }
 
         // ==================== 2. OVERALL BOUNCE GAP ====================
@@ -3592,7 +3786,8 @@ export async function getDeepInsights(req, res) {
             };
 
             const totalClicks = parseInt(data.clicks || 0);
-            const outboundClicks = parseInt(data.outbound_clicks?.[0]?.value || 0) || totalClicks;
+            const rawOutboundClicks = parseInt(data.outbound_clicks?.[0]?.value || 0);
+            const outboundClicks = rawOutboundClicks || totalClicks;
             const landingPageViews = getAction('landing_page_view');
 
             // Bounce Gap = people who clicked but didn't let the page load (Pixel didn't fire)
@@ -3626,6 +3821,11 @@ export async function getDeepInsights(req, res) {
                 totalClicks,
                 outboundClicks,
                 landingPageViews,
+                trafficMetricSource: rawOutboundClicks > 0 ? 'outbound_clicks' : 'clicks_fallback',
+                trafficMetricLabel: rawOutboundClicks > 0 ? 'Outbound Clicks' : 'Clicks (fallback)',
+                trafficMetricNote: rawOutboundClicks > 0
+                    ? 'Meta returned outbound clicks for this account, so click loss is measured from users who actually left Meta.'
+                    : 'Meta did not return outbound clicks for this account, so click loss is using total clicks as the closest available fallback.',
                 bounceGap: parseFloat(bounceGapPercent.toFixed(1)),
                 severity,
                 message,
@@ -3687,6 +3887,29 @@ export async function getDeepInsights(req, res) {
                     let color = '#6b7280';
                     const spend = parseFloat(insights.spend || 0);
                     const qualifiesWinnerGate = isActive && daysActive >= 3 && spend >= 2000;
+                    const videoConfidenceLabel = getEvidenceLabel({
+                        spend,
+                        conversions,
+                        clicks: baseViews,
+                        impressions: parseInt(insights.impressions || 0)
+                    });
+                    const qualityScore = Math.max(
+                        0,
+                        Math.min(
+                            100,
+                            (
+                                (Math.min(hookRate / 20, 1) * 35) +
+                                (Math.min(holdRate / 55, 1) * 25) +
+                                (Math.min(completionRate / 6, 1) * 15) +
+                                (Math.min(spend / 5000, 1) * 15) +
+                                (Math.min(conversions / 12, 1) * 10)
+                            )
+                        )
+                    );
+                    const confidenceFlags = [];
+                    if (baseViews < 250 || spend < 1000) confidenceFlags.push('Low sample');
+                    if (conversions <= 0) confidenceFlags.push('No result signal');
+                    if (!isActive) confidenceFlags.push('Inactive creative');
 
                     if (hookRate >= 50 && holdRate >= 60 && qualifiesWinnerGate) {
                         pattern = '🏆 Full Engagement Winner';
@@ -3763,13 +3986,27 @@ export async function getDeepInsights(req, res) {
                             { stage: '100%', value: completionRate }
                         ].map(s => ({ ...s, value: parseFloat(s.value.toFixed(1)) })),
                         conversions,
+                        qualityScore: parseFloat(qualityScore.toFixed(1)),
+                        qualityLabel: qualityScore >= 70 ? 'Strong quality' : qualityScore >= 45 ? 'Promising quality' : 'Weak quality',
+                        confidenceLabel: videoConfidenceLabel,
+                        maturity: getMaturityBadge({
+                            spend,
+                            conversions,
+                            clicks: baseViews,
+                            impressions: parseInt(insights.impressions || 0)
+                        }),
+                        confidenceFlags,
                         pattern,
                         insight,
                         patternColor: color
                     };
                 })
                 .filter(v => v.retention.videoPlays > 10) // Only meaningful data
-                .sort((a, b) => b.retention.hookRate - a.retention.hookRate);
+                .sort((a, b) => {
+                    const scoreDiff = (b.qualityScore || 0) - (a.qualityScore || 0);
+                    if (scoreDiff !== 0) return scoreDiff;
+                    return b.retention.hookRate - a.retention.hookRate;
+                });
         }
 
         // ==================== 4. PLACEMENT DIAGNOSTICS ====================
@@ -3847,6 +4084,20 @@ export async function getDeepInsights(req, res) {
                     const spendShare = totalSpend > 0 ? (placement.metrics.spend / totalSpend) * 100 : 0;
                     const enoughSpend = spendShare >= 5;
                     const enoughData = enoughSpend || placement.metrics.clicks >= 40 || placement.metrics.purchases >= 3 || placement.metrics.leads >= 3;
+                    const maturity = enoughSpend || placement.metrics.purchases >= 3 || placement.metrics.leads >= 3
+                        ? {
+                            label: 'Established',
+                            note: 'This placement has enough spend or result volume for a firmer efficiency read.'
+                        }
+                        : enoughData
+                            ? {
+                                label: 'Building',
+                                note: 'This placement has some usable evidence, but it is still building toward a mature signal.'
+                            }
+                            : {
+                                label: 'Early',
+                                note: 'This placement needs more spend, clicks, or results before the decision label should be trusted heavily.'
+                            };
                     let recommendation = 'Needs data';
                     let recommendationColor = '#94a3b8';
 
@@ -3920,6 +4171,7 @@ export async function getDeepInsights(req, res) {
                             ...placement.metrics,
                             spendShare: parseFloat(spendShare.toFixed(1))
                         },
+                        maturity,
                         recommendation,
                         recommendationColor
                     };
@@ -3989,28 +4241,22 @@ export async function getDeepInsights(req, res) {
         // ==================== COMPILE RESPONSE ====================
         const payload = {
                 accountProfile: deepAccountProfile,
-                campaignFunnels: campaignFunnels.slice(0, 20),
-                compareFunnels: campaignFunnels.length >= 2 ? {
-                    best: campaignFunnels[0],
-                    worst: campaignFunnels[campaignFunnels.length - 1],
-                    comparison: campaignFunnels[0] && campaignFunnels[campaignFunnels.length - 1] ? {
-                        roasDiff: (campaignFunnels[0].conversions.roas - campaignFunnels[campaignFunnels.length - 1].conversions.roas).toFixed(2),
-                        atcRateDiff: (campaignFunnels[0].conversions.atcToPurchaseRate - campaignFunnels[campaignFunnels.length - 1].conversions.atcToPurchaseRate).toFixed(1),
-                        bounceGapDiff: campaignFunnels[0].dropoffs.bounceGap !== null && campaignFunnels[campaignFunnels.length - 1].dropoffs.bounceGap !== null
-                            ? (campaignFunnels[campaignFunnels.length - 1].dropoffs.bounceGap - campaignFunnels[0].dropoffs.bounceGap).toFixed(1)
-                            : null
-                    } : null
-                } : null,
+                campaignFunnels: campaignFunnels.slice(0, 150),
+                overallFunnel,
+                compareFunnels: funnelComparison,
                 bounceGapAnalysis,
-                videoHookAnalysis: videoHookAnalysis.slice(0, 15),
+                videoHookAnalysis: videoHookAnalysis.slice(0, 120),
                 videoSummary: videoHookAnalysis.length > 0 ? {
                     totalVideos: videoHookAnalysis.length,
-                    avgHookRate: parseFloat((videoHookAnalysis.reduce((s, v) => s + v.retention.hookRate, 0) / videoHookAnalysis.length).toFixed(1)),
-                    avgCompletionRate: parseFloat((videoHookAnalysis.reduce((s, v) => s + v.retention.completionRate, 0) / videoHookAnalysis.length).toFixed(1)),
+                    avgHookRate: parseFloat(calculateWeightedAverage(videoHookAnalysis, (video) => video.retention?.hookRate || 0, (video) => video.retention?.videoPlays || 0).toFixed(1)),
+                    avgHoldRate: parseFloat(calculateWeightedAverage(videoHookAnalysis, (video) => video.retention?.holdRate || 0, (video) => video.retention?.videoPlays || 0).toFixed(1)),
+                    avgCompletionRate: parseFloat(calculateWeightedAverage(videoHookAnalysis, (video) => video.retention?.completionRate || 0, (video) => video.retention?.videoPlays || 0).toFixed(1)),
+                    weightedQualityScore: parseFloat(calculateWeightedAverage(videoHookAnalysis, (video) => video.qualityScore || 0, (video) => video.retention?.videoPlays || 0).toFixed(1)),
+                    weightingLabel: 'Play-weighted averages',
                     topPerformer: videoHookAnalysis[0],
                     needsWork: videoHookAnalysis.filter(v => v.pattern.includes('Weak') || v.pattern.includes('Content Weak')).length
                 } : null,
-                placementDiagnostics: placementDiagnostics.slice(0, 20),
+                placementDiagnostics: placementDiagnostics.slice(0, 60),
                 placementSummary,
                 datePreset
         };
