@@ -3550,7 +3550,6 @@ export async function getDeepInsights(req, res) {
         ] = await Promise.allSettled([
             includeFunnel
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
-                    timeout: 12000,
                     params: {
                         access_token: accessToken,
                         fields: 'id,name,status,effective_status,configured_status,objective,insights.date_preset(' + datePreset + '){spend,impressions,clicks,actions,action_values,cost_per_action_type,outbound_clicks}',
@@ -3560,7 +3559,6 @@ export async function getDeepInsights(req, res) {
                 : Promise.resolve({ data: { data: [] } }),
             includeFunnel
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                    timeout: 10000,
                     params: {
                         access_token: accessToken,
                         fields: 'clicks,actions,outbound_clicks',
@@ -3570,7 +3568,6 @@ export async function getDeepInsights(req, res) {
                 : Promise.resolve({ data: { data: [] } }),
             includePlacements
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
-                    timeout: 12000,
                     params: {
                         access_token: accessToken,
                         fields: 'spend,impressions,clicks,reach,ctr,cpc,cpm,actions,action_values',
@@ -3581,7 +3578,6 @@ export async function getDeepInsights(req, res) {
                 : Promise.resolve({ data: { data: [] } }),
             includeVideo
                 ? axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
-                    timeout: 12000,
                     params: {
                         access_token: accessToken,
                         fields: 'id,name,status,effective_status,created_time,updated_time,campaign_id,campaign{id,name},adset{id,name},creative{id,name,image_url,thumbnail_url},insights.date_preset(' + datePreset + '){impressions,reach,clicks,ctr,spend,actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_play_actions}',
