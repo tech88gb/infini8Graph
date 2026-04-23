@@ -2107,6 +2107,15 @@ export default function AdsPage() {
 
     const selectedAccountMeta = adAccounts.find((account: any) => account.account_id === effectiveAccount);
     const objectiveMixLabel = accountProfile?.objectiveMix?.slice?.(0, 2)?.map((entry: any) => `${entry.label} ${entry.share}%`)?.join(' • ');
+    const spendComparisonLabel = useMemo(() => {
+        const startD = new Date(dateRange.startDate);
+        const endD = new Date(dateRange.endDate);
+        const daySpan = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+        if (daySpan === 1 && datePreset === 'today') return 'Today vs yesterday';
+        if (daySpan === 1) return 'Selected day vs previous day';
+        return `Current ${daySpan} days vs previous ${daySpan} days`;
+    }, [dateRange, datePreset]);
+
     const overviewMetricCards = buildMetaAdsOverviewMetrics({
         accountProfile,
         summary,
@@ -2121,14 +2130,7 @@ export default function AdsPage() {
     const showConversionsSection = accountProfile?.type !== 'awareness';
     const showDiagnosticsSection = accountProfile?.type !== 'app_promotion';
     const showVideoRetentionSection = ['awareness', 'engagement', 'mixed'].includes(accountProfile?.type) || Object.values(videoViews || {}).some((value) => Number(value || 0) > 0);
-    const spendComparisonLabel = useMemo(() => {
-        const startD = new Date(dateRange.startDate);
-        const endD = new Date(dateRange.endDate);
-        const daySpan = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
-        if (daySpan === 1 && datePreset === 'today') return 'Today vs yesterday';
-        if (daySpan === 1) return 'Selected day vs previous day';
-        return `Current ${daySpan} days vs previous ${daySpan} days`;
-    }, [dateRange, datePreset]);
+
     const campaignTypeOptions = useMemo(() => {
         const options = new Map<string, string>();
         campaigns.forEach((campaign: any) => {
