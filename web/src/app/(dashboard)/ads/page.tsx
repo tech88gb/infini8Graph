@@ -1825,10 +1825,20 @@ export default function AdsPage() {
 
     // Fetch deep insights (Nurture Funnel, Bounce Gap, Video Hook, Placement Arbitrage)
     const { data: deepInsightsData, isLoading: deepInsightsLoading, error: deepInsightsError } = useQuery({
-        queryKey: ['deep-insights', effectiveAccount, datePreset],
+        queryKey: ['deep-insights', 'core', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset);
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'core');
+            return res.data;
+        },
+        enabled: !!effectiveAccount && activeTab === 'deep',
+        retry: 1
+    });
+    const { data: deepVideoData, isLoading: deepVideoLoading, error: deepVideoError } = useQuery({
+        queryKey: ['deep-insights', 'video', effectiveAccount, datePreset],
+        queryFn: async () => {
+            if (!effectiveAccount) return null;
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'video');
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'deep',
@@ -2154,7 +2164,7 @@ export default function AdsPage() {
     }, [funnelRows, funnelFilters]);
     const pagedFunnelRows = paginateItems(filteredFunnelRows, funnelFilters.page, sectionPageSize);
 
-    const videoRows = useMemo(() => deepInsightsData?.data?.videoHookAnalysis || [], [deepInsightsData]);
+    const videoRows = useMemo(() => deepVideoData?.data?.videoHookAnalysis || [], [deepVideoData]);
     const filteredVideoRows = useMemo(() => {
         const search = videoFilters.search.trim().toLowerCase();
         const rows = videoRows.filter((video: any) =>
@@ -2305,6 +2315,7 @@ export default function AdsPage() {
     const deepProfileType = deepInsightsData?.data?.accountProfile?.type || 'general';
     const deepPlacementSummary = deepInsightsData?.data?.placementSummary || null;
     const deepPlacementRows = deepInsightsData?.data?.placementDiagnostics || [];
+    const deepVideoSummary = deepVideoData?.data?.videoSummary || null;
     const campaignDrilldownPageList = campaignDrilldownPages?.pages?.filter(Boolean) || [];
     const selectedCampaignDrilldown = campaignDrilldownPageList[0]?.data
         ? {
@@ -5341,7 +5352,16 @@ export default function AdsPage() {
                             )}
 
                             {/* Video Hook Analysis */}
-                            {deepInsightsData.data.videoSummary && (
+                            {deepVideoLoading ? (
+                                <SectionCard
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
+                                    subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
+                                >
+                                    <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(99, 102, 241, 0.08)', color: 'var(--muted)', fontSize: 13 }}>
+                                        Loading video retention separately so the rest of diagnostics can render first.
+                                    </div>
+                                </SectionCard>
+                            ) : deepVideoSummary ? (
                                 <SectionCard
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
                                     subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
@@ -5353,29 +5373,29 @@ export default function AdsPage() {
                                                 Videos Analyzed
                                                 <InfoTooltip text="How many ads had enough Meta video-play or watch-depth data to be evaluated in this section." />
                                             </div>
-                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{deepInsightsData.data.videoSummary.totalVideos}</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700 }}>{deepVideoSummary.totalVideos}</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 Weighted Hook Rate (25%)
-                                                <InfoTooltip text={`Play-weighted share of video plays that reached the 25% watch milestone. This summary uses ${deepInsightsData.data.videoSummary.weightingLabel || 'weighted averages'} instead of a simple ad-by-ad average.`} />
+                                                <InfoTooltip text={`Play-weighted share of video plays that reached the 25% watch milestone. This summary uses ${deepVideoSummary.weightingLabel || 'weighted averages'} instead of a simple ad-by-ad average.`} />
                                             </div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>{deepInsightsData.data.videoSummary.avgHookRate}%</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1' }}>{deepVideoSummary.avgHookRate}%</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 Weighted Quality Score
                                                 <InfoTooltip text="A play-weighted blended quality score from hook rate, hold rate, completion rate, spend depth, and result volume. This is more useful than ranking on hook rate alone." />
                                             </div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepInsightsData.data.videoSummary.weightedQualityScore}</div>
-                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hold {deepInsightsData.data.videoSummary.avgHoldRate}% • Complete {deepInsightsData.data.videoSummary.avgCompletionRate}%</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{deepVideoSummary.weightedQualityScore}</div>
+                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Hold {deepVideoSummary.avgHoldRate}% • Complete {deepVideoSummary.avgCompletionRate}%</div>
                                         </div>
                                         <div style={{ padding: 16, background: 'var(--background)', borderRadius: 8, textAlign: 'center' }}>
                                             <div className="text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 Needs Improvement
                                                 <InfoTooltip text="Count of video ads whose hook or hold pattern suggests creative work is needed before scaling harder." />
                                             </div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{deepInsightsData.data.videoSummary.needsWork}</div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{deepVideoSummary.needsWork}</div>
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
@@ -5581,7 +5601,16 @@ export default function AdsPage() {
                                         onPageChange={(page) => setVideoFilters((current) => ({ ...current, page }))}
                                     />
                                 </SectionCard>
-                            )}
+                            ) : deepVideoError ? (
+                                <SectionCard
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
+                                    subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
+                                >
+                                    <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.18)', color: 'var(--muted)', fontSize: 13 }}>
+                                        Video diagnostics did not finish in time for this refresh, so the rest of diagnostics was shown first. Reload the tab if you want to retry the video-only section.
+                                    </div>
+                                </SectionCard>
+                            ) : null}
 
                             {/* Placement Diagnostics */}
                             {deepPlacementSummary && (
