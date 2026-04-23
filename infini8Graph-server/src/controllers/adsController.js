@@ -648,10 +648,13 @@ export async function getAdInsights(req, res) {
         const payload = await withMetaCache(cacheKey, META_CACHE_TTL.overview, async () => {
             const comparisonRange = getRollingComparisonRange(datePreset);
             const requests = [
+                // Relevance diagnostics: always use last_30d — Meta requires ~500 impressions
+                // before providing quality/engagement/conversion rankings; short windows (7d)
+                // often fall below this threshold and return UNKNOWN for all rankings.
                 axios.get(`${GRAPH_API_BASE}/${accountId}/ads`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'name,status,insights.date_preset(' + datePreset + '){quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,spend}',
+                        fields: 'name,status,insights.date_preset(last_30d){quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,spend}',
                         limit: 500
                     }
                 }),
