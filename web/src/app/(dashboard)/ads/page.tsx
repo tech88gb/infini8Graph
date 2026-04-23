@@ -244,6 +244,8 @@ function buildMetaAdsOverviewMetrics({
                 value: formatRoas(roas.purchaseRoas || 0),
                 icon: TrendingUp,
                 color: '#22c55e',
+                trend: summary.comparison?.roasTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Return on ad spend from tracked purchases'
             },
             {
@@ -251,6 +253,8 @@ function buildMetaAdsOverviewMetrics({
                 value: formatCurrency(purchaseValueMetric?.value || 0),
                 icon: CreditCard,
                 color: '#8b5cf6',
+                trend: summary.comparison?.purchaseValueTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Tracked revenue value attributed to ads'
             },
             {
@@ -258,6 +262,8 @@ function buildMetaAdsOverviewMetrics({
                 value: formatNumber(purchaseMetric?.value || 0),
                 icon: Package,
                 color: '#f59e0b',
+                trend: summary.comparison?.purchasesTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Tracked purchase actions attributed to ads'
             },
             {
@@ -265,6 +271,9 @@ function buildMetaAdsOverviewMetrics({
                 value: formatCurrency(purchaseCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#ef4444',
+                trend: summary.comparison?.costPerPurchaseTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
                 tooltip: 'Average spend required to drive one purchase'
             },
             {
@@ -272,7 +281,7 @@ function buildMetaAdsOverviewMetrics({
                 value: formatPercent(summary.ctr),
                 icon: MousePointer,
                 color: '#0ea5e9',
-                trend: summary.comparison?.clicksTrend,
+                trend: summary.comparison?.ctrTrend,
                 trendLabel: summary.comparison?.label,
                 tooltip: 'Click-through rate across all ads'
             }
@@ -292,6 +301,8 @@ function buildMetaAdsOverviewMetrics({
                 value: formatNumber(leadMetric?.value || 0),
                 icon: Target,
                 color: '#6366f1',
+                trend: summary.comparison?.leadsTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Tracked lead conversions from campaigns'
             },
             {
@@ -299,6 +310,9 @@ function buildMetaAdsOverviewMetrics({
                 value: formatCurrency(leadCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#f97316',
+                trend: summary.comparison?.costPerLeadTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
                 tooltip: 'Average spend required to drive one lead'
             },
             {
@@ -306,9 +320,28 @@ function buildMetaAdsOverviewMetrics({
                 value: formatPercent(summary.ctr),
                 icon: MousePointer,
                 color: '#0ea5e9',
-                trend: summary.comparison?.clicksTrend,
+                trend: summary.comparison?.ctrTrend,
                 trendLabel: summary.comparison?.label,
                 tooltip: 'Click-through rate across all ads'
+            },
+            {
+                label: 'CPC',
+                value: formatCurrency(parseFloat(summary.cpc || 0)),
+                icon: CreditCard,
+                color: '#ef4444',
+                trend: summary.comparison?.cpcTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
+                tooltip: 'Average cost per click'
+            },
+            {
+                label: 'Impressions',
+                value: formatNumber(summary.impressions),
+                icon: Eye,
+                color: '#ec4899',
+                trend: summary.comparison?.impressionsTrend,
+                trendLabel: summary.comparison?.label,
+                tooltip: 'Number of times your ads were shown on screen'
             },
             {
                 label: 'Reach',
@@ -320,13 +353,14 @@ function buildMetaAdsOverviewMetrics({
                 tooltip: 'Number of unique people who saw your ads'
             },
             {
-                label: 'Impressions',
-                value: formatNumber(summary.impressions),
-                icon: Eye,
-                color: '#ec4899',
-                trend: summary.comparison?.impressionsTrend,
+                label: 'CPM',
+                value: formatCurrency(parseFloat(summary.cpm || 0)),
+                icon: BarChart3,
+                color: '#14b8a6',
+                trend: summary.comparison?.cpmTrend,
                 trendLabel: summary.comparison?.label,
-                tooltip: 'Number of times your ads were shown on screen'
+                trendInvert: true,
+                tooltip: 'Cost per 1,000 impressions'
             }
         ],
         traffic: [
@@ -344,6 +378,8 @@ function buildMetaAdsOverviewMetrics({
                 value: formatNumber(clickMetrics.outboundClicks || 0),
                 icon: ArrowRight,
                 color: '#0ea5e9',
+                trend: summary.comparison?.clicksTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Clicks that sent people off Meta to your destination'
             },
             {
@@ -351,6 +387,9 @@ function buildMetaAdsOverviewMetrics({
                 value: formatCurrency(clickMetrics.costPerInlineLinkClick || summary.cpc || 0),
                 icon: DollarSign,
                 color: '#8b5cf6',
+                trend: summary.comparison?.cpcTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
                 tooltip: 'Average cost per click to your destination'
             },
             {
@@ -358,9 +397,19 @@ function buildMetaAdsOverviewMetrics({
                 value: formatPercent(summary.ctr),
                 icon: MousePointer,
                 color: '#f59e0b',
-                trend: summary.comparison?.clicksTrend,
+                trend: summary.comparison?.ctrTrend,
                 trendLabel: summary.comparison?.label,
                 tooltip: 'Click-through rate across all ads'
+            },
+            {
+                label: 'CPM',
+                value: formatCurrency(parseFloat(summary.cpm || 0)),
+                icon: BarChart3,
+                color: '#14b8a6',
+                trend: summary.comparison?.cpmTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
+                tooltip: 'Cost per 1,000 impressions'
             },
             {
                 label: 'Reach',
@@ -405,6 +454,9 @@ function buildMetaAdsOverviewMetrics({
                 value: formatCurrency(parseFloat(summary.cpm || 0)),
                 icon: DollarSign,
                 color: '#ec4899',
+                trend: summary.comparison?.cpmTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
                 tooltip: 'Cost per 1,000 impressions'
             },
             {
@@ -412,6 +464,8 @@ function buildMetaAdsOverviewMetrics({
                 value: parseFloat(summary.frequency || 0).toFixed(2),
                 icon: Activity,
                 color: '#14b8a6',
+                trend: summary.comparison?.frequencyTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Average number of times each person saw your ad'
             },
             {
@@ -428,7 +482,7 @@ function buildMetaAdsOverviewMetrics({
                 value: formatPercent(summary.ctr),
                 icon: MousePointer,
                 color: '#f59e0b',
-                trend: summary.comparison?.clicksTrend,
+                trend: summary.comparison?.ctrTrend,
                 trendLabel: summary.comparison?.label,
                 tooltip: 'Click-through rate across all ads'
             }
@@ -448,6 +502,8 @@ function buildMetaAdsOverviewMetrics({
                 value: formatNumber(engagementMetric?.value || 0),
                 icon: Activity,
                 color: '#ec4899',
+                trend: summary.comparison?.engagementsTrend,
+                trendLabel: summary.comparison?.label,
                 tooltip: 'Tracked engagement actions from campaigns'
             },
             {
@@ -455,6 +511,9 @@ function buildMetaAdsOverviewMetrics({
                 value: formatCurrency(engagementCostMetric?.value || 0),
                 icon: DollarSign,
                 color: '#f97316',
+                trend: summary.comparison?.costPerEngagementTrend,
+                trendLabel: summary.comparison?.label,
+                trendInvert: true,
                 tooltip: 'Average spend required to drive one engagement'
             },
             {
@@ -514,7 +573,7 @@ function buildMetaAdsOverviewMetrics({
                 value: formatPercent(summary.ctr),
                 icon: MousePointer,
                 color: '#f59e0b',
-                trend: summary.comparison?.clicksTrend,
+                trend: summary.comparison?.ctrTrend,
                 trendLabel: summary.comparison?.label,
                 tooltip: 'Click-through rate across all ads'
             },
@@ -575,6 +634,44 @@ function buildMetaAdsOverviewMetrics({
             trend: summary.comparison?.clicksTrend,
             trendLabel: summary.comparison?.label,
             tooltip: 'Number of clicks on your ads'
+        },
+        {
+            label: 'CTR',
+            value: formatPercent(summary.ctr),
+            icon: Target,
+            color: '#22c55e',
+            trend: summary.comparison?.ctrTrend,
+            trendLabel: summary.comparison?.label,
+            tooltip: 'Click-through rate across all ads'
+        },
+        {
+            label: 'CPC',
+            value: formatCurrency(parseFloat(summary.cpc || 0)),
+            icon: CreditCard,
+            color: '#ef4444',
+            trend: summary.comparison?.cpcTrend,
+            trendLabel: summary.comparison?.label,
+            trendInvert: true,
+            tooltip: 'Average cost per click'
+        },
+        {
+            label: 'CPM',
+            value: formatCurrency(parseFloat(summary.cpm || 0)),
+            icon: BarChart3,
+            color: '#14b8a6',
+            trend: summary.comparison?.cpmTrend,
+            trendLabel: summary.comparison?.label,
+            trendInvert: true,
+            tooltip: 'Cost per 1,000 impressions'
+        },
+        {
+            label: 'Frequency',
+            value: parseFloat(summary.frequency || 0).toFixed(2),
+            icon: Activity,
+            color: '#ec4899',
+            trend: summary.comparison?.frequencyTrend,
+            trendLabel: summary.comparison?.label,
+            tooltip: 'Average number of times each person saw your ad'
         }
     ];
 
@@ -735,7 +832,7 @@ function InfoTooltip({ text }: { text: string }) {
 
 // ==================== METRIC CARDS ====================
 
-function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, tooltip }: {
+function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, tooltip, trendInvert }: {
     label: string;
     value: string | number;
     icon: React.ElementType;
@@ -743,10 +840,12 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
     trendLabel?: string;
     color: string;
     tooltip?: string;
+    trendInvert?: boolean;
 }) {
     const formattedTrend = trend !== undefined
         ? `${trend >= 0 ? '+' : ''}${Number.isInteger(trend) ? trend : trend.toFixed(1)}%`
         : null;
+    const isPositive = trendInvert ? (trend !== undefined && trend <= 0) : (trend !== undefined && trend >= 0);
 
     return (
         <div className="metric-card" style={{ padding: 16 }}>
@@ -761,7 +860,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
 
             {trend !== undefined && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 'auto' }}>
-                    {trend >= 0 ? (
+                    {isPositive ? (
                         <TrendingUp size={14} style={{ color: '#10b981' }} />
                     ) : (
                         <TrendingUp size={14} style={{ color: '#ef4444', transform: 'rotate(180deg)' }} />
@@ -769,7 +868,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, toolti
                     <span style={{
                         fontSize: 12,
                         fontWeight: 600,
-                        color: trend >= 0 ? '#10b981' : '#ef4444'
+                        color: isPositive ? '#10b981' : '#ef4444'
                     }}>
                         {formattedTrend}
                     </span>
