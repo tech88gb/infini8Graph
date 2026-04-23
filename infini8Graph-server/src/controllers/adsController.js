@@ -4240,6 +4240,8 @@ export async function getDeepInsights(req, res) {
                 const benchmarkCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
                 const benchmarkCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
                 const benchmarkLpvRate = totalClicks > 0 ? (totalLandingPageViews / totalClicks) * 100 : 0;
+                const totalImpressions = placementDiagnostics.reduce((sum, placement) => sum + placement.metrics.impressions, 0);
+                const benchmarkCpm = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
 
                 placementDiagnostics = placementDiagnostics.map((placement) => {
                     const spendShare = totalSpend > 0 ? (placement.metrics.spend / totalSpend) * 100 : 0;
@@ -4317,9 +4319,17 @@ export async function getDeepInsights(req, res) {
                             recommendationColor = '#f59e0b';
                         }
                     } else {
-                        if (placement.metrics.reach > 0 && placement.metrics.cpm > 0 && (benchmarkCpc === 0 || placement.metrics.cpm <= (totalSpend > 0 && placementDiagnostics.reduce((sum, row) => sum + row.metrics.impressions, 0) > 0 ? (totalSpend / placementDiagnostics.reduce((sum, row) => sum + row.metrics.impressions, 0)) * 1000 * 1.1 : placement.metrics.cpm))) {
-                            recommendation = 'Efficient';
-                            recommendationColor = '#10b981';
+                        if (placement.metrics.reach > 0 && placement.metrics.cpm > 0) {
+                            if (benchmarkCpm > 0 && placement.metrics.cpm <= benchmarkCpm * 0.8) {
+                                recommendation = 'Scale';
+                                recommendationColor = '#10b981';
+                            } else if (benchmarkCpm > 0 && placement.metrics.cpm >= benchmarkCpm * 1.25 && enoughSpend) {
+                                recommendation = 'Review';
+                                recommendationColor = '#ef4444';
+                            } else {
+                                recommendation = 'Efficient';
+                                recommendationColor = '#10b981';
+                            }
                         } else if (enoughData) {
                             recommendation = 'Watch';
                             recommendationColor = '#f59e0b';

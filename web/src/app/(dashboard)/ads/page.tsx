@@ -3715,11 +3715,11 @@ export default function AdsPage() {
                                                         alignItems: 'center',
                                                         gap: 8,
                                                         padding: '8px 0',
-                                                        color: stage.dropoffRate > 50 ? '#ef4444' : '#94a3b8'
+                                                        color: stage.dropoffRate > 50 ? '#ef4444' : stage.dropoffRate < 0 ? '#10b981' : '#94a3b8'
                                                     }}>
                                                         <ArrowRight size={16} style={{ transform: 'rotate(90deg)' }} />
                                                         <span style={{ fontSize: 12, fontWeight: 500 }}>
-                                                            {stage.dropoffRate}% drop off
+                                                            {stage.dropoffRate < 0 ? `+${Math.abs(stage.dropoffRate)}% increase` : `${stage.dropoffRate}% drop off`}
                                                         </span>
                                                     </div>
                                                 )}
