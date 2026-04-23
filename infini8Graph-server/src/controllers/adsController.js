@@ -699,7 +699,7 @@ export async function getAdInsights(req, res) {
                 requests.push(axios.get(`${GRAPH_API_BASE}/${accountId}/insights`, {
                     params: {
                         access_token: accessToken,
-                        fields: 'spend,impressions,reach,clicks',
+                        fields: 'spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,actions,action_values,cost_per_action_type,purchase_roas',
                         time_range: JSON.stringify(comparisonRange.previous)
                     }
                 }));
@@ -830,11 +830,47 @@ export async function getAdInsights(req, res) {
                     return Number((((c - p) / p) * 100).toFixed(1));
                 };
 
+                const prevConversions = (comparisonSummary.actions || []).filter(a =>
+                    ['purchase', 'lead', 'complete_registration', 'add_to_cart', 'initiate_checkout', 'link_click', 'post_engagement', 'page_engagement'].includes(a.action_type)
+                    || String(a.action_type || '').toLowerCase().includes('total_messaging_connection')
+                ).map(a => ({ type: a.action_type, value: parseInt(a.value) }));
+                const prevActionValues = (comparisonSummary.action_values || []).map(a => ({ type: a.action_type, value: parseFloat(a.value) }));
+                const prevCostPerAction = (comparisonSummary.cost_per_action_type || []).map(a => ({ type: a.action_type, value: parseFloat(a.value) }));
+                const prevPurchaseRoas = Array.isArray(comparisonSummary.purchase_roas) ? parseFloat(comparisonSummary.purchase_roas[0]?.value || 0) : parseFloat(comparisonSummary.purchase_roas || 0);
+                const prevPurchaseMetric = findActionMetric(prevConversions, ACTION_CANDIDATES.purchases);
+                const prevPurchaseValueMetric = findActionMetric(prevActionValues, ACTION_CANDIDATES.purchases);
+                const prevPurchaseCostMetric = findActionMetric(prevCostPerAction, ACTION_CANDIDATES.purchases);
+                const prevLeadMetric = findActionMetric(prevConversions, ACTION_CANDIDATES.leads);
+                const prevLeadCostMetric = findActionMetric(prevCostPerAction, ACTION_CANDIDATES.leads);
+                const prevEngagementMetric = findActionMetric(prevConversions, ACTION_CANDIDATES.engagement);
+                const prevEngagementCostMetric = findActionMetric(prevCostPerAction, ACTION_CANDIDATES.engagement);
+
+                const currPurchaseRoas = parseFloat(roas.purchaseRoas || 0);
+                const currPurchaseMetric = findActionMetric(conversions, ACTION_CANDIDATES.purchases);
+                const currPurchaseValueMetric = findActionMetric(actionValues, ACTION_CANDIDATES.purchases);
+                const currPurchaseCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.purchases);
+                const currLeadMetric = findActionMetric(conversions, ACTION_CANDIDATES.leads);
+                const currLeadCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.leads);
+                const currEngagementMetric = findActionMetric(conversions, ACTION_CANDIDATES.engagement);
+                const currEngagementCostMetric = findActionMetric(costPerAction, ACTION_CANDIDATES.engagement);
+
                 comparisonTrend = {
                     spendTrend: calculateTrend(summary?.spend, comparisonSummary.spend),
                     impressionsTrend: calculateTrend(summary?.impressions, comparisonSummary.impressions),
                     reachTrend: calculateTrend(summary?.reach, comparisonSummary.reach),
                     clicksTrend: calculateTrend(summary?.clicks, comparisonSummary.clicks),
+                    ctrTrend: calculateTrend(summary?.ctr, comparisonSummary.ctr),
+                    cpcTrend: calculateTrend(summary?.cpc, comparisonSummary.cpc),
+                    cpmTrend: calculateTrend(summary?.cpm, comparisonSummary.cpm),
+                    frequencyTrend: calculateTrend(summary?.frequency, comparisonSummary.frequency),
+                    roasTrend: calculateTrend(currPurchaseRoas, prevPurchaseRoas),
+                    purchasesTrend: calculateTrend(currPurchaseMetric?.value, prevPurchaseMetric?.value),
+                    purchaseValueTrend: calculateTrend(currPurchaseValueMetric?.value, prevPurchaseValueMetric?.value),
+                    costPerPurchaseTrend: calculateTrend(currPurchaseCostMetric?.value, prevPurchaseCostMetric?.value),
+                    leadsTrend: calculateTrend(currLeadMetric?.value, prevLeadMetric?.value),
+                    costPerLeadTrend: calculateTrend(currLeadCostMetric?.value, prevLeadCostMetric?.value),
+                    engagementsTrend: calculateTrend(currEngagementMetric?.value, prevEngagementMetric?.value),
+                    costPerEngagementTrend: calculateTrend(currEngagementCostMetric?.value, prevEngagementCostMetric?.value),
                     label: comparisonRange?.label || 'vs previous period'
                 };
             }
