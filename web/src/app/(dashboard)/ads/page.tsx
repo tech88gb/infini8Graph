@@ -1834,21 +1834,11 @@ export default function AdsPage() {
         enabled: !!effectiveAccount && activeTab === 'funnel',
         retry: 1
     });
-    const { data: deepPlacementData, isLoading: deepPlacementLoading, error: deepPlacementError } = useQuery({
-        queryKey: ['deep-insights', 'placements', effectiveAccount, datePreset],
+    const { data: deepDiagnosticsData, isLoading: deepDiagnosticsLoading, error: deepDiagnosticsError } = useQuery({
+        queryKey: ['deep-insights', 'diagnostics', effectiveAccount, datePreset],
         queryFn: async () => {
             if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'placements');
-            return res.data;
-        },
-        enabled: !!effectiveAccount && activeTab === 'deep',
-        retry: 1
-    });
-    const { data: deepVideoData, isLoading: deepVideoLoading, error: deepVideoError } = useQuery({
-        queryKey: ['deep-insights', 'video', effectiveAccount, datePreset],
-        queryFn: async () => {
-            if (!effectiveAccount) return null;
-            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'video');
+            const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'diagnostics');
             return res.data;
         },
         enabled: !!effectiveAccount && activeTab === 'deep',
@@ -2174,7 +2164,7 @@ export default function AdsPage() {
     }, [funnelRows, funnelFilters]);
     const pagedFunnelRows = paginateItems(filteredFunnelRows, funnelFilters.page, sectionPageSize);
 
-    const videoRows = useMemo(() => deepVideoData?.data?.videoHookAnalysis || [], [deepVideoData]);
+    const videoRows = useMemo(() => deepDiagnosticsData?.data?.videoHookAnalysis || [], [deepDiagnosticsData]);
     const filteredVideoRows = useMemo(() => {
         const search = videoFilters.search.trim().toLowerCase();
         const rows = videoRows.filter((video: any) =>
@@ -2322,12 +2312,11 @@ export default function AdsPage() {
             helper: videoViews.views_75 > 0 ? `${((Number(videoViews.views_100 || 0) / Number(videoViews.views_75 || 1)) * 100).toFixed(1)}% of 75% viewers completed` : 'Completed the video'
         }
     ];
-    const deepProfileType = deepPlacementData?.data?.accountProfile?.type || 'general';
-    const deepPlacementSummary = deepPlacementData?.data?.placementSummary || null;
-    const deepPlacementRows = deepPlacementData?.data?.placementDiagnostics || [];
-    const deepVideoSummary = deepVideoData?.data?.videoSummary || null;
+    const deepProfileType = deepDiagnosticsData?.data?.accountProfile?.type || 'general';
+    const deepPlacementSummary = deepDiagnosticsData?.data?.placementSummary || null;
+    const deepPlacementRows = deepDiagnosticsData?.data?.placementDiagnostics || [];
+    const deepVideoSummary = deepDiagnosticsData?.data?.videoSummary || null;
     const deepFunnelData = deepInsightsData?.data || {};
-    const deepDiagnosticsLoading = deepPlacementLoading && deepVideoLoading;
     const deepHasAnySectionData = Boolean(
         deepPlacementSummary
         || deepVideoSummary
@@ -5369,16 +5358,7 @@ export default function AdsPage() {
                     ) : deepHasAnySectionData ? (
                         <>
                             {/* Video Hook Analysis */}
-                            {deepVideoLoading ? (
-                                <SectionCard
-                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
-                                    subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
-                                >
-                                    <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(99, 102, 241, 0.08)', color: 'var(--muted)', fontSize: 13 }}>
-                                        Loading video retention separately so the rest of diagnostics can render first.
-                                    </div>
-                                </SectionCard>
-                            ) : deepVideoSummary ? (
+                            {deepVideoSummary ? (
                                 <SectionCard
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
                                     subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
@@ -5618,21 +5598,15 @@ export default function AdsPage() {
                                         onPageChange={(page) => setVideoFilters((current) => ({ ...current, page }))}
                                     />
                                 </SectionCard>
-                            ) : deepVideoError ? (
+                            ) : (
                                 <SectionCard
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>📹 Video Hook & Retention Analysis <InfoTooltip text="Uses Meta's real video-play and watch-depth actions. Hook rate is the share of plays that reached 25%. Hold rate is the share of 25% viewers who stayed through 75%." /></span>}
                                     subtitle="Use this when the account is spending materially on video and you want to see whether the opening and middle of the video are keeping attention"
                                 >
                                     <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.18)', color: 'var(--muted)', fontSize: 13 }}>
-                                        Video diagnostics did not finish in time for this refresh, so the rest of diagnostics was shown first. Reload the tab if you want to retry the video-only section.
+                                        No video retention data was available for the selected date range.
                                     </div>
                                 </SectionCard>
-                            ) : null}
-
-                            {deepPlacementError && !deepPlacementSummary && (
-                                <div style={{ padding: '16px 18px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.18)', color: 'var(--muted)', fontSize: 13 }}>
-                                    Placement diagnostics did not finish for this refresh, so the other diagnostics sections are shown first.
-                                </div>
                             )}
 
                             {/* Placement Diagnostics */}
@@ -5832,11 +5806,11 @@ export default function AdsPage() {
                                 </SectionCard>
                             )}
                         </>
-                    ) : (deepPlacementError || deepVideoError) ? (
+                    ) : deepDiagnosticsError ? (
                         <div style={{ textAlign: 'center', padding: 40 }}>
                             <p className="text-muted" style={{ marginBottom: 8 }}>Deep diagnostics could not load for this account just now.</p>
                             <p className="text-muted" style={{ fontSize: 12 }}>
-                                This refresh likely hit a temporary Meta response issue for the placement or video diagnostics requests.
+                                This refresh likely hit a temporary Meta response issue while fetching the diagnostics dataset.
                             </p>
                         </div>
                     ) : (
