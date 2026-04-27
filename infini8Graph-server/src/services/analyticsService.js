@@ -1336,7 +1336,7 @@ class AnalyticsService {
      * Includes: format battle, caption analysis, viral coefficient, save-to-like ratio
      */
     async getContentIntelligence(startDate = null, endDate = null) {
-        const dateKey = `v2_${startDate || 'default'}_${endDate || 'default'}`;
+        const dateKey = `v3_${startDate || 'default'}_${endDate || 'default'}`;
         const cached = await this.checkCache('content_intelligence', dateKey);
         if (cached) return cached;
 
@@ -1521,6 +1521,159 @@ class AnalyticsService {
             rank: row.rank
         })).sort((a, b) => b.reachAdjustedER - a.reachAdjustedER);
 
+        const sortedPostsByTime = [...enrichedPosts]
+            .filter((post) => post.timestamp)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const postsByDay = sortedPostsByTime.reduce((acc, post) => {
+            const date = new Date(post.timestamp).toISOString().split('T')[0];
+            if (!acc[date]) acc[date] = [];
+            acc[date].push(post);
+            return acc;
+        }, {});
+        const dayRows = Object.entries(postsByDay)
+            .map(([date, posts]) => {
+                const formats = posts.reduce((acc, post) => {
+                    const type = post.mediaType || 'UNKNOWN';
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                }, {});
+                return {
+                    date,
+                    postCount: posts.length,
+                    totalReach: posts.reduce((sum, post) => sum + (post.reach || 0), 0),
+                    totalEngagement: posts.reduce((sum, post) => sum + (post.engagement || 0), 0),
+                    avgReach: posts.length > 0 ? Math.round(posts.reduce((sum, post) => sum + (post.reach || 0), 0) / posts.length) : 0,
+                    avgEngagementRate: this.averageValue(posts.map((post) => post.engagementRate)),
+                    avgSaveRate: this.averageValue(posts.map((post) => post.saveRate)),
+                    formats,
+                    dominantFormat: Object.entries(formats).sort((a, b) => b[1] - a[1])[0]?.[0] || 'UNKNOWN'
+                };
+            })
+            .sort((a, b) => a.date.localeCompare(b.date));
+        const activeDays = dayRows.length;
+        const dateSpanDays = (() => {
+            const explicitRangeDays = this.getDateRangeDays(startDate, endDate);
+            if (explicitRangeDays) return explicitRangeDays;
+            if (dayRows.length <= 1) return dayRows.length || 0;
+            const first = new Date(`${dayRows[0].date}T00:00:00Z`);
+            const last = new Date(`${dayRows[dayRows.length - 1].date}T00:00:00Z`);
+            return Math.round((last - first) / 86400000) + 1;
+        })();
+        const postsPerActiveDay = activeDays > 0 ? Number((enrichedPosts.length / activeDays).toFixed(2)) : 0;
+        const postsPerCalendarDay = dateSpanDays > 0 ? Number((enrichedPosts.length / dateSpanDays).toFixed(2)) : 0;
+        const gaps = dayRows.slice(1).map((day, index) => {
+            const previous = new Date(`${dayRows[index].date}T00:00:00Z`);
+            const current = new Date(`${day.date}T00:00:00Z`);
+            return Math.max(0, Math.round((current - previous) / 86400000) - 1);
+        });
+        const avgGapDays = gaps.length > 0 ? Number((gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length).toFixed(1)) : 0;
+        const maxGapDays = gaps.length > 0 ? Math.max(...gaps) : 0;
+        const singlePostDays = dayRows.filter((day) => day.postCount === 1);
+        const multiPostDays = dayRows.filter((day) => day.postCount > 1);
+        const averageDayMetric = (rows, selector) => rows.length > 0
+            ? Number((rows.reduce((sum, row) => sum + selector(row), 0) / rows.length).toFixed(2))
+            : 0;
+        const sameDayMultiPostPerformance = {
+            days: multiPostDays.length,
+            avgPostsPerMultiPostDay: multiPostDays.length > 0
+                ? Number((multiPostDays.reduce((sum, day) => sum + day.postCount, 0) / multiPostDays.length).toFixed(2))
+                : 0,
+            singlePostDayAvgReach: averageDayMetric(singlePostDays, (day) => day.avgReach),
+            multiPostDayAvgReachPerPost: averageDayMetric(multiPostDays, (day) => day.avgReach),
+            singlePostDayAvgEngagementRate: averageDayMetric(singlePostDays, (day) => day.avgEngagementRate),
+            multiPostDayAvgEngagementRate: averageDayMetric(multiPostDays, (day) => day.avgEngagementRate),
+            reachDeltaPct: singlePostDays.length > 0 && multiPostDays.length > 0 && averageDayMetric(singlePostDays, (day) => day.avgReach) > 0
+                ? Number((((averageDayMetric(multiPostDays, (day) => day.avgReach) - averageDayMetric(singlePostDays, (day) => day.avgReach)) / averageDayMetric(singlePostDays, (day) => day.avgReach)) * 100).toFixed(1))
+                : null,
+            engagementRateDeltaPct: singlePostDays.length > 0 && multiPostDays.length > 0 && averageDayMetric(singlePostDays, (day) => day.avgEngagementRate) > 0
+                ? Number((((averageDayMetric(multiPostDays, (day) => day.avgEngagementRate) - averageDayMetric(singlePostDays, (day) => day.avgEngagementRate)) / averageDayMetric(singlePostDays, (day) => day.avgEngagementRate)) * 100).toFixed(1))
+                : null
+        };
+        const formatCadence = Object.values(
+            enrichedPosts.reduce((acc, post) => {
+                const type = post.mediaType || 'UNKNOWN';
+                if (!acc[type]) {
+                    acc[type] = { type, posts: 0, reach: 0, engagement: 0, saveRateSum: 0 };
+                }
+                acc[type].posts += 1;
+                acc[type].reach += post.reach || 0;
+                acc[type].engagement += post.engagement || 0;
+                acc[type].saveRateSum += post.saveRate || 0;
+                return acc;
+            }, {})
+        ).map((format) => ({
+            ...format,
+            postShare: enrichedPosts.length > 0 ? Number(((format.posts / enrichedPosts.length) * 100).toFixed(1)) : 0,
+            reachShare: enrichedPosts.reduce((sum, post) => sum + (post.reach || 0), 0) > 0
+                ? Number(((format.reach / enrichedPosts.reduce((sum, post) => sum + (post.reach || 0), 0)) * 100).toFixed(1))
+                : 0,
+            avgReach: format.posts > 0 ? Math.round(format.reach / format.posts) : 0,
+            avgEngagementRate: format.reach > 0 ? Number(((format.engagement / format.reach) * 100).toFixed(2)) : 0,
+            avgSaveRate: format.posts > 0 ? Number((format.saveRateSum / format.posts).toFixed(2)) : 0
+        })).sort((a, b) => b.reachShare - a.reachShare);
+        const reelFormat = formatCadence.find((format) => format.type === 'REEL' || format.type === 'VIDEO');
+        const staticFormats = formatCadence.filter((format) => ['IMAGE', 'CAROUSEL_ALBUM'].includes(format.type));
+        const staticPostShare = staticFormats.reduce((sum, format) => sum + format.postShare, 0);
+        const staticReachShare = staticFormats.reduce((sum, format) => sum + format.reachShare, 0);
+        const reelsCarryingReach = reelFormat
+            && reelFormat.reachShare >= reelFormat.postShare + 15
+            && staticPostShare >= 25
+            && staticReachShare + 10 < staticPostShare;
+        const possibleCannibalization = sameDayMultiPostPerformance.days >= 2
+            && (
+                (sameDayMultiPostPerformance.reachDeltaPct !== null && sameDayMultiPostPerformance.reachDeltaPct <= -20)
+                || (sameDayMultiPostPerformance.engagementRateDeltaPct !== null && sameDayMultiPostPerformance.engagementRateDeltaPct <= -20)
+            );
+        const underPosting = dateSpanDays >= 7
+            && enrichedPosts.length >= 1
+            && (postsPerCalendarDay < 0.35 || maxGapDays >= 5);
+        let cadenceStatus = 'Healthy cadence';
+        let cadenceKey = 'healthy';
+        let recommendation = 'Keep the current rhythm and keep testing format mix.';
+        if (reelsCarryingReach) {
+            cadenceStatus = 'Reels carrying reach, static under-supporting';
+            cadenceKey = 'reels_carrying';
+            recommendation = 'Keep reels active, but improve static/carousel concepts or reduce their share until they earn reach.';
+        } else if (possibleCannibalization) {
+            cadenceStatus = 'Possible cannibalization';
+            cadenceKey = 'cannibalization';
+            recommendation = 'Avoid stacking too many posts on the same day unless the second post serves a different format or intent.';
+        } else if (underPosting) {
+            cadenceStatus = 'Under-posting';
+            cadenceKey = 'under_posting';
+            recommendation = 'Increase posting consistency before judging topic or format performance too harshly.';
+        }
+        const cadenceConfidence = enrichedPosts.length >= 12 && activeDays >= 5
+            ? 'High confidence'
+            : enrichedPosts.length >= 6 && activeDays >= 3
+                ? 'Medium confidence'
+                : 'Low confidence';
+        const postingCadenceHealth = {
+            status: cadenceStatus,
+            key: cadenceKey,
+            recommendation,
+            confidenceLabel: cadenceConfidence,
+            postsAnalyzed: enrichedPosts.length,
+            activeDays,
+            dateSpanDays,
+            postsPerActiveDay,
+            postsPerCalendarDay,
+            avgGapDays,
+            maxGapDays,
+            sameDayMultiPostPerformance,
+            formatMixByDay: dayRows.slice(-14),
+            formatCadence,
+            signals: {
+                underPosting,
+                possibleCannibalization,
+                reelsCarryingReach,
+                staticPostShare: Number(staticPostShare.toFixed(1)),
+                staticReachShare: Number(staticReachShare.toFixed(1)),
+                reelPostShare: reelFormat?.postShare || 0,
+                reelReachShare: reelFormat?.reachShare || 0
+            }
+        };
+
         const intelligence = {
             formatBattle: {
                 ranking: formatRanking,
@@ -1562,6 +1715,7 @@ class AnalyticsService {
                     ? `${String(postingHours[0].hour).padStart(2, '0')}:00 is your strongest recent posting hour by combined reach and interaction quality`
                     : 'Not enough data'
             },
+            postingCadenceHealth,
             interactionQuality,
             reachEfficiency,
             contentQuality: {
