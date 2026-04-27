@@ -233,21 +233,27 @@ export const googleAdsApi = {
     getStatus: () => googleApi.get('/google/auth/status'),
     login: () => googleApi.get('/google/auth/login'),
     disconnect: () => googleApi.post('/google/auth/disconnect'),
-    getPerformance: (preset = '30d') => googleApi.get(`/google/auth/ads-performance?preset=${preset}`),
-    getCampaigns: (preset = '30d') => googleApi.get(`/google/auth/campaigns?preset=${preset}`),
+    buildDateQuery: (preset = '30d', startDate?: string, endDate?: string) => {
+        const params = new URLSearchParams({ preset });
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+        return params.toString();
+    },
+    getPerformance: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/ads-performance?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
+    getCampaigns: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/campaigns?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
     getBudget: () => googleApi.get('/google/auth/budget'),
-    getKeywords: (preset = '30d') => googleApi.get(`/google/auth/keywords?preset=${preset}`),
+    getKeywords: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/keywords?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
     getCreatives: () => googleApi.get('/google/auth/creatives'),
-    getCrossPlatform: (preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0) =>
-        googleApi.get(`/google/auth/cross-platform?preset=${preset}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
-    getAlerts: (preset = '30d') => googleApi.get(`/google/auth/alerts?preset=${preset}`),
-    getAuctionInsights: (preset = '30d') => googleApi.get(`/google/auth/auction-insights?preset=${preset}`),
-    getSearchTerms: (preset = '30d') => googleApi.get(`/google/auth/search-terms?preset=${preset}`),
+    getCrossPlatform: (preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0, startDate?: string, endDate?: string) =>
+        googleApi.get(`/google/auth/cross-platform?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}&metaSpend=${metaSpend}&metaImpressions=${metaImpressions}&metaClicks=${metaClicks}`),
+    getAlerts: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/alerts?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
+    getAuctionInsights: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/auction-insights?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
+    getSearchTerms: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/search-terms?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
     getQualityScore: () => googleApi.get('/google/auth/quality-score'),
-    getAssetData: (preset = '30d') => googleApi.get(`/google/auth/assets?preset=${preset}`),
-    getBidding: (preset = '30d') => googleApi.get(`/google/auth/bidding?preset=${preset}`),
-    getGeo: (preset = '30d') => googleApi.get(`/google/auth/geo?preset=${preset}`),
-    getLocalPresence: (preset = '30d') => googleApi.get(`/google/auth/local-presence?preset=${preset}`),
+    getAssetData: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/assets?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
+    getBidding: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/bidding?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
+    getGeo: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/geo?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
+    getLocalPresence: (preset = '30d', startDate?: string, endDate?: string) => googleApi.get(`/google/auth/local-presence?${googleAdsApi.buildDateQuery(preset, startDate, endDate)}`),
     getDiscovery: () => googleApi.get('/google/auth/accounts'),
     updateAccount: (payload: { customerId: string; loginCustomerId?: string; allClientIds?: string[] }) =>
         googleApi.post('/google/auth/update-account', payload),

@@ -103,8 +103,8 @@ export async function disconnect(req, res) {
 export async function getAdsPerformanceData(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getAdsPerformance(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getAdsPerformance(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Google Ads performance error:', error.message);
@@ -115,8 +115,8 @@ export async function getAdsPerformanceData(req, res) {
 export async function getCampaigns(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getCampaignBreakdown(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getCampaignBreakdown(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Google campaigns error:', error.message);
@@ -138,8 +138,8 @@ export async function getBudget(req, res) {
 export async function getKeywords(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getKeywordPerformance(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getKeywordPerformance(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Google keywords error:', error.message);
@@ -161,8 +161,8 @@ export async function getCreatives(req, res) {
 export async function getCrossPlatform(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0 } = req.query;
-        const data = await getCrossPlatformSummary(userId, metaSpend, metaImpressions, metaClicks, preset);
+        const { preset = '30d', metaSpend = 0, metaImpressions = 0, metaClicks = 0, startDate, endDate } = req.query;
+        const data = await getCrossPlatformSummary(userId, metaSpend, metaImpressions, metaClicks, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Cross-platform error:', error.message);
@@ -173,8 +173,8 @@ export async function getCrossPlatform(req, res) {
 export async function getAlerts(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getRecommendations(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getRecommendations(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Google recommendations error:', error.message);
@@ -185,8 +185,8 @@ export async function getAlerts(req, res) {
 export async function getAuctionInsightsData(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getAuctionInsights(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getAuctionInsights(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Auction insights controller error:', error.message);
@@ -197,8 +197,8 @@ export async function getAuctionInsightsData(req, res) {
 export async function getSearchTerms(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getSearchTermInsights(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getSearchTermInsights(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Search terms controller error:', error.message);
@@ -220,8 +220,8 @@ export async function getQualityScore(req, res) {
 export async function getAssetData(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getAssetPerformance(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getAssetPerformance(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Asset performance controller error:', error.message);
@@ -232,8 +232,8 @@ export async function getAssetData(req, res) {
 export async function getBiddingData(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getBiddingInsights(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getBiddingInsights(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Bidding insights controller error:', error.message);
@@ -244,8 +244,8 @@ export async function getBiddingData(req, res) {
 export async function getGeoData(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getGeoPerformance(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getGeoPerformance(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Geo performance controller error:', error.message);
@@ -256,8 +256,8 @@ export async function getGeoData(req, res) {
 export async function getLocalPresenceData(req, res) {
     try {
         const userId = req.user?.userId;
-        const { preset = '30d' } = req.query;
-        const data = await getLocalPresenceSignals(userId, preset);
+        const { preset = '30d', startDate, endDate } = req.query;
+        const data = await getLocalPresenceSignals(userId, preset, startDate, endDate);
         return res.json({ success: true, data });
     } catch (error) {
         console.error('Local presence controller error:', error.message);
