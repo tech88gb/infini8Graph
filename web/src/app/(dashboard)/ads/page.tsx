@@ -1887,6 +1887,7 @@ export default function AdsPage() {
     const [cqiFilters, setCqiFilters] = useState({ search: '', objective: 'all', status: 'active', confidence: 'all', sort: 'score_desc', page: 1 });
     const [creativeFilters, setCreativeFilters] = useState({ search: '', status: 'all', format: 'all', diagnosis: 'all', sort: 'score_desc', page: 1 });
     const [deliveryFilters, setDeliveryFilters] = useState({ search: '', objective: 'all', status: 'active', readiness: 'all', sort: 'spend_desc', page: 1 });
+    const [healthViewMode, setHealthViewMode] = useState<'workflow' | 'campaign'>('workflow');
     const [funnelFilters, setFunnelFilters] = useState({ search: '', objective: 'all', status: 'active', sort: 'roas_desc', page: 1 });
     const [videoFilters, setVideoFilters] = useState({ search: '', status: 'all', confidence: 'all', diagnosis: 'all', sort: 'quality_desc', page: 1 });
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
@@ -2434,6 +2435,125 @@ export default function AdsPage() {
         });
     }, [deliveryRows, deliveryFilters]);
     const pagedDeliveryRows = paginateItems(filteredDeliveryRows, deliveryFilters.page, sectionPageSize);
+    const campaignHealthRows = useMemo(() => {
+        if (!advancedData?.data) return [];
+
+        const rows = new Map<string, any>();
+        const getKey = (name: string, fallback: string) => (String(name || '').trim().toLowerCase() || fallback);
+        const ensureRow = (name: string, id?: string) => {
+            const key = getKey(name, id || name);
+            if (!rows.has(key)) {
+                rows.set(key, {
+                    key,
+                    name: name || 'Unknown campaign',
+                    cqi: null,
+                    cqiGrade: null,
+                    cqiColor: '#94a3b8',
+                    spend: 0,
+                    conversions: 0,
+                    fatigue: advancedData.data.fatigueAnalysis?.statusLabel || 'Unknown',
+                    fatigueStatus: advancedData.data.fatigueAnalysis?.status || 'unknown',
+                    saturation: null,
+                    saturationStatus: null,
+                    saturationScore: null,
+                    learningStatus: null,
+                    learningSpend: 0,
+                    learningWarnings: 0,
+                    flags: [],
+                    recommendedAction: 'Monitor'
+                });
+            }
+            return rows.get(key);
+        };
+
+        (cqiRows || []).forEach((campaign: any) => {
+            const row = ensureRow(campaign.name, campaign.id);
+            row.cqi = Number(campaign.lqs || 0);
+            row.cqiGrade = campaign.grade || null;
+            row.cqiColor = campaign.gradeColor || row.cqiColor;
+            row.spend = Math.max(row.spend || 0, Number(campaign.spend || 0));
+            row.conversions = Math.max(row.conversions || 0, Number(campaign.conversions || 0));
+        });
+
+        (advancedData.data.creativeSaturation?.campaigns || []).forEach((campaign: any) => {
+            const row = ensureRow(campaign.campaignName, campaign.campaignId);
+            row.saturation = campaign.status || null;
+            row.saturationStatus = campaign.statusKey || null;
+            row.saturationScore = Number(campaign.saturationScore || 0);
+            row.spend = Math.max(row.spend || 0, Number(campaign.totalCreativeSpend || 0));
+            if (campaign.statusKey && campaign.statusKey !== 'healthy') row.flags.push(campaign.status);
+        });
+
+        const readinessRank: Record<string, number> = {
+            limited: 5,
+            learning: 4,
+            delivery_learning: 3,
+            unknown: 2,
+            active: 1,
+            delivery_active: 1
+        };
+        (deliveryRows || []).forEach((adset: any) => {
+            const row = ensureRow(adset.campaignName || adset.name, adset.campaignName || adset.id);
+            const status = adset.learningStatus?.status || 'unknown';
+            const currentRank = readinessRank[row.learningStatus?.status || ''] || 0;
+            if ((readinessRank[status] || 0) > currentRank) {
+                row.learningStatus = adset.learningStatus || { status: 'unknown', label: 'Unknown', color: '#94a3b8' };
+            }
+            row.learningSpend += Number(adset.spend || 0);
+            row.learningWarnings += (adset.warnings || []).length;
+        });
+
+        const retargeting = advancedData.data.retargetingLift;
+        const placementRows = advancedData.data.placementIntent || [];
+        const expensivePlacement = [...placementRows]
+            .filter((placement: any) => Number(placement.spend || 0) > 0 && placement.effectiveCPA)
+            .sort((a: any, b: any) => Number(b.effectiveCPA || 0) - Number(a.effectiveCPA || 0))[0];
+        const bestPlacement = placementRows[0];
+        const retargetKeywords = ['retarget', 'remarket', 'warm', 'website visitor', 'engaged', 'cart', 'abandon'];
+
+        rows.forEach((row) => {
+            const isRetargeting = retargetKeywords.some((keyword) => row.name.toLowerCase().includes(keyword));
+            if (retargeting && isRetargeting) {
+                row.flags.push(`Retargeting ${retargeting.status || 'read'}`);
+            } else if (retargeting && ['critical', 'warning'].includes(retargeting.status)) {
+                row.flags.push('Account retargeting weak');
+            }
+            if (expensivePlacement && Number(expensivePlacement.effectiveCPA || 0) > 0) {
+                row.flags.push(`Watch ${expensivePlacement.displayName}`);
+            } else if (bestPlacement?.displayName) {
+                row.flags.push(`Best placement: ${bestPlacement.displayName}`);
+            }
+
+            if (row.learningStatus?.status === 'limited' || row.learningStatus?.status === 'learning') {
+                row.recommendedAction = 'Consolidate or improve event pace';
+            } else if (row.saturationStatus === 'one_creative' || row.saturationStatus === 'creative_fatigue') {
+                row.recommendedAction = 'Refresh or rotate creatives';
+            } else if (row.fatigueStatus === 'critical' && row.saturationStatus && row.saturationStatus !== 'healthy') {
+                row.recommendedAction = 'Refresh creative before scaling';
+            } else if (row.cqi !== null && row.cqi < 40) {
+                row.recommendedAction = 'Fix traffic quality or funnel handoff';
+            } else if (retargeting && isRetargeting && ['critical', 'warning'].includes(retargeting.status)) {
+                row.recommendedAction = 'Audit retargeting audience and offer';
+            } else if (row.cqi !== null && row.cqi >= 60 && (!row.saturationStatus || row.saturationStatus === 'healthy') && (!row.learningStatus || ['active', 'delivery_active'].includes(row.learningStatus.status))) {
+                row.recommendedAction = 'Healthy candidate to protect';
+            }
+
+            row.flags = Array.from(new Set(row.flags)).slice(0, 3);
+        });
+
+        return Array.from(rows.values()).sort((a, b) => {
+            const actionPriority = (row: any) => {
+                if (String(row.recommendedAction || '').includes('Consolidate')) return 5;
+                if (String(row.recommendedAction || '').includes('Refresh')) return 4;
+                if (String(row.recommendedAction || '').includes('Fix')) return 3;
+                if (String(row.recommendedAction || '').includes('Audit')) return 2;
+                return 1;
+            };
+            const priorityDiff = actionPriority(b) - actionPriority(a);
+            if (priorityDiff !== 0) return priorityDiff;
+            return Number(b.spend || b.learningSpend || 0) - Number(a.spend || a.learningSpend || 0);
+        }).slice(0, 50);
+    }, [advancedData, cqiRows, deliveryRows]);
 
     const funnelRows = useMemo(() => deepInsightsData?.data?.campaignFunnels || [], [deepInsightsData]);
     const funnelObjectiveOptions = useMemo(() => {
@@ -4730,6 +4850,152 @@ export default function AdsPage() {
                         </div>
                     ) : advancedData?.data ? (
                         <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                                <div>
+                                    <div style={{ fontSize: 16, fontWeight: 700 }}>Health View</div>
+                                    <div className="text-muted" style={{ fontSize: 12 }}>Switch between a workflow diagnosis and a campaign-first action matrix.</div>
+                                </div>
+                                <div style={{ display: 'inline-flex', padding: 4, borderRadius: 10, background: 'rgba(15, 23, 42, 0.62)', border: '1px solid var(--border)' }}>
+                                    {[
+                                        { value: 'workflow', label: 'Workflow' },
+                                        { value: 'campaign', label: 'By campaign' }
+                                    ].map((item) => (
+                                        <button
+                                            key={item.value}
+                                            type="button"
+                                            onClick={() => setHealthViewMode(item.value as 'workflow' | 'campaign')}
+                                            style={{
+                                                padding: '8px 12px',
+                                                borderRadius: 8,
+                                                border: 'none',
+                                                background: healthViewMode === item.value ? 'var(--primary)' : 'transparent',
+                                                color: healthViewMode === item.value ? '#fff' : 'var(--muted)',
+                                                fontSize: 12,
+                                                fontWeight: 700,
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {healthViewMode === 'campaign' ? (
+                                <SectionCard
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>Campaign Health Matrix <InfoTooltip text="A campaign-first view that combines Health-tab signals already loaded on this page: account fatigue, campaign quality, creative saturation, delivery readiness, retargeting, and placement reads." /></span>}
+                                    subtitle="One row per campaign, sorted by the most actionable issue first"
+                                >
+                                    {campaignHealthRows.length > 0 ? (
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table className="table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Campaign</th>
+                                                        <th>Fatigue</th>
+                                                        <th>CQI</th>
+                                                        <th>Creative saturation</th>
+                                                        <th>Learning readiness</th>
+                                                        <th>Retargeting / placement flags</th>
+                                                        <th>Recommended action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {campaignHealthRows.map((row: any) => {
+                                                        const fatigueTone = row.fatigueStatus === 'critical'
+                                                            ? { bg: 'rgba(239, 68, 68, 0.14)', color: '#fca5a5' }
+                                                            : row.fatigueStatus === 'warning'
+                                                                ? { bg: 'rgba(245, 158, 11, 0.14)', color: '#fcd34d' }
+                                                                : { bg: 'rgba(16, 185, 129, 0.14)', color: '#86efac' };
+                                                        const saturationTone = row.saturationStatus === 'healthy' || !row.saturationStatus
+                                                            ? { bg: 'rgba(16, 185, 129, 0.12)', color: '#86efac' }
+                                                            : row.saturationStatus === 'audience_saturation'
+                                                                ? { bg: 'rgba(99, 102, 241, 0.12)', color: '#c4b5fd' }
+                                                                : { bg: 'rgba(245, 158, 11, 0.14)', color: '#fcd34d' };
+                                                        const learningStatus = row.learningStatus || { status: 'unknown', label: 'No ad set read', color: '#94a3b8' };
+                                                        return (
+                                                            <tr key={row.key}>
+                                                                <td style={{ minWidth: 220 }}>
+                                                                    <div style={{ fontWeight: 700, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</div>
+                                                                    <div className="text-muted" style={{ fontSize: 11 }}>
+                                                                        Spend {formatCurrency(row.spend || row.learningSpend || 0)} • {formatNumber(row.conversions || 0)} conv
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    <span style={{ padding: '4px 8px', borderRadius: 999, background: fatigueTone.bg, color: fatigueTone.color, fontSize: 11, fontWeight: 700 }}>
+                                                                        {row.fatigue}
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    {row.cqi !== null ? (
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                            <span style={{ width: 28, height: 28, borderRadius: 8, background: row.cqiColor, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+                                                                                {row.cqiGrade || '-'}
+                                                                            </span>
+                                                                            <span style={{ fontWeight: 700 }}>{Math.round(row.cqi)}</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-muted">No CQI</span>
+                                                                    )}
+                                                                </td>
+                                                                <td>
+                                                                    <div style={{ display: 'grid', gap: 4 }}>
+                                                                        <span style={{ padding: '4px 8px', borderRadius: 999, background: saturationTone.bg, color: saturationTone.color, fontSize: 11, fontWeight: 700, width: 'fit-content' }}>
+                                                                            {row.saturation || 'No saturation read'}
+                                                                        </span>
+                                                                        {row.saturationScore !== null && <span className="text-muted" style={{ fontSize: 11 }}>Risk {Math.round(row.saturationScore)}</span>}
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    <div style={{ display: 'grid', gap: 4 }}>
+                                                                        <span style={{ padding: '4px 8px', borderRadius: 999, background: `${learningStatus.color || '#94a3b8'}24`, color: learningStatus.color || '#cbd5e1', fontSize: 11, fontWeight: 700, width: 'fit-content' }}>
+                                                                            {learningStatus.label}
+                                                                        </span>
+                                                                        <span className="text-muted" style={{ fontSize: 11 }}>{formatCurrency(row.learningSpend || 0)} in ad sets</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ minWidth: 220 }}>
+                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                                        {(row.flags || []).length > 0 ? row.flags.map((flag: string) => (
+                                                                            <span key={flag} style={{ padding: '3px 8px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 10, fontWeight: 700 }}>
+                                                                                {flag}
+                                                                            </span>
+                                                                        )) : <span className="text-muted">No major flag</span>}
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ minWidth: 220, fontWeight: 700 }}>
+                                                                    {row.recommendedAction}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                            No campaign-level Health signals are available for this selected date range yet.
+                                        </div>
+                                    )}
+                                </SectionCard>
+                            ) : (
+                                <>
+                                    <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>What is broken?</div>
+                                        <div className="text-muted" style={{ fontSize: 12 }}>Start here when performance is softening and you need to know whether it is fatigue, creative concentration, or creative-level weakness.</div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                                        {[
+                                            { title: 'What is broken?', sections: 'Fatigue Framework • Creative Saturation • Creative Forensics', color: '#f59e0b' },
+                                            { title: 'Can delivery scale?', sections: 'Campaign Quality Index • Delivery Readiness', color: '#10b981' },
+                                            { title: 'Where is money inefficient?', sections: 'Retargeting Lift • Placement Intent Weighting', color: '#60a5fa' }
+                                        ].map((group) => (
+                                            <div key={group.title} style={{ padding: 14, borderRadius: 12, background: 'rgba(15, 23, 42, 0.5)', border: `1px solid ${group.color}44` }}>
+                                                <div style={{ fontSize: 13, fontWeight: 800, color: group.color, marginBottom: 6 }}>{group.title}</div>
+                                                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{group.sections}</div>
+                                            </div>
+                                        ))}
+                                    </div>
                             {/* Fatigue Early Warning */}
                             <SectionCard
                                 title={<span style={{ display: 'flex', alignItems: 'center' }}>🚨 Fatigue Framework <InfoTooltip text="A blended fatigue read built from real Meta trend signals: CTR decay, CPM pressure, CPC pressure, CPR pressure, frequency, and when available, video hook quality. This is meant to distinguish audience fatigue from creative fatigue more credibly than a single metric." /></span>}
@@ -4949,6 +5215,10 @@ export default function AdsPage() {
                             </SectionCard>
 
                             {/* Campaign Quality Index */}
+                            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+                                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Can delivery scale?</div>
+                                <div className="text-muted" style={{ fontSize: 12 }}>Use these reads to decide whether the account has enough quality and delivery stability to support more budget.</div>
+                            </div>
                             {(advancedData.data.campaignQualityIndex || advancedData.data.leadQualityScore) && (
                                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>📊 Campaign Quality Index <InfoTooltip text="CQI is a blended campaign-quality score built from real CTR, click-to-conversion rate, CPA efficiency, spend confidence, and a frequency penalty. Read it as a practical campaign quality read, not as a pure lead score." /></span>} subtitle="Ranks campaigns by traffic quality, conversion efficiency, and cost discipline">
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
@@ -5751,6 +6021,10 @@ export default function AdsPage() {
                             )}
 
                             {/* Retargeting Lift */}
+                            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+                                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Where is money inefficient?</div>
+                                <div className="text-muted" style={{ fontSize: 12 }}>Use these sections to spot audience sequencing and placement mix problems that can quietly waste spend.</div>
+                            </div>
                             {advancedData.data.retargetingLift && (
                                 <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔄 Retargeting Lift Analysis <InfoTooltip text="Measures whether retargeting converts better than cold traffic for the selected window. This uses click-to-conversion rate, not reach-to-conversion rate, so the comparison is closer to what performance marketers usually expect." /></span>} subtitle="Compares cold vs retargeting click-to-conversion efficiency and CPA">
                                     <div style={{ marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
@@ -5922,6 +6196,8 @@ export default function AdsPage() {
                                         </table>
                                     </div>
                                 </SectionCard>
+                            )}
+                                </>
                             )}
                         </>
                     ) : (
