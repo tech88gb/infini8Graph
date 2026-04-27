@@ -355,6 +355,7 @@ export default function ContentIntelligencePage() {
     const reachEfficiency = intel.reachEfficiency || {};
     const interactionQuality = intel.interactionQuality || {};
     const postingTime = intel.postingTime || {};
+    const postingCadenceHealth = intel.postingCadenceHealth || {};
     const contentQuality = intel.contentQuality || {};
 
     // Prepare chart data
@@ -633,6 +634,122 @@ export default function ContentIntelligencePage() {
                     </div>
                 </div>
             </SectionCard>
+
+            {postingCadenceHealth.status && (
+                <SectionCard
+                    title="Posting Cadence Health"
+                    subtitle="Checks whether posting rhythm is helping or hurting reach and interaction quality"
+                    insight={postingCadenceHealth.recommendation}
+                    timePeriod={`${postingCadenceHealth.postsAnalyzed || 0} posts across ${postingCadenceHealth.dateSpanDays || 0} days`}
+                >
+                    {(() => {
+                        const statusKey = postingCadenceHealth.key || 'healthy';
+                        const tone = statusKey === 'healthy'
+                            ? { color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.28)' }
+                            : statusKey === 'under_posting'
+                                ? { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.28)' }
+                                : statusKey === 'cannibalization'
+                                    ? { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.28)' }
+                                    : { color: '#6366f1', bg: 'rgba(99, 102, 241, 0.12)', border: 'rgba(99, 102, 241, 0.28)' };
+                        const sameDay = postingCadenceHealth.sameDayMultiPostPerformance || {};
+                        const formatRows = postingCadenceHealth.formatCadence || [];
+                        return (
+                            <div style={{ display: 'grid', gap: 18 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(4, minmax(0, 1fr))', gap: 12 }}>
+                                    <div style={{ padding: 16, borderRadius: 12, background: tone.bg, border: `1px solid ${tone.border}` }}>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>Cadence read</div>
+                                        <div style={{ fontSize: 18, fontWeight: 800, color: tone.color, lineHeight: 1.25 }}>{postingCadenceHealth.status}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>{postingCadenceHealth.confidenceLabel || 'Low confidence'}</div>
+                                    </div>
+                                    {[
+                                        { label: 'Posts / active day', value: postingCadenceHealth.postsPerActiveDay ?? 0, sub: `${postingCadenceHealth.activeDays || 0} active days` },
+                                        { label: 'Posts / calendar day', value: postingCadenceHealth.postsPerCalendarDay ?? 0, sub: `${postingCadenceHealth.dateSpanDays || 0} days selected` },
+                                        { label: 'Avg gap', value: `${postingCadenceHealth.avgGapDays ?? 0}d`, sub: `Max gap ${postingCadenceHealth.maxGapDays ?? 0}d` },
+                                        { label: 'Multi-post days', value: sameDay.days || 0, sub: sameDay.reachDeltaPct === null || sameDay.reachDeltaPct === undefined ? 'No comparison yet' : `${sameDay.reachDeltaPct}% reach/post` }
+                                    ].map((item) => (
+                                        <div key={item.label} style={{ padding: 14, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                            <div className="text-muted" style={{ fontSize: 11, marginBottom: 6 }}>{item.label}</div>
+                                            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{item.value}</div>
+                                            <div className="text-muted" style={{ fontSize: 10, marginTop: 6 }}>{item.sub}</div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                    <div style={{ padding: 16, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Same-day posting impact</div>
+                                        <div style={{ display: 'grid', gap: 10 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                                                <span className="text-muted" style={{ fontSize: 12 }}>Single-post day avg reach</span>
+                                                <strong>{Number(sameDay.singlePostDayAvgReach || 0).toLocaleString()}</strong>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                                                <span className="text-muted" style={{ fontSize: 12 }}>Multi-post day avg reach/post</span>
+                                                <strong>{Number(sameDay.multiPostDayAvgReachPerPost || 0).toLocaleString()}</strong>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                                                <span className="text-muted" style={{ fontSize: 12 }}>Engagement rate delta</span>
+                                                <strong style={{ color: Number(sameDay.engagementRateDeltaPct || 0) < 0 ? '#ef4444' : '#10b981' }}>
+                                                    {sameDay.engagementRateDeltaPct === null || sameDay.engagementRateDeltaPct === undefined ? 'N/A' : `${sameDay.engagementRateDeltaPct}%`}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ padding: 16, borderRadius: 10, background: 'var(--background)', border: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Format support mix</div>
+                                        <div style={{ display: 'grid', gap: 10 }}>
+                                            {formatRows.slice(0, 4).map((format: any) => (
+                                                <div key={format.type}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                                                        <span style={{ fontSize: 12, fontWeight: 700 }}>{String(format.type || '').replace('_', ' ')}</span>
+                                                        <span className="text-muted" style={{ fontSize: 12 }}>{format.postShare}% posts • {format.reachShare}% reach</span>
+                                                    </div>
+                                                    <div style={{ height: 6, borderRadius: 999, background: 'rgba(148, 163, 184, 0.16)', overflow: 'hidden' }}>
+                                                        <div style={{ width: `${Math.min(Number(format.reachShare || 0), 100)}%`, height: '100%', background: FORMAT_COLORS[format.type] || '#6366f1' }} />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {formatRows.length === 0 && (
+                                                <div className="text-muted" style={{ fontSize: 12 }}>No format mix available for this date range.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {(postingCadenceHealth.formatMixByDay || []).length > 0 && (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Recent day</th>
+                                                    <th>Posts</th>
+                                                    <th>Dominant format</th>
+                                                    <th>Avg reach/post</th>
+                                                    <th>Engagement rate</th>
+                                                    <th>Save rate</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(postingCadenceHealth.formatMixByDay || []).slice(-7).map((day: any) => (
+                                                    <tr key={day.date}>
+                                                        <td>{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                                                        <td>{day.postCount}</td>
+                                                        <td>{String(day.dominantFormat || '').replace('_', ' ')}</td>
+                                                        <td>{Number(day.avgReach || 0).toLocaleString()}</td>
+                                                        <td>{day.avgEngagementRate}%</td>
+                                                        <td>{day.avgSaveRate}%</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+                </SectionCard>
+            )}
 
             <p className="text-muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 24 }}>
                 Last updated: {intel.lastUpdated ? new Date(intel.lastUpdated).toLocaleString() : 'N/A'}
