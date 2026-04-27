@@ -1919,7 +1919,7 @@ export async function getCampaignIntelligence(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-intelligence-v3', [req.user.userId, accountId, dateFilter.dateKey]);
+        const cacheKey = buildMetaCacheKey('meta-intelligence-v4', [req.user.userId, accountId, dateFilter.dateKey]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -1928,9 +1928,13 @@ export async function getCampaignIntelligence(req, res) {
         const insightsModifier = dateFilter.isCustom
             ? `insights.time_range(${JSON.stringify({ since: dateFilter.startDate, until: dateFilter.endDate })})`
             : `insights.date_preset(${dateFilter.datePreset})`;
+        const previousRange = dateFilter.comparisonRange?.previous || null;
+        const previousInsightsModifier = previousRange
+            ? `insights.time_range(${JSON.stringify(previousRange)})`
+            : null;
 
         // Fetch multiple breakdowns in parallel
-        const [campaignsRes, hourlyRes, weekdayRes, placementMatrixRes] = await Promise.allSettled([
+        const [campaignsRes, hourlyRes, weekdayRes, placementMatrixRes, previousCampaignsRes] = await Promise.allSettled([
             // Campaign-level performance
             axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
                 params: {
@@ -1966,25 +1970,64 @@ export async function getCampaignIntelligence(req, res) {
                     ...dateFilter.params,
                     breakdowns: 'publisher_platform,platform_position'
                 }
-            })
+            }),
+            previousInsightsModifier
+                ? axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: `id,name,${previousInsightsModifier}{spend,impressions,reach,clicks,actions,action_values,cpc,cpm,ctr,frequency,purchase_roas}`,
+                        limit: 500
+                    }
+                })
+                : Promise.resolve({ data: { data: [] } })
         ]);
 
         // Process campaigns
         let campaigns = [];
         if (campaignsRes.status === 'fulfilled') {
+            const previousCampaignMap = new Map();
+            if (previousCampaignsRes.status === 'fulfilled') {
+                (previousCampaignsRes.value.data.data || []).forEach(campaign => {
+                    const insights = campaign.insights?.data?.[0] || {};
+                    const spend = parseMetricNumber(insights.spend);
+                    const purchases = getActionTotal(insights.actions || [], ACTION_CANDIDATES.purchases);
+                    const leads = getActionTotal(insights.actions || [], ACTION_CANDIDATES.leads);
+                    const conversions = purchases + leads;
+                    const revenue = getActionTotal(insights.action_values || [], ACTION_CANDIDATES.purchases);
+                    previousCampaignMap.set(campaign.id, {
+                        spend,
+                        impressions: parseMetricNumber(insights.impressions),
+                        clicks: parseMetricNumber(insights.clicks),
+                        ctr: parseMetricNumber(insights.ctr),
+                        cpc: parseMetricNumber(insights.cpc),
+                        cpm: parseMetricNumber(insights.cpm),
+                        frequency: parseMetricNumber(insights.frequency),
+                        purchases,
+                        leads,
+                        conversions,
+                        revenue,
+                        roas: parseMetricNumber(insights.purchase_roas?.[0]?.value || (spend > 0 ? revenue / spend : 0)),
+                        costPerPurchase: purchases > 0 ? spend / purchases : null,
+                        costPerLead: leads > 0 ? spend / leads : null,
+                        costPerResult: conversions > 0 ? spend / conversions : null
+                    });
+                });
+            }
+
             const rawCampaigns = (campaignsRes.value.data.data || []).map(c => {
                 const insights = c.insights?.data?.[0] || {};
-                const purchases = (insights.actions || []).find(a => a.action_type === 'purchase');
-                const purchaseValue = (insights.action_values || []).find(a => a.action_type === 'purchase');
-                const spend = parseFloat(insights.spend || 0);
-                const purchaseCount = purchases ? parseInt(purchases.value) : 0;
-                const revenue = purchaseValue ? parseFloat(purchaseValue.value) : 0;
-                const roas = parseFloat(insights.purchase_roas?.[0]?.value || (spend > 0 ? revenue / spend : 0));
-                const budgetUtilization = c.daily_budget ? ((spend / (parseFloat(c.daily_budget) / 100 * 30)) * 100).toFixed(1) : null;
-                const clicks = parseInt(insights.clicks || 0);
-                const cpc = parseFloat(insights.cpc || 0);
-                const ctr = parseFloat(insights.ctr || 0);
-                const frequency = parseFloat(insights.frequency || 0);
+                const spend = parseMetricNumber(insights.spend);
+                const purchaseCount = getActionTotal(insights.actions || [], ACTION_CANDIDATES.purchases);
+                const leadCount = getActionTotal(insights.actions || [], ACTION_CANDIDATES.leads);
+                const resultCount = purchaseCount + leadCount;
+                const revenue = getActionTotal(insights.action_values || [], ACTION_CANDIDATES.purchases);
+                const roas = parseMetricNumber(insights.purchase_roas?.[0]?.value || (spend > 0 ? revenue / spend : 0));
+                const budgetUtilization = c.daily_budget ? ((spend / (parseMetricNumber(c.daily_budget) / 100 * 30)) * 100).toFixed(1) : null;
+                const clicks = parseMetricNumber(insights.clicks);
+                const cpc = parseMetricNumber(insights.cpc);
+                const ctr = parseMetricNumber(insights.ctr);
+                const frequency = parseMetricNumber(insights.frequency);
+                const impressions = parseMetricNumber(insights.impressions);
 
                 const effectiveStatus = String(c.effective_status || c.status || 'UNKNOWN').toUpperCase();
                 const configuredStatus = String(c.configured_status || c.status || 'UNKNOWN').toUpperCase();
@@ -2000,28 +2043,43 @@ export async function getCampaignIntelligence(req, res) {
                     objectiveGroup: mapObjectiveGroup(c.objective),
                     objectiveLabel: getCampaignTypeLabel(c.objective),
                     spend,
-                    impressions: parseInt(insights.impressions || 0),
+                    impressions,
                     clicks,
                     ctr,
                     cpc,
                     frequency,
                     purchases: purchaseCount,
+                    leads: leadCount,
+                    conversions: resultCount,
                     revenue,
                     roas,
                     costPerPurchase: purchaseCount > 0 ? spend / purchaseCount : null,
+                    costPerLead: leadCount > 0 ? spend / leadCount : null,
+                    costPerResult: resultCount > 0 ? spend / resultCount : null,
                     conversionRate: clicks > 0 ? (purchaseCount / clicks) * 100 : 0,
                     budgetUtilization: budgetUtilization ? parseFloat(budgetUtilization) : null,
-                    confidenceLabel: getEvidenceLabel({ spend, conversions: purchaseCount, clicks, impressions: parseInt(insights.impressions || 0) }),
-                    maturity: getMaturityBadge({ spend, conversions: purchaseCount, clicks, impressions: parseInt(insights.impressions || 0) })
+                    confidenceLabel: getEvidenceLabel({ spend, conversions: resultCount || purchaseCount, clicks, impressions }),
+                    maturity: getMaturityBadge({ spend, conversions: resultCount || purchaseCount, clicks, impressions }),
+                    previous: previousCampaignMap.get(c.id) || null
                 };
             });
 
             const scoredCampaigns = rawCampaigns.filter(c => c.spend > 0);
+            const totalCampaignSpend = scoredCampaigns.reduce((sum, c) => sum + c.spend, 0);
             const maxRoas = Math.max(...scoredCampaigns.map(c => c.roas), 0);
             const maxPurchases = Math.max(...scoredCampaigns.map(c => c.purchases), 0);
+            const maxConversions = Math.max(...scoredCampaigns.map(c => c.conversions), 0);
             const maxCtr = Math.max(...scoredCampaigns.map(c => c.ctr), 0);
             const maxSpend = Math.max(...scoredCampaigns.map(c => c.spend), 0);
             const minCpc = Math.min(...scoredCampaigns.filter(c => c.cpc > 0).map(c => c.cpc), Number.POSITIVE_INFINITY);
+            const medianFrequency = getMedian(scoredCampaigns.map(c => c.frequency).filter(value => value > 0));
+            const medianCpr = getMedian(scoredCampaigns.map(c => c.costPerResult).filter(value => value !== null && value > 0));
+            const scoreScale = (value, low, high) => {
+                const numeric = parseMetricNumber(value);
+                if (numeric <= low) return 0;
+                if (numeric >= high) return 100;
+                return ((numeric - low) / (high - low)) * 100;
+            };
 
             campaigns = rawCampaigns.map(c => {
                 const roasScore = maxRoas > 0 ? c.roas / maxRoas : 0;
@@ -2032,6 +2090,77 @@ export async function getCampaignIntelligence(req, res) {
                 const performanceScore = c.spend > 0
                     ? ((roasScore * 0.45) + (volumeScore * 0.25) + (ctrScore * 0.15) + (cpcScore * 0.1) + (spendConfidence * 0.05)) * 100
                     : 0;
+                const spendShare = totalCampaignSpend > 0 ? (c.spend / totalCampaignSpend) * 100 : 0;
+                const conversionVolumeScore = maxConversions > 0
+                    ? Math.min((Math.log10((c.conversions || 0) + 1) / Math.log10(maxConversions + 1)) * 100, 100)
+                    : 0;
+                const costEfficiencyScore = c.costPerResult && medianCpr > 0
+                    ? Math.min((medianCpr / c.costPerResult) * 100, 100)
+                    : c.roas > 0 ? Math.min(c.roas * 25, 100) : 0;
+                const trend = {
+                    ctr: calculateTrendPercent(c.ctr, c.previous?.ctr),
+                    cpc: calculateTrendPercent(c.cpc, c.previous?.cpc),
+                    cpm: calculateTrendPercent(c.cpm, c.previous?.cpm),
+                    roas: calculateTrendPercent(c.roas, c.previous?.roas),
+                    costPerResult: calculateTrendPercent(c.costPerResult, c.previous?.costPerResult),
+                    spend: calculateTrendPercent(c.spend, c.previous?.spend)
+                };
+                const frequencyLow = Math.max(2.2, medianFrequency || 0);
+                const frequencyHigh = Math.max(4.5, (medianFrequency || 2.2) + 2.2);
+                const fatiguePressure = Math.min(100,
+                    (scoreScale(c.frequency, frequencyLow, frequencyHigh) * 0.35)
+                    + (scoreScale(-(trend.ctr ?? 0), 8, 30) * 0.25)
+                    + (scoreScale(trend.cpc ?? 0, 10, 35) * 0.2)
+                    + (scoreScale(trend.cpm ?? 0, 10, 35) * 0.2)
+                );
+                const degradationPressure = Math.min(100,
+                    (scoreScale(-(trend.roas ?? 0), 10, 35) * 0.45)
+                    + (scoreScale(trend.costPerResult ?? 0, 10, 40) * 0.35)
+                    + (scoreScale(-(trend.ctr ?? 0), 12, 35) * 0.2)
+                );
+                const deliveryReadinessScore = Math.max(0, Math.min(100,
+                    (c.effectiveStatus === 'ACTIVE' ? 30 : 0)
+                    + (maxSpend > 0 ? Math.min(c.spend / maxSpend, 1) * 20 : 0)
+                    + Math.min((c.conversions || 0) / 20, 1) * 25
+                    + Math.min((c.clicks || 0) / 1000, 1) * 15
+                    + (c.confidenceLabel === 'High confidence' ? 10 : c.confidenceLabel === 'Medium confidence' ? 5 : 0)
+                ));
+                const baseHeadroom = (
+                    (performanceScore * 0.28)
+                    + (conversionVolumeScore * 0.22)
+                    + (costEfficiencyScore * 0.18)
+                    + (deliveryReadinessScore * 0.2)
+                    + (Math.min(spendShare / 12, 1) * 100 * 0.12)
+                );
+                const lowVolumePenalty = (c.conversions || 0) < 3 ? 22 : (c.conversions || 0) < 8 ? 10 : 0;
+                const concentrationPenalty = spendShare > 45 && degradationPressure > 25 ? 8 : 0;
+                const headroomScore = Math.max(0, Math.min(100, baseHeadroom - (fatiguePressure * 0.28) - (degradationPressure * 0.32) - lowVolumePenalty - concentrationPenalty));
+                const reasons = [];
+                const riskFlags = [];
+
+                if ((c.conversions || 0) >= 10) reasons.push(`${c.conversions} results support a more stable read`);
+                else if ((c.conversions || 0) > 0) riskFlags.push(`Only ${c.conversions} result${c.conversions === 1 ? '' : 's'} in this window`);
+                else riskFlags.push('No conversion result volume in this window');
+                if (trend.roas !== null && trend.roas > 10) reasons.push(`ROAS is up ${trend.roas}% vs previous period`);
+                if (trend.ctr !== null && trend.ctr < -12) riskFlags.push(`CTR down ${Math.abs(trend.ctr)}%`);
+                if (trend.cpc !== null && trend.cpc > 15) riskFlags.push(`CPC up ${trend.cpc}%`);
+                if (trend.cpm !== null && trend.cpm > 18) riskFlags.push(`CPM up ${trend.cpm}%`);
+                if (c.frequency >= 3.5) riskFlags.push(`Frequency ${c.frequency.toFixed(2)}x`);
+                if (c.confidenceLabel === 'High confidence') reasons.push('High-confidence delivery sample');
+                else riskFlags.push(`${c.confidenceLabel} sample`);
+
+                let recommendation = 'Hold budget';
+                let recommendationKey = 'hold';
+                if (degradationPressure >= 55 && headroomScore < 65) {
+                    recommendation = 'Do not scale: efficiency already degrading';
+                    recommendationKey = 'do_not_scale';
+                } else if (fatiguePressure >= 50 && headroomScore < 72) {
+                    recommendation = 'Scale only after creative refresh';
+                    recommendationKey = 'creative_refresh';
+                } else if (headroomScore >= 72 && deliveryReadinessScore >= 60 && (c.conversions || 0) >= 5 && degradationPressure < 45) {
+                    recommendation = 'Scale +10-20%';
+                    recommendationKey = 'scale_10_20';
+                }
 
                 return {
                     ...c,
@@ -2042,6 +2171,33 @@ export async function getCampaignIntelligence(req, res) {
                         ctr: parseFloat((ctrScore * 100).toFixed(1)),
                         cpcEfficiency: parseFloat((cpcScore * 100).toFixed(1)),
                         spendConfidence: parseFloat((spendConfidence * 100).toFixed(1))
+                    },
+                    spendShare: parseFloat(spendShare.toFixed(1)),
+                    previous: undefined,
+                    scaleHeadroom: {
+                        score: parseFloat(headroomScore.toFixed(1)),
+                        recommendation,
+                        recommendationKey,
+                        confidenceLabel: c.confidenceLabel,
+                        deliveryReadinessScore: parseFloat(deliveryReadinessScore.toFixed(1)),
+                        conversionVolumeScore: parseFloat(conversionVolumeScore.toFixed(1)),
+                        fatiguePressure: parseFloat(fatiguePressure.toFixed(1)),
+                        degradationPressure: parseFloat(degradationPressure.toFixed(1)),
+                        trend,
+                        reasons: reasons.slice(0, 3),
+                        riskFlags: riskFlags.slice(0, 4),
+                        inputs: {
+                            spend: c.spend,
+                            spendShare: parseFloat(spendShare.toFixed(1)),
+                            roas: c.roas,
+                            costPerPurchase: c.costPerPurchase,
+                            costPerLead: c.costPerLead,
+                            costPerResult: c.costPerResult,
+                            conversions: c.conversions,
+                            purchases: c.purchases,
+                            leads: c.leads,
+                            frequency: c.frequency
+                        }
                     }
                 };
             }).sort((a, b) => b.efficiencyScore - a.efficiencyScore);
@@ -2164,10 +2320,26 @@ export async function getCampaignIntelligence(req, res) {
             ? dayOfWeekPerformance.reduce((max, d) => parseFloat(d.ctr) > parseFloat(max?.ctr || 0) ? d : max, null)
             : null;
         const bestPlacement = placementMatrix.length > 0 ? placementMatrix[0] : null;
+        const headroomRows = campaigns.filter(c => c.spend > 0 && c.scaleHeadroom);
+        const scaleHeadroomSummary = {
+            averageScore: headroomRows.length
+                ? parseFloat((headroomRows.reduce((sum, c) => sum + Number(c.scaleHeadroom.score || 0), 0) / headroomRows.length).toFixed(1))
+                : 0,
+            scaleNow: headroomRows.filter(c => c.scaleHeadroom.recommendationKey === 'scale_10_20').length,
+            hold: headroomRows.filter(c => c.scaleHeadroom.recommendationKey === 'hold').length,
+            creativeRefresh: headroomRows.filter(c => c.scaleHeadroom.recommendationKey === 'creative_refresh').length,
+            doNotScale: headroomRows.filter(c => c.scaleHeadroom.recommendationKey === 'do_not_scale').length,
+            scalableSpend: parseFloat(headroomRows
+                .filter(c => c.scaleHeadroom.recommendationKey === 'scale_10_20')
+                .reduce((sum, c) => sum + Number(c.spend || 0), 0)
+                .toFixed(2)),
+            comparisonLabel: dateFilter.comparisonRange?.label || null
+        };
 
         const payload = {
                 campaigns: campaigns.slice(0, 150),
                 topCampaign: campaigns.length > 0 ? campaigns[0] : null,
+                scaleHeadroomSummary,
                 hourlyPerformance,
                 dayOfWeekPerformance,
                 placementMatrix: placementMatrix.slice(0, 15),
@@ -2201,7 +2373,7 @@ export async function getAdvancedAnalytics(req, res) {
         }
 
         const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-        const cacheKey = buildMetaCacheKey('meta-advanced-v8', [req.user.userId, accountId, dateFilter.dateKey]);
+        const cacheKey = buildMetaCacheKey('meta-advanced-v9', [req.user.userId, accountId, dateFilter.dateKey]);
         const cached = getMetaCacheEntry(cacheKey);
         if (cached) {
             return res.json({ success: true, data: cached });
@@ -2423,6 +2595,7 @@ export async function getAdvancedAnalytics(req, res) {
             'name',
             'status',
             'effective_status',
+            'campaign_id',
             'created_time',
             'updated_time',
             includeStorySpec
@@ -2483,8 +2656,13 @@ export async function getAdvancedAnalytics(req, res) {
             }
         };
 
+        const previousRange = dateFilter.comparisonRange?.previous || null;
+        const previousCampaignInsightsModifier = previousRange
+            ? `insights.time_range(${JSON.stringify(previousRange)})`
+            : null;
+
         // Fetch all required data in parallel
-        const [adsRes, adsetsRes, campaignsRes, dailyRes, placementRes] = await Promise.allSettled([
+        const [adsRes, adsetsRes, campaignsRes, dailyRes, placementRes, previousCampaignsRes] = await Promise.allSettled([
             // Ads with creative details and insights
             fetchAdvancedAds(),
             // Adsets with learning phase status
@@ -2520,8 +2698,56 @@ export async function getAdvancedAnalytics(req, res) {
                     ...dateFilter.params,
                     breakdowns: 'publisher_platform,platform_position'
                 }
-            })
+            }),
+            previousCampaignInsightsModifier
+                ? axios.get(`${GRAPH_API_BASE}/${accountId}/campaigns`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: `id,name,${previousCampaignInsightsModifier}{spend,reach,impressions,clicks,ctr,cpc,cpm,actions,action_values,frequency}`,
+                        limit: 500
+                    }
+                })
+                : Promise.resolve({ data: { data: [] } })
         ]);
+
+        const parseCampaignInsightRow = (campaign = {}) => {
+            const insights = campaign.insights?.data?.[0] || {};
+            const spend = parseMetricNumber(insights.spend);
+            const purchases = getActionTotal(insights.actions || [], ACTION_CANDIDATES.purchases);
+            const leads = getActionTotal(insights.actions || [], ACTION_CANDIDATES.leads);
+            const conversions = purchases + leads;
+            const purchaseValue = getActionTotal(insights.action_values || [], ACTION_CANDIDATES.purchases);
+            return {
+                id: campaign.id,
+                name: campaign.name,
+                spend,
+                reach: parseMetricNumber(insights.reach),
+                impressions: parseMetricNumber(insights.impressions),
+                clicks: parseMetricNumber(insights.clicks),
+                ctr: parseMetricNumber(insights.ctr),
+                cpc: parseMetricNumber(insights.cpc),
+                cpm: parseMetricNumber(insights.cpm),
+                frequency: parseMetricNumber(insights.frequency),
+                purchases,
+                leads,
+                conversions,
+                purchaseValue,
+                roas: spend > 0 ? purchaseValue / spend : 0,
+                cpa: conversions > 0 ? spend / conversions : null
+            };
+        };
+        const currentCampaignMetrics = new Map();
+        if (campaignsRes.status === 'fulfilled') {
+            (campaignsRes.value.data.data || []).forEach((campaign) => {
+                currentCampaignMetrics.set(campaign.id, parseCampaignInsightRow(campaign));
+            });
+        }
+        const previousCampaignMetrics = new Map();
+        if (previousCampaignsRes.status === 'fulfilled') {
+            (previousCampaignsRes.value.data.data || []).forEach((campaign) => {
+                previousCampaignMetrics.set(campaign.id, parseCampaignInsightRow(campaign));
+            });
+        }
 
         // ==================== 1. FATIGUE DETECTION ====================
         let fatigueAnalysis = {
@@ -2820,6 +3046,8 @@ export async function getAdvancedAnalytics(req, res) {
                 return {
                     id: ad.id,
                     name: ad.name,
+                    campaignId: ad.campaign_id || ad.campaign?.id || null,
+                    campaignName: ad.campaign?.name || currentCampaignMetrics.get(ad.campaign_id || ad.campaign?.id || '')?.name || null,
                     status: ad.status,
                     format: hasVideo ? 'video' : 'static',
                     formatLabel: hasVideo ? 'Video' : 'Static',
@@ -3158,6 +3386,162 @@ export async function getAdvancedAnalytics(req, res) {
             creativeForensicsMeta.note = 'The ad-level creative fetch did not complete for this account, so creative diagnostics could not be calculated for this refresh.';
         }
 
+        // ==================== 3B. CREATIVE SATURATION BY CAMPAIGN ====================
+        let creativeSaturation = {
+            summary: {
+                campaignsAnalyzed: 0,
+                atRiskCampaigns: 0,
+                averageRisk: 0,
+                topConcentration: 0,
+                leadingCause: 'Not enough creative data'
+            },
+            campaigns: []
+        };
+
+        if (creativeForensics.length > 0) {
+            const activeCreatives = creativeForensics.filter(ad => ad.campaignId && (ad.isActive || Number(ad.spend || 0) > 0));
+            const byCampaign = new Map();
+            activeCreatives.forEach(ad => {
+                if (!byCampaign.has(ad.campaignId)) {
+                    byCampaign.set(ad.campaignId, []);
+                }
+                byCampaign.get(ad.campaignId).push(ad);
+            });
+
+            const standardDeviation = (values = []) => {
+                const numeric = values.map(value => parseMetricNumber(value)).filter(value => Number.isFinite(value));
+                if (!numeric.length) return 0;
+                const avg = numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
+                const variance = numeric.reduce((sum, value) => sum + Math.pow(value - avg, 2), 0) / numeric.length;
+                return Math.sqrt(variance);
+            };
+            const riskScale = (value, low, high) => {
+                const numeric = parseMetricNumber(value);
+                if (numeric <= low) return 0;
+                if (numeric >= high) return 100;
+                return ((numeric - low) / (high - low)) * 100;
+            };
+
+            creativeSaturation.campaigns = Array.from(byCampaign.entries()).map(([campaignId, creatives]) => {
+                const current = currentCampaignMetrics.get(campaignId) || {};
+                const previous = previousCampaignMetrics.get(campaignId) || {};
+                const totalCreativeSpend = creatives.reduce((sum, ad) => sum + Number(ad.spend || 0), 0);
+                const topCreative = [...creatives].sort((a, b) => Number(b.spend || 0) - Number(a.spend || 0))[0] || null;
+                const topCreativeSpendShare = totalCreativeSpend > 0 && topCreative
+                    ? (Number(topCreative.spend || 0) / totalCreativeSpend) * 100
+                    : 0;
+                const newestCreativeAge = Math.min(...creatives.map(ad => Number(ad.daysActive || 999)).filter(value => value > 0));
+                const performanceSpread = standardDeviation(creatives.map(ad => Number(ad.performanceScore || 0)));
+                const activeCreativeCount = creatives.filter(ad => ad.isActive).length || creatives.length;
+                const ctrTrend = calculateTrendPercent(current.ctr, previous.ctr);
+                const cpcTrend = calculateTrendPercent(current.cpc, previous.cpc);
+                const cpmTrend = calculateTrendPercent(current.cpm, previous.cpm);
+
+                const concentrationRisk = riskScale(topCreativeSpendShare, 45, 85);
+                const freshnessRisk = activeCreativeCount <= 1
+                    ? 85
+                    : newestCreativeAge >= 21
+                        ? 70
+                        : newestCreativeAge >= 14
+                            ? 45
+                            : 10;
+                const trendRisk = Math.min(100,
+                    (riskScale(-(ctrTrend ?? 0), 8, 30) * 0.42)
+                    + (riskScale(cpcTrend ?? 0, 10, 35) * 0.29)
+                    + (riskScale(cpmTrend ?? 0, 10, 35) * 0.29)
+                );
+                const frequencyRisk = riskScale(current.frequency || getMedian(creatives.map(ad => Number(ad.frequency || 0))), 2.2, 4.5);
+                const spreadRisk = performanceSpread >= 25 ? 35 : performanceSpread >= 15 ? 18 : 8;
+                const saturationScore = Math.max(0, Math.min(100,
+                    (frequencyRisk * 0.25)
+                    + (trendRisk * 0.25)
+                    + (concentrationRisk * 0.22)
+                    + (freshnessRisk * 0.18)
+                    + (spreadRisk * 0.1)
+                ));
+
+                let status = 'Creative rotation healthy';
+                let statusKey = 'healthy';
+                if (topCreativeSpendShare >= 70 && activeCreativeCount <= 2) {
+                    status = 'One creative carrying spend';
+                    statusKey = 'one_creative';
+                } else if (saturationScore >= 62 && trendRisk >= 45 && concentrationRisk >= 35) {
+                    status = 'Likely creative fatigue';
+                    statusKey = 'creative_fatigue';
+                } else if (saturationScore >= 55 && frequencyRisk >= 50 && concentrationRisk < 45) {
+                    status = 'Audience saturation more likely than creative fatigue';
+                    statusKey = 'audience_saturation';
+                }
+
+                const reasons = [];
+                if (topCreativeSpendShare >= 55) reasons.push(`${topCreativeSpendShare.toFixed(0)}% of spend is on the top creative`);
+                if (activeCreativeCount <= 2) reasons.push(`${activeCreativeCount} active creative${activeCreativeCount === 1 ? '' : 's'}`);
+                if (ctrTrend !== null && ctrTrend < -10) reasons.push(`CTR down ${Math.abs(ctrTrend)}% vs previous period`);
+                if (cpcTrend !== null && cpcTrend > 15) reasons.push(`CPC up ${cpcTrend}%`);
+                if (cpmTrend !== null && cpmTrend > 15) reasons.push(`CPM up ${cpmTrend}%`);
+                if ((current.frequency || 0) >= 3) reasons.push(`Campaign frequency ${Number(current.frequency || 0).toFixed(2)}x`);
+
+                return {
+                    campaignId,
+                    campaignName: topCreative?.campaignName || current.name || 'Unknown campaign',
+                    status,
+                    statusKey,
+                    saturationScore: parseFloat(saturationScore.toFixed(1)),
+                    activeCreativeCount,
+                    totalCreativeSpend: parseFloat(totalCreativeSpend.toFixed(2)),
+                    topCreative: topCreative ? {
+                        id: topCreative.id,
+                        name: topCreative.name,
+                        spend: Number(topCreative.spend || 0),
+                        performanceScore: Number(topCreative.performanceScore || 0)
+                    } : null,
+                    topCreativeSpendShare: parseFloat(topCreativeSpendShare.toFixed(1)),
+                    newestCreativeAge: Number.isFinite(newestCreativeAge) ? newestCreativeAge : null,
+                    performanceSpread: parseFloat(performanceSpread.toFixed(1)),
+                    campaignFrequency: parseFloat(Number(current.frequency || 0).toFixed(2)),
+                    trend: {
+                        ctr: ctrTrend,
+                        cpc: cpcTrend,
+                        cpm: cpmTrend
+                    },
+                    componentScores: {
+                        frequencyRisk: parseFloat(frequencyRisk.toFixed(1)),
+                        trendRisk: parseFloat(trendRisk.toFixed(1)),
+                        concentrationRisk: parseFloat(concentrationRisk.toFixed(1)),
+                        freshnessRisk: parseFloat(freshnessRisk.toFixed(1)),
+                        spreadRisk: parseFloat(spreadRisk.toFixed(1))
+                    },
+                    reasons: reasons.slice(0, 4)
+                };
+            }).sort((a, b) => b.saturationScore - a.saturationScore);
+
+            const analyzed = creativeSaturation.campaigns;
+            const causeCounts = analyzed.reduce((acc, campaign) => {
+                acc[campaign.statusKey] = (acc[campaign.statusKey] || 0) + 1;
+                return acc;
+            }, {});
+            const leadingCauseKey = Object.entries(causeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'healthy';
+            const causeLabels = {
+                healthy: 'Creative rotation healthy',
+                one_creative: 'One creative carrying spend',
+                creative_fatigue: 'Likely creative fatigue',
+                audience_saturation: 'Audience saturation more likely than creative fatigue'
+            };
+
+            creativeSaturation.summary = {
+                campaignsAnalyzed: analyzed.length,
+                atRiskCampaigns: analyzed.filter(campaign => campaign.statusKey !== 'healthy').length,
+                averageRisk: analyzed.length
+                    ? parseFloat((analyzed.reduce((sum, campaign) => sum + Number(campaign.saturationScore || 0), 0) / analyzed.length).toFixed(1))
+                    : 0,
+                topConcentration: analyzed.length
+                    ? parseFloat(Math.max(...analyzed.map(campaign => Number(campaign.topCreativeSpendShare || 0))).toFixed(1))
+                    : 0,
+                leadingCause: causeLabels[leadingCauseKey] || causeLabels.healthy,
+                comparisonLabel: dateFilter.comparisonRange?.label || null
+            };
+        }
+
         // ==================== 4. LEARNING PHASE STATUS ====================
         let learningPhase = [];
 
@@ -3318,6 +3702,83 @@ export async function getAdvancedAnalytics(req, res) {
                 };
             }).sort((a, b) => (b.spend || 0) - (a.spend || 0));
         }
+
+        // ==================== 4B. LEARNING PHASE OPPORTUNITY COST ====================
+        const unstableLearningStates = new Set(['learning', 'limited', 'delivery_learning', 'unknown']);
+        const learningOpportunityRows = learningPhase.filter(row => Number(row.spend || 0) > 0);
+        const totalLearningSpend = learningOpportunityRows.reduce((sum, row) => sum + Number(row.spend || 0), 0);
+        const totalLearningConversions = learningOpportunityRows.reduce((sum, row) => sum + Number(row.conversions || 0), 0);
+        const unstableRows = learningOpportunityRows.filter(row => unstableLearningStates.has(row.learningStatus?.status || 'unknown'));
+        const unstableSpend = unstableRows.reduce((sum, row) => sum + Number(row.spend || 0), 0);
+        const unstableConversions = unstableRows.reduce((sum, row) => sum + Number(row.conversions || 0), 0);
+        const unlikelyRows = unstableRows.filter(row => {
+            if (row.learningStatus?.status === 'limited') return true;
+            if (!row.needsOptimizationEvents) return row.daysActive >= 5 && row.learningStatus?.status === 'delivery_learning';
+            const pace = Number(row.weeklyPace || 0);
+            const progress = Number(row.benchmarkProgress || 0);
+            return row.daysActive >= 3 && (pace < 25 || progress < 50);
+        });
+        const unlikelyCampaignMap = unlikelyRows.reduce((map, row) => {
+            const key = row.campaignName || row.name || row.id;
+            if (!map.has(key)) {
+                map.set(key, { name: key, spend: 0, adsets: 0, conversions: 0 });
+            }
+            const entry = map.get(key);
+            entry.spend += Number(row.spend || 0);
+            entry.adsets += 1;
+            entry.conversions += Number(row.conversions || 0);
+            return map;
+        }, new Map());
+        const readinessBuckets = learningOpportunityRows.reduce((acc, row) => {
+            const key = row.learningStatus?.status || 'unknown';
+            if (!acc[key]) {
+                acc[key] = {
+                    status: key,
+                    label: row.learningStatus?.label || 'Unknown',
+                    spend: 0,
+                    conversions: 0,
+                    adsets: 0,
+                    goalEvents: 0
+                };
+            }
+            acc[key].spend += Number(row.spend || 0);
+            acc[key].conversions += Number(row.conversions || 0);
+            acc[key].adsets += 1;
+            acc[key].goalEvents += Number(row.goalEvents || 0);
+            return acc;
+        }, {});
+        const unstableSpendShare = totalLearningSpend > 0 ? (unstableSpend / totalLearningSpend) * 100 : 0;
+        const consolidationRecommended = unstableSpendShare >= 25 && unlikelyCampaignMap.size > 0;
+        const learningOpportunityCost = {
+            unstableSpend: parseFloat(unstableSpend.toFixed(2)),
+            unstableSpendShare: parseFloat(unstableSpendShare.toFixed(1)),
+            unstableConversions,
+            unstableCPA: unstableConversions > 0 ? parseFloat((unstableSpend / unstableConversions).toFixed(2)) : null,
+            totalSpend: parseFloat(totalLearningSpend.toFixed(2)),
+            totalConversions: totalLearningConversions,
+            unlikelyCampaigns: unlikelyCampaignMap.size,
+            unlikelyAdsets: unlikelyRows.length,
+            consolidationRecommended,
+            recommendation: consolidationRecommended
+                ? 'Budget consolidation recommended'
+                : unstableSpendShare >= 15
+                    ? 'Monitor learning spend before adding budget'
+                    : 'Learning spend is contained',
+            readinessBuckets: Object.values(readinessBuckets).map(bucket => ({
+                ...bucket,
+                spend: parseFloat(bucket.spend.toFixed(2)),
+                cpa: bucket.conversions > 0 ? parseFloat((bucket.spend / bucket.conversions).toFixed(2)) : null,
+                spendShare: totalLearningSpend > 0 ? parseFloat(((bucket.spend / totalLearningSpend) * 100).toFixed(1)) : 0
+            })).sort((a, b) => b.spend - a.spend),
+            unlikelyCampaignBreakdown: Array.from(unlikelyCampaignMap.values())
+                .map(item => ({
+                    ...item,
+                    spend: parseFloat(item.spend.toFixed(2)),
+                    cpa: item.conversions > 0 ? parseFloat((item.spend / item.conversions).toFixed(2)) : null
+                }))
+                .sort((a, b) => b.spend - a.spend)
+                .slice(0, 6)
+        };
 
         // ==================== 5. RETARGETING LIFT ====================
         let retargetingLift = null;
@@ -3595,9 +4056,14 @@ export async function getAdvancedAnalytics(req, res) {
         const payload = {
                 fatigueAnalysis,
                 placementIntent: placementIntent.slice(0, 15),
+                creativeSaturation: {
+                    ...creativeSaturation,
+                    campaigns: creativeSaturation.campaigns.slice(0, 80)
+                },
                 creativeForensics: creativeForensics.slice(0, 120),
                 creativeForensicsMeta,
                 learningPhase,
+                learningOpportunityCost,
                 retargetingLift,
                 leadQualityScore,
                 campaignQualityIndex: leadQualityScore,
@@ -3605,6 +4071,8 @@ export async function getAdvancedAnalytics(req, res) {
                     fatigueStatus: fatigueAnalysis.statusLabel,
                     adsAnalyzed: creativeForensics.length,
                     adsetsAnalyzed: learningPhase.length,
+                    creativeSaturationAtRisk: creativeSaturation.summary.atRiskCampaigns,
+                    learningUnstableSpend: learningOpportunityCost.unstableSpend,
                     placementsAnalyzed: placementIntent.length,
                     hasRetargetingData: retargetingLift !== null
                 },

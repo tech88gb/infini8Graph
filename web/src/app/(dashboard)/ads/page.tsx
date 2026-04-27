@@ -2334,6 +2334,8 @@ export default function AdsPage() {
 
         return [...rows].sort((a: any, b: any) => {
             switch (scaleFilters.sort) {
+                case 'headroom_desc':
+                    return Number(b.scaleHeadroom?.score || 0) - Number(a.scaleHeadroom?.score || 0);
                 case 'roas_desc':
                     return Number(b.roas || 0) - Number(a.roas || 0);
                 case 'spend_desc':
@@ -4514,6 +4516,23 @@ export default function AdsPage() {
                                         <div className="text-muted" style={{ fontSize: 12, marginBottom: 14 }}>
                                             A high score means the campaign is combining efficiency with enough delivery volume to trust the result. Low-spend campaigns can still have strong ROAS, but they will show lower confidence until they prove at scale.
                                         </div>
+                                        {intelligenceData.data.scaleHeadroomSummary && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+                                                {[
+                                                    { label: 'Avg headroom', value: Math.round(intelligenceData.data.scaleHeadroomSummary.averageScore || 0), sub: '0-100 modeled score', color: '#60a5fa' },
+                                                    { label: 'Scale now', value: intelligenceData.data.scaleHeadroomSummary.scaleNow || 0, sub: `${formatCurrency(intelligenceData.data.scaleHeadroomSummary.scalableSpend || 0)} spend base`, color: '#10b981' },
+                                                    { label: 'Hold', value: intelligenceData.data.scaleHeadroomSummary.hold || 0, sub: 'Keep budget steady', color: '#94a3b8' },
+                                                    { label: 'Refresh first', value: intelligenceData.data.scaleHeadroomSummary.creativeRefresh || 0, sub: 'Fatigue risk present', color: '#f59e0b' },
+                                                    { label: 'Do not scale', value: intelligenceData.data.scaleHeadroomSummary.doNotScale || 0, sub: 'Efficiency degrading', color: '#ef4444' }
+                                                ].map((item) => (
+                                                    <div key={item.label} style={{ padding: 12, borderRadius: 10, background: 'rgba(15, 23, 42, 0.48)', border: '1px solid var(--border)' }}>
+                                                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{item.label}</div>
+                                                        <div style={{ fontSize: 22, fontWeight: 800, color: item.color, lineHeight: 1 }}>{item.value}</div>
+                                                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>{item.sub}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
                                             <FilterInput
                                                 label="Find campaign"
@@ -4546,6 +4565,7 @@ export default function AdsPage() {
                                                 onChange={(value) => setScaleFilters((current) => ({ ...current, sort: value }))}
                                                 options={[
                                                     { value: 'score_desc', label: 'Performance score' },
+                                                    { value: 'headroom_desc', label: 'Scale headroom' },
                                                     { value: 'roas_desc', label: 'ROAS' },
                                                     { value: 'spend_desc', label: 'Spend' },
                                                     { value: 'purchases_desc', label: 'Purchases' },
@@ -4562,10 +4582,18 @@ export default function AdsPage() {
                                                 const maturityTone = getMaturityTone(c.maturity?.label || 'Early');
                                                 const statusLabel = c.effectiveStatus || c.status || 'UNKNOWN';
                                                 const hasDelivery = Number(c.spend || 0) > 0 || Number(c.clicks || 0) > 0 || Number(c.purchases || 0) > 0;
+                                                const headroom = c.scaleHeadroom || null;
+                                                const headroomTone = headroom?.recommendationKey === 'scale_10_20'
+                                                    ? { bg: 'rgba(16, 185, 129, 0.14)', color: '#86efac', border: 'rgba(16, 185, 129, 0.28)' }
+                                                    : headroom?.recommendationKey === 'creative_refresh'
+                                                        ? { bg: 'rgba(245, 158, 11, 0.14)', color: '#fcd34d', border: 'rgba(245, 158, 11, 0.28)' }
+                                                        : headroom?.recommendationKey === 'do_not_scale'
+                                                            ? { bg: 'rgba(239, 68, 68, 0.14)', color: '#fca5a5', border: 'rgba(239, 68, 68, 0.28)' }
+                                                            : { bg: 'rgba(148, 163, 184, 0.14)', color: '#cbd5e1', border: 'rgba(148, 163, 184, 0.28)' };
                                                 return (
                                                     <div key={c.id} style={{
                                                         display: 'grid',
-                                                        gridTemplateColumns: '40px minmax(0, 1.4fr) minmax(320px, 1fr) 110px',
+                                                        gridTemplateColumns: '40px minmax(0, 1.25fr) minmax(300px, 1fr) minmax(180px, 0.72fr) 110px',
                                                         gap: 16,
                                                         alignItems: 'center',
                                                         padding: 16,
@@ -4623,6 +4651,24 @@ export default function AdsPage() {
                                                                     {hasDelivery ? `CTR ${formatCompactPercent(c.ctr || 0, 2)}` : 'No delivery in range'}
                                                                 </div>
                                                             </div>
+                                                        </div>
+
+                                                        <div style={{ padding: '10px 12px', borderRadius: 10, background: headroomTone.bg, border: `1px solid ${headroomTone.border}` }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                                                <span style={{ fontSize: 11, color: headroomTone.color, fontWeight: 700 }}>Headroom</span>
+                                                                <span style={{ fontSize: 18, color: headroomTone.color, fontWeight: 800 }}>{Math.round(headroom?.score || 0)}</span>
+                                                            </div>
+                                                            <div style={{ fontSize: 12, color: headroomTone.color, fontWeight: 700, lineHeight: 1.25 }}>
+                                                                {headroom?.recommendation || 'Hold budget'}
+                                                            </div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+                                                                Vol {Math.round(headroom?.conversionVolumeScore || 0)} • Fatigue {Math.round(headroom?.fatiguePressure || 0)} • Efficiency {Math.round(headroom?.degradationPressure || 0)}
+                                                            </div>
+                                                            {(headroom?.riskFlags || []).length > 0 && (
+                                                                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                    {(headroom.riskFlags || []).slice(0, 2).join(' • ')}
+                                                                </div>
+                                                            )}
                                                         </div>
 
                                                         <div style={{ textAlign: 'right' }}>
@@ -5039,6 +5085,83 @@ export default function AdsPage() {
                                 </SectionCard>
                             )}
 
+                            {/* Creative Saturation by Campaign */}
+                            {(advancedData.data.creativeSaturation?.campaigns || []).length > 0 && (
+                                <SectionCard
+                                    title={<span style={{ display: 'flex', alignItems: 'center' }}>🎛️ Creative Saturation by Campaign <InfoTooltip text="Campaign-level saturation combines real campaign frequency, CTR/CPC/CPM trend, active creative count, top-creative spend concentration, creative age, and creative performance spread." /></span>}
+                                    subtitle="Flags whether the issue is creative rotation, one ad carrying spend, or audience saturation"
+                                >
+                                    {(() => {
+                                        const saturation = advancedData.data.creativeSaturation;
+                                        const summary = saturation.summary || {};
+                                        const rows = (saturation.campaigns || []).slice(0, 6);
+                                        return (
+                                            <div style={{ display: 'grid', gap: 14 }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                                                    {[
+                                                        { label: 'Avg saturation risk', value: Math.round(summary.averageRisk || 0), sub: '0-100 modeled score', color: '#60a5fa' },
+                                                        { label: 'At risk campaigns', value: summary.atRiskCampaigns || 0, sub: `${summary.campaignsAnalyzed || 0} analyzed`, color: '#f59e0b' },
+                                                        { label: 'Top concentration', value: `${Math.round(summary.topConcentration || 0)}%`, sub: 'Highest top-creative spend share', color: '#a78bfa' },
+                                                        { label: 'Main read', value: summary.leadingCause || 'Healthy', sub: summary.comparisonLabel || 'Current range only', color: '#cbd5e1' }
+                                                    ].map((item) => (
+                                                        <div key={item.label} style={{ padding: 12, borderRadius: 10, background: 'rgba(15, 23, 42, 0.48)', border: '1px solid var(--border)' }}>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{item.label}</div>
+                                                            <div style={{ fontSize: typeof item.value === 'string' && item.value.length > 18 ? 14 : 22, fontWeight: 800, color: item.color, lineHeight: 1.15 }}>{item.value}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>{item.sub}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div style={{ display: 'grid', gap: 8 }}>
+                                                    {rows.map((campaign: any) => {
+                                                        const tone = campaign.statusKey === 'healthy'
+                                                            ? { bg: 'rgba(16, 185, 129, 0.12)', color: '#86efac', border: 'rgba(16, 185, 129, 0.24)' }
+                                                            : campaign.statusKey === 'audience_saturation'
+                                                                ? { bg: 'rgba(99, 102, 241, 0.12)', color: '#c4b5fd', border: 'rgba(99, 102, 241, 0.24)' }
+                                                                : campaign.statusKey === 'one_creative'
+                                                                    ? { bg: 'rgba(245, 158, 11, 0.12)', color: '#fcd34d', border: 'rgba(245, 158, 11, 0.24)' }
+                                                                    : { bg: 'rgba(239, 68, 68, 0.12)', color: '#fca5a5', border: 'rgba(239, 68, 68, 0.24)' };
+                                                        return (
+                                                            <div key={campaign.campaignId} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(220px, 0.8fr) 90px', gap: 14, alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: 'var(--background)', border: `1px solid ${tone.border}` }}>
+                                                                <div style={{ minWidth: 0 }}>
+                                                                    <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{campaign.campaignName}</div>
+                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                                                                        <span style={{ padding: '3px 8px', borderRadius: 999, background: tone.bg, color: tone.color, fontSize: 10, fontWeight: 700 }}>{campaign.status}</span>
+                                                                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{campaign.activeCreativeCount} active creative{campaign.activeCreativeCount === 1 ? '' : 's'}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+                                                                    <div>
+                                                                        <div className="text-muted" style={{ fontSize: 10 }}>Top spend</div>
+                                                                        <div style={{ fontSize: 13, fontWeight: 700 }}>{Math.round(campaign.topCreativeSpendShare || 0)}%</div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-muted" style={{ fontSize: 10 }}>Freq</div>
+                                                                        <div style={{ fontSize: 13, fontWeight: 700 }}>{campaign.campaignFrequency || 0}x</div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-muted" style={{ fontSize: 10 }}>CTR trend</div>
+                                                                        <div style={{ fontSize: 13, fontWeight: 700 }}>{campaign.trend?.ctr === null || campaign.trend?.ctr === undefined ? '—' : `${campaign.trend.ctr}%`}</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div style={{ textAlign: 'right' }}>
+                                                                    <div style={{ fontSize: 24, fontWeight: 800, color: tone.color, lineHeight: 1 }}>{Math.round(campaign.saturationScore || 0)}</div>
+                                                                    <div className="text-muted" style={{ fontSize: 10 }}>risk score</div>
+                                                                </div>
+                                                                {(campaign.reasons || []).length > 0 && (
+                                                                    <div style={{ gridColumn: '1 / -1', fontSize: 11, color: 'var(--muted)' }}>
+                                                                        {(campaign.reasons || []).join(' • ')}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </SectionCard>
+                            )}
+
                             {/* Creative Forensics */}
                             <SectionCard title={<span style={{ display: 'flex', alignItems: 'center' }}>🔍 Creative Forensics <InfoTooltip text="Reads each ad creative against its peers using real CTR, click-to-result rate, CPR, CPM, frequency, and video hook quality when available. The labels here are meant to help you decide whether to scale, refresh, or let the creative mature." /></span>} subtitle="Creative-by-creative diagnosis with visuals, cost signals, and practical next actions">
                                 {advancedData.data.creativeForensicsMeta?.note && (
@@ -5334,6 +5457,51 @@ export default function AdsPage() {
                                             </div>
                                         );
                                     })()}
+                                    {advancedData.data.learningOpportunityCost && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 16 }}>
+                                            {(() => {
+                                                const cost = advancedData.data.learningOpportunityCost;
+                                                const tone = cost.consolidationRecommended
+                                                    ? { bg: 'rgba(239, 68, 68, 0.1)', color: '#fca5a5', border: 'rgba(239, 68, 68, 0.24)' }
+                                                    : Number(cost.unstableSpendShare || 0) >= 15
+                                                        ? { bg: 'rgba(245, 158, 11, 0.1)', color: '#fcd34d', border: 'rgba(245, 158, 11, 0.24)' }
+                                                        : { bg: 'rgba(16, 185, 129, 0.1)', color: '#86efac', border: 'rgba(16, 185, 129, 0.24)' };
+                                                return (
+                                                    <>
+                                                        <div style={{ padding: 12, borderRadius: 10, background: tone.bg, border: `1px solid ${tone.border}` }}>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Unstable spend</div>
+                                                            <div style={{ fontSize: 22, fontWeight: 800, color: tone.color, lineHeight: 1 }}>{formatCurrency(cost.unstableSpend || 0)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>{Math.round(cost.unstableSpendShare || 0)}% of delivery-readiness spend</div>
+                                                        </div>
+                                                        <div style={{ padding: 12, borderRadius: 10, background: 'rgba(15, 23, 42, 0.48)', border: '1px solid var(--border)' }}>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Unlikely to exit</div>
+                                                            <div style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b', lineHeight: 1 }}>{cost.unlikelyCampaigns || 0}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>{cost.unlikelyAdsets || 0} ad set{cost.unlikelyAdsets === 1 ? '' : 's'} at current pace</div>
+                                                        </div>
+                                                        <div style={{ padding: 12, borderRadius: 10, background: 'rgba(15, 23, 42, 0.48)', border: '1px solid var(--border)' }}>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Unstable CPA</div>
+                                                            <div style={{ fontSize: 22, fontWeight: 800, color: '#cbd5e1', lineHeight: 1 }}>{cost.unstableCPA ? formatCurrency(cost.unstableCPA) : '—'}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>{formatNumber(cost.unstableConversions || 0)} conversions in unstable states</div>
+                                                        </div>
+                                                        <div style={{ padding: 12, borderRadius: 10, background: tone.bg, border: `1px solid ${tone.border}` }}>
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Recommendation</div>
+                                                            <div style={{ fontSize: 14, fontWeight: 800, color: tone.color, lineHeight: 1.25 }}>{cost.recommendation || 'Learning spend is contained'}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>Based on readiness, event pace, age, and spend</div>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+                                    {(advancedData.data.learningOpportunityCost?.readinessBuckets || []).length > 0 && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                            {(advancedData.data.learningOpportunityCost.readinessBuckets || []).slice(0, 5).map((bucket: any) => (
+                                                <div key={bucket.status} style={{ padding: '8px 10px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.1)', border: '1px solid rgba(148, 163, 184, 0.18)', fontSize: 11, color: 'var(--muted)' }}>
+                                                    <strong style={{ color: 'var(--foreground)' }}>{bucket.label}</strong> {formatCurrency(bucket.spend || 0)} • {formatNumber(bucket.conversions || 0)} conv • CPA {bucket.cpa ? formatCurrency(bucket.cpa) : '—'}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: 10, fontSize: 12, color: 'var(--muted)' }}>
                                         This section is based on each ad set&apos;s <strong>objective</strong> and <strong>optimization goal</strong>. Conversion-style ad sets are judged on optimization-event pace. Awareness-style ad sets are judged on delivery stability, not a fake 50-conversion target.
                                     </div>
