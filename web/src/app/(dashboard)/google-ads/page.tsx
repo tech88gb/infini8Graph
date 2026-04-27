@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { googleAdsApi } from '@/lib/api';
+import { DateRangeSelector } from '@/components/ui/DateRangeSelector';
 import {
     PageExportMenu,
     appendDatasetTables,
@@ -33,6 +34,7 @@ import {
 } from 'recharts';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'];
+type DateRange = { startDate: string; endDate: string };
 
 // ==================== HELPERS ====================
 
@@ -342,12 +344,12 @@ function AccountSelector({ currentId, allIds, onSelect, loading }: { currentId: 
 
 // ==================== OVERVIEW TAB ====================
 
-function OverviewTab({ preset }: { preset: string }) {
+function OverviewTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     // Primary query — this is the ONLY Google API call on initial load
     const { data: perf, isLoading, isError, error } = useQuery({
-        queryKey: ['google-perf', preset],
+        queryKey: ['google-perf', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getPerformance(preset);
+            const res = await googleAdsApi.getPerformance(preset, dateRange.startDate, dateRange.endDate);
             if (!res.data.success) throw new Error(res.data.error || 'Failed to fetch performance data');
             return res.data.data;
         },
@@ -670,16 +672,16 @@ function getKeywordHealth(keyword: any, accountMetrics: any) {
     return { key: 'idle', label: 'Idle', tone: 'default', note: 'Not contributing enough data yet.' };
 }
 
-function CampaignsTab({ preset }: { preset: string }) {
+function CampaignsTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     const [search, setSearch] = useState('');
     const [channelFilter, setChannelFilter] = useState('all');
     const [healthFilter, setHealthFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
 
     const { data, isLoading } = useQuery({
-        queryKey: ['google-campaigns', preset],
+        queryKey: ['google-campaigns', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getCampaigns(preset);
+            const res = await googleAdsApi.getCampaigns(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -699,9 +701,9 @@ function CampaignsTab({ preset }: { preset: string }) {
     });
 
     const { data: perfData } = useQuery({
-        queryKey: ['google-perf-campaign-ops', preset],
+        queryKey: ['google-perf-campaign-ops', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getPerformance(preset);
+            const res = await googleAdsApi.getPerformance(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -710,9 +712,9 @@ function CampaignsTab({ preset }: { preset: string }) {
     });
 
     const { data: searchTermData } = useQuery({
-        queryKey: ['google-search-terms-campaign-ops', preset],
+        queryKey: ['google-search-terms-campaign-ops', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getSearchTerms(preset);
+            const res = await googleAdsApi.getSearchTerms(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -984,7 +986,7 @@ function CampaignsTab({ preset }: { preset: string }) {
 
 // ==================== KEYWORDS TAB ====================
 
-function KeywordsTab({ preset }: { preset: string }) {
+function KeywordsTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     const [search, setSearch] = useState('');
     const [matchFilter, setMatchFilter] = useState('all');
     const [healthFilter, setHealthFilter] = useState('all');
@@ -992,9 +994,9 @@ function KeywordsTab({ preset }: { preset: string }) {
     const [intentFilter, setIntentFilter] = useState('all');
 
     const { data, isLoading } = useQuery({
-        queryKey: ['google-keywords', preset],
+        queryKey: ['google-keywords', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getKeywords(preset);
+            const res = await googleAdsApi.getKeywords(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1003,9 +1005,9 @@ function KeywordsTab({ preset }: { preset: string }) {
     });
 
     const { data: perfData } = useQuery({
-        queryKey: ['google-perf-keyword-ops', preset],
+        queryKey: ['google-perf-keyword-ops', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getPerformance(preset);
+            const res = await googleAdsApi.getPerformance(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1355,11 +1357,11 @@ function CreativesTab() {
 
 // ==================== COMPETITORS TAB ====================
 
-function CompetitorsTab({ preset }: { preset: string }) {
+function CompetitorsTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     const { data, isLoading } = useQuery({
-        queryKey: ['google-auction', preset],
+        queryKey: ['google-auction', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAuctionInsights(preset);
+            const res = await googleAdsApi.getAuctionInsights(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -1431,11 +1433,11 @@ function CompetitorsTab({ preset }: { preset: string }) {
 
 // ==================== SEARCH TERMS (WASTED SPEND) ====================
 
-function SearchTermsTab({ preset }: { preset: string }) {
+function SearchTermsTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     const { data, isLoading } = useQuery({
-        queryKey: ['google-search-terms', preset],
+        queryKey: ['google-search-terms', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getSearchTerms(preset);
+            const res = await googleAdsApi.getSearchTerms(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -1663,11 +1665,11 @@ function IntelligenceTab() {
 
 // ==================== GEO / LOCATION TAB ====================
 
-function GeoTab({ preset }: { preset: string }) {
+function GeoTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     const { data, isLoading } = useQuery({
-        queryKey: ['google-geo', preset],
+        queryKey: ['google-geo', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getGeo(preset);
+            const res = await googleAdsApi.getGeo(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         }
     });
@@ -1728,14 +1730,14 @@ function GeoTab({ preset }: { preset: string }) {
 
 // ==================== ALERTS TAB ====================
 
-function AlertsTab({ preset }: { preset: string }) {
+function AlertsTab({ preset, dateRange }: { preset: string; dateRange: DateRange }) {
     const [severityFilter, setSeverityFilter] = useState('all');
     const [categoryFilter, setCategoryFilter] = useState('all');
 
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ['google-alerts', preset],
+        queryKey: ['google-alerts', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAlerts(preset);
+            const res = await googleAdsApi.getAlerts(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -2048,15 +2050,28 @@ function ConnectScreen() {
 
 // ==================== MAIN PAGE ====================
 
-const PRESETS = [
-    { label: '7 days', value: '7d' },
-    { label: '30 days', value: '30d' },
-    { label: '90 days', value: '90d' },
-];
-
 export default function GoogleAdsPage() {
     const [activeTab, setActiveTab] = useState('overview');
-    const [preset, setPreset] = useState('30d');
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 6);
+    const toYMD = (date: Date) => date.toLocaleDateString('en-CA');
+    const [dateRange, setDateRange] = useState<DateRange>({ startDate: toYMD(defaultStart), endDate: toYMD(defaultEnd) });
+    const preset = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const endD = new Date(dateRange.endDate);
+        endD.setHours(0, 0, 0, 0);
+        const startD = new Date(dateRange.startDate);
+        startD.setHours(0, 0, 0, 0);
+        const daySpan = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+        const isEndToday = endD.getTime() === today.getTime();
+
+        if (daySpan === 7 && isEndToday) return '7d';
+        if (daySpan === 30 && isEndToday) return '30d';
+        if (daySpan === 90 && isEndToday) return '90d';
+        return 'custom';
+    }, [dateRange]);
     const [showTip, setShowTip] = useState(false);
     const queryClient = useQueryClient();
 
@@ -2118,9 +2133,9 @@ export default function GoogleAdsPage() {
     // getRecommendations runs 3 sub-queries (campaigns+keywords+budget) inside
     // it — we do NOT want those hitting Google on every page load.
     const { data: alertsData } = useQuery({
-        queryKey: ['google-alerts', preset],
+        queryKey: ['google-alerts', preset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAlerts(preset);
+            const res = await googleAdsApi.getAlerts(preset, dateRange.startDate, dateRange.endDate);
             return res.data.data;
         },
         enabled: !!status?.connected && activeTab === 'alerts',
@@ -2220,17 +2235,17 @@ export default function GoogleAdsPage() {
         ] = await Promise.all([
             googleAdsApi.getStatus().then((res) => res.data).catch(() => status),
             googleAdsApi.getDiscovery().then((res) => res.data.data).catch(() => accountsData),
-            googleAdsApi.getPerformance(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getPerformance(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
             googleAdsApi.getBudget().then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getCampaigns(preset).then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getKeywords(preset).then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getAuctionInsights(preset).then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getSearchTerms(preset).then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getGeo(preset).then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getAlerts(preset).then((res) => res.data.data).catch(() => alertsData),
-            googleAdsApi.getBidding(preset).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getCampaigns(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getKeywords(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getAuctionInsights(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getSearchTerms(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getGeo(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
+            googleAdsApi.getAlerts(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => alertsData),
+            googleAdsApi.getBidding(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null),
             googleAdsApi.getQualityScore().then((res) => res.data.data).catch(() => null),
-            googleAdsApi.getAssetData(preset).then((res) => res.data.data).catch(() => null)
+            googleAdsApi.getAssetData(preset, dateRange.startDate, dateRange.endDate).then((res) => res.data.data).catch(() => null)
         ]);
 
         const customerId = latestAccounts?.customerId || latestStatus?.account?.customerId || 'google-ads';
@@ -2283,23 +2298,7 @@ export default function GoogleAdsPage() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* Date Range Picker */}
                     {['overview', 'campaigns', 'keywords', 'search-terms', 'local', 'true-roas', 'local-search', 'bidding-intel', 'alerts'].includes(activeTab) && (
-                        <div style={{ display: 'flex', gap: 4, background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
-                            {PRESETS.map((p) => (
-                                <button
-                                    key={p.value}
-                                    onClick={() => setPreset(p.value)}
-                                    style={{
-                                        padding: '4px 10px', borderRadius: 6,
-                                        background: preset === p.value ? 'var(--primary)' : 'transparent',
-                                        border: 'none', color: preset === p.value ? '#fff' : 'var(--muted)',
-                                        fontSize: 12, fontWeight: preset === p.value ? 600 : 400,
-                                        cursor: 'pointer', transition: 'all 0.15s'
-                                    }}
-                                >
-                                    {p.label}
-                                </button>
-                            ))}
-                        </div>
+                        <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
                     )}
                     <PageExportMenu onExport={handlePageExport} />
                     <button
@@ -2337,16 +2336,16 @@ export default function GoogleAdsPage() {
 
             {/* Tab Content */}
             <div style={{ padding: '20px 0' }}>
-                {activeTab === 'overview' && <OverviewTab preset={preset} />}
-                {activeTab === 'true-roas' && <ConversionIntegrityTab preset={preset} />}
-                {activeTab === 'local' && <LocalImpactTab />}
-                {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} />}
-                {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} />}
-                {activeTab === 'competitors' && <BiddingIntelligenceTab preset={preset} />}
-                {activeTab === 'campaigns' && <CampaignsTab preset={preset} />}
-                {activeTab === 'keywords' && <KeywordsTab preset={preset} />}
-                {activeTab === 'search-terms' && <WastedSpendTab preset={preset} />}
-                {activeTab === 'alerts' && <AlertsTab preset={preset} />}
+                {activeTab === 'overview' && <OverviewTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'true-roas' && <ConversionIntegrityTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'local' && <LocalImpactTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'local-search' && <LocalSearchDominanceTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'bidding-intel' && <BiddingIntelligenceTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'competitors' && <BiddingIntelligenceTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'campaigns' && <CampaignsTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'keywords' && <KeywordsTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'search-terms' && <WastedSpendTab preset={preset} dateRange={dateRange} />}
+                {activeTab === 'alerts' && <AlertsTab preset={preset} dateRange={dateRange} />}
             </div>
         </div>
     );

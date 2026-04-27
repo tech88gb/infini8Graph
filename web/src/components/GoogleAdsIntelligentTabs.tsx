@@ -14,6 +14,8 @@ import {
     BarChart as ReBarChart, Bar, PieChart, Pie, Cell, CartesianGrid, Legend
 } from 'recharts';
 
+type DateRange = { startDate: string; endDate: string };
+
 function fmtNumber(value: number, digits = 0) {
     return value?.toLocaleString('en-US', { maximumFractionDigits: digits }) ?? '0';
 }
@@ -104,11 +106,11 @@ function CompactMetric({ label, value, tone = 'default', tooltip }: { label: str
 
 // ==================== CONVERSION INTEGRITY ====================
 
-export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) {
+export function ConversionIntegrityTab({ preset = '30d', dateRange }: { preset?: string; dateRange?: DateRange }) {
     const { data: searchTerms, isLoading: stLoading } = useQuery({
-        queryKey: ['google-search-terms', preset],
+        queryKey: ['google-search-terms', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getSearchTerms(preset);
+            const res = await googleAdsApi.getSearchTerms(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -116,9 +118,9 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
     });
 
     const { data: assetData, isLoading: assetLoading } = useQuery({
-        queryKey: ['google-assets', preset],
+        queryKey: ['google-assets', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssetData(preset);
+            const res = await googleAdsApi.getAssetData(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -391,11 +393,11 @@ export function ConversionIntegrityTab({ preset = '30d' }: { preset?: string }) 
 
 // ==================== LOCAL IMPACT (ADS + GMB) ====================
 
-export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
+export function LocalImpactTab({ preset = '30d', dateRange }: { preset?: string; dateRange?: DateRange }) {
     const { data: geoData, isLoading } = useQuery({
-        queryKey: ['google-geo', preset],
+        queryKey: ['google-geo', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getGeo(preset);
+            const res = await googleAdsApi.getGeo(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -605,11 +607,11 @@ export function LocalImpactTab({ preset = '30d' }: { preset?: string }) {
 
 // ==================== COMPETITOR THREAT (ADS) ====================
 
-export function CompetitorThreatTab({ preset }: { preset: string }) {
+export function CompetitorThreatTab({ preset, dateRange }: { preset: string; dateRange?: DateRange }) {
     const { data, isLoading } = useQuery({
-        queryKey: ['google-auction', preset],
+        queryKey: ['google-auction', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAuctionInsights(preset);
+            const res = await googleAdsApi.getAuctionInsights(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -703,11 +705,11 @@ export function CompetitorThreatTab({ preset }: { preset: string }) {
 
 // ==================== WASTED SPEND (ADS) ====================
 
-export function WastedSpendTab({ preset }: { preset: string }) {
+export function WastedSpendTab({ preset, dateRange }: { preset: string; dateRange?: DateRange }) {
     const { data: searchTerms, isLoading: stLoading } = useQuery({
-        queryKey: ['google-search-terms', preset],
+        queryKey: ['google-search-terms', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getSearchTerms(preset);
+            const res = await googleAdsApi.getSearchTerms(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -716,9 +718,9 @@ export function WastedSpendTab({ preset }: { preset: string }) {
     });
 
     const { data: assetData, isLoading: assetLoading } = useQuery({
-        queryKey: ['google-assets', preset],
+        queryKey: ['google-assets', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAssetData(preset);
+            const res = await googleAdsApi.getAssetData(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1292,11 +1294,11 @@ export function WastedSpendTab({ preset }: { preset: string }) {
 
 // ==================== LOCAL SEARCH DOMINANCE (GMB — business.manage) ====================
 
-export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string }) {
+export function LocalSearchDominanceTab({ preset = '30d', dateRange }: { preset?: string; dateRange?: DateRange }) {
     const { data: geoData, isLoading: geoLoading } = useQuery({
-        queryKey: ['google-geo-local', preset],
+        queryKey: ['google-geo-local', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getGeo(preset);
+            const res = await googleAdsApi.getGeo(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1304,9 +1306,9 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
     });
 
     const { data: keywordData, isLoading: keywordLoading } = useQuery({
-        queryKey: ['google-keywords-local', preset],
+        queryKey: ['google-keywords-local', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getKeywords(preset);
+            const res = await googleAdsApi.getKeywords(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1314,9 +1316,9 @@ export function LocalSearchDominanceTab({ preset = '30d' }: { preset?: string })
     });
 
     const { data: localPresenceData, isLoading: presenceLoading } = useQuery({
-        queryKey: ['google-local-presence', preset],
+        queryKey: ['google-local-presence', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getLocalPresence(preset);
+            const res = await googleAdsApi.getLocalPresence(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1610,11 +1612,11 @@ function QualityScore({ score }: { score: number | null }) {
     );
 }
 
-export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) {
+export function BiddingIntelligenceTab({ preset = '30d', dateRange }: { preset?: string; dateRange?: DateRange }) {
     const { data: biddingData, isLoading: bLoading } = useQuery({
-        queryKey: ['google-bidding-intel', preset],
+        queryKey: ['google-bidding-intel', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getBidding(preset);
+            const res = await googleAdsApi.getBidding(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1623,9 +1625,9 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
     });
 
     const { data: keywordData, isLoading: kLoading } = useQuery({
-        queryKey: ['google-keywords-intel', preset],
+        queryKey: ['google-keywords-intel', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getKeywords(preset);
+            const res = await googleAdsApi.getKeywords(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -1634,9 +1636,9 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
     });
 
     const { data: auctionData, isLoading: aLoading } = useQuery({
-        queryKey: ['google-auction-intel', preset],
+        queryKey: ['google-auction-intel', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getAuctionInsights(preset);
+            const res = await googleAdsApi.getAuctionInsights(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
@@ -2150,47 +2152,47 @@ export function BiddingIntelligenceTab({ preset = '30d' }: { preset?: string }) 
 
 // ==================== PERSONA BUILDER (ANALYTICS + ADS) ====================
 
-export function PersonaBuilderTab({ preset = '30d' }: { preset?: string }) {
+export function PersonaBuilderTab({ preset = '30d', dateRange }: { preset?: string; dateRange?: DateRange }) {
     const { data: perf, isLoading: perfLoading } = useQuery({
-        queryKey: ['google-perf-persona', preset],
+        queryKey: ['google-perf-persona', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getPerformance(preset);
+            const res = await googleAdsApi.getPerformance(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
         refetchOnWindowFocus: false
     });
     const { data: keywordData, isLoading: keywordLoading } = useQuery({
-        queryKey: ['google-keywords-persona', preset],
+        queryKey: ['google-keywords-persona', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getKeywords(preset);
+            const res = await googleAdsApi.getKeywords(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
         refetchOnWindowFocus: false
     });
     const { data: searchTermData, isLoading: termLoading } = useQuery({
-        queryKey: ['google-search-terms-persona', preset],
+        queryKey: ['google-search-terms-persona', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getSearchTerms(preset);
+            const res = await googleAdsApi.getSearchTerms(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
         refetchOnWindowFocus: false
     });
     const { data: geoData, isLoading: geoLoading } = useQuery({
-        queryKey: ['google-geo-persona', preset],
+        queryKey: ['google-geo-persona', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getGeo(preset);
+            const res = await googleAdsApi.getGeo(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,
         refetchOnWindowFocus: false
     });
     const { data: localPresenceData, isLoading: presenceLoading } = useQuery({
-        queryKey: ['google-local-presence-persona', preset],
+        queryKey: ['google-local-presence-persona', preset, dateRange?.startDate, dateRange?.endDate],
         queryFn: async () => {
-            const res = await googleAdsApi.getLocalPresence(preset);
+            const res = await googleAdsApi.getLocalPresence(preset, dateRange?.startDate, dateRange?.endDate);
             return res.data.data;
         },
         staleTime: 300000,

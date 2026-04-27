@@ -190,16 +190,35 @@ export async function getCustomerId(userId) {
     return resolvePromise;
 }
 
+function isYmd(value) {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function formatLocalYmd(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 /**
- * Parse days from preset (7d, 30d, 90d) into GAQL date strings.
+ * Build inclusive GAQL date bounds.
+ * Custom UI ranges are preferred; presets are a compatibility fallback.
  */
-function getDateRange(preset = '30d') {
+function getDateRange(preset = '30d', customStartDate = null, customEndDate = null) {
+    if (isYmd(customStartDate) && isYmd(customEndDate)) {
+        const startDate = customStartDate <= customEndDate ? customStartDate : customEndDate;
+        const endDate = customStartDate <= customEndDate ? customEndDate : customStartDate;
+        return { startDate, endDate, period: `${startDate}_${endDate}`, isCustom: true };
+    }
+
     const today = new Date();
     const days = preset === '7d' ? 7 : preset === '90d' ? 90 : 30;
     const from = new Date(today);
-    from.setDate(from.getDate() - days);
-    const fmt = (d) => d.toISOString().split('T')[0];
-    return { startDate: fmt(from), endDate: fmt(today) };
+    from.setDate(from.getDate() - (days - 1));
+    const startDate = formatLocalYmd(from);
+    const endDate = formatLocalYmd(today);
+    return { startDate, endDate, period: preset, isCustom: false };
 }
 
 function mapAssetPerformanceLabel(value) {
@@ -482,17 +501,18 @@ function inferGoogleAccountFocus(campaigns = [], aggregate = {}) {
 
 // ===================== OVERVIEW METRICS =====================
 
-export async function getAdsPerformance(userId, preset = '30d') {
-    const cacheKey = `${userId}:performance:${preset}`;
+export async function getAdsPerformance(userId, preset = '30d', customStartDate = null, customEndDate = null) {
+    const dateRange = getDateRange(preset, customStartDate, customEndDate);
+    const cacheKey = `${userId}:performance:${dateRange.period}`;
     const cached = await getCachedResult(cacheKey);
-    if (cached) { console.log(`⚡ [cache] performance:${preset}`); return cached; }
+    if (cached) { console.log(`⚡ [cache] performance:${dateRange.period}`); return cached; }
 
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate, period } = dateRange;
 
         const rows = await customer.query(`
             SELECT
@@ -588,7 +608,7 @@ export async function getAdsPerformance(userId, preset = '30d') {
                             ? 'Conversions are present, but revenue/value tracking looks too weak to headline ROAS confidently.'
                             : 'This account does not yet have enough value tracking to make ROAS the primary operating metric.',
             },
-            period: preset,
+            period,
         };
         await setCachedResult(cacheKey, result);
         return result;
@@ -601,17 +621,18 @@ export async function getAdsPerformance(userId, preset = '30d') {
 
 // ===================== CAMPAIGN BREAKDOWN =====================
 
-export async function getCampaignBreakdown(userId, preset = '30d') {
-    const cacheKey = `${userId}:campaigns:${preset}`;
+export async function getCampaignBreakdown(userId, preset = '30d', customStartDate = null, customEndDate = null) {
+    const dateRange = getDateRange(preset, customStartDate, customEndDate);
+    const cacheKey = `${userId}:campaigns:${dateRange.period}`;
     const cached = await getCachedResult(cacheKey);
-    if (cached) { console.log(`⚡ [cache] campaigns:${preset}`); return cached; }
+    if (cached) { console.log(`⚡ [cache] campaigns:${dateRange.period}`); return cached; }
 
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate, period } = dateRange;
 
         const rows = await customer.query(`
             SELECT
@@ -695,7 +716,7 @@ export async function getCampaignBreakdown(userId, preset = '30d') {
             };
         }).sort((a, b) => b.spend - a.spend);
 
-        const result = { connected: true, campaigns, period: preset };
+        const result = { connected: true, campaigns, period };
         await setCachedResult(cacheKey, result);
         return result;
     } catch (error) {
@@ -717,7 +738,7 @@ export async function getBudgetUtilization(userId) {
         if (!creds) return { connected: false };
 
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const today = new Date().toISOString().split('T')[0];
+        const today = formatLocalYmd(new Date());
 
         const rows = await customer.query(`
             SELECT
@@ -766,13 +787,13 @@ export async function getBudgetUtilization(userId) {
 
 // ===================== KEYWORD PERFORMANCE =====================
 
-export async function getKeywordPerformance(userId, preset = '30d') {
+export async function getKeywordPerformance(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
 
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate, period } = getDateRange(preset, customStartDate, customEndDate);
 
         const rows = await customer.query(`
             SELECT
@@ -849,7 +870,7 @@ export async function getKeywordPerformance(userId, preset = '30d') {
         // Surface low quality score keywords (< 5)
         const lowQuality = keywords.filter(k => k.qualityScore !== null && k.qualityScore < 5);
 
-        return { connected: true, keywords, lowQuality, period: preset };
+        return { connected: true, keywords, lowQuality, period };
     } catch (error) {
         const msg = error?.errors?.[0]?.error_string || error.message;
         console.error('❌ Keyword performance error:', msg);
@@ -957,11 +978,11 @@ export async function getAdCreativePreviews(userId) {
  * IMPORTANT: We reuse the already-cached getAdsPerformance result - this
  * does NOT fire an extra Google API call if performance was already fetched.
  */
-export async function getCrossPlatformSummary(userId, metaSpend = 0, metaImpressions = 0, metaClicks = 0, preset = '30d') {
+export async function getCrossPlatformSummary(userId, metaSpend = 0, metaImpressions = 0, metaClicks = 0, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         // getAdsPerformance is result-cached — this will be a cache hit if
         // the OverviewTab already fetched it moments ago
-        const perf = await getAdsPerformance(userId, preset);
+        const perf = await getAdsPerformance(userId, preset, customStartDate, customEndDate);
         if (!perf.connected) return { connected: false };
 
         const googleSpend = perf.metrics?.spend || 0;
@@ -998,14 +1019,14 @@ export async function getCrossPlatformSummary(userId, metaSpend = 0, metaImpress
 
 // ===================== RECOMMENDATIONS / ALERTS =====================
 
-export async function getRecommendations(userId, preset = '30d') {
+export async function getRecommendations(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const [campaigns, keywords, budget, searchTerms, performance] = await Promise.all([
-            getCampaignBreakdown(userId, preset),
-            getKeywordPerformance(userId, preset),
+            getCampaignBreakdown(userId, preset, customStartDate, customEndDate),
+            getKeywordPerformance(userId, preset, customStartDate, customEndDate),
             getBudgetUtilization(userId),
-            getSearchTermInsights(userId, preset),
-            getAdsPerformance(userId, preset),
+            getSearchTermInsights(userId, preset, customStartDate, customEndDate),
+            getAdsPerformance(userId, preset, customStartDate, customEndDate),
         ]);
 
         const alerts = [];
@@ -1117,7 +1138,7 @@ export async function getRecommendations(userId, preset = '30d') {
                 type: totalWastedSpend >= 100 ? 'danger' : 'warning',
                 category: 'Search Terms',
                 title: 'Negative keyword pressure is building',
-                message: `${wastedTerms.length} search terms spent money without conversions in the ${preset} window.`,
+                message: `${wastedTerms.length} search terms spent money without conversions in the ${performance?.period || preset} window.`,
                 metric: `₹${totalWastedSpend.toFixed(2)} at risk · ${totalWastedClicks} clicks`,
                 nextStep: 'Review zero-conversion terms and add the clearest exclusions before broadening budget.',
             });
@@ -1148,7 +1169,7 @@ export async function getRecommendations(userId, preset = '30d') {
             pacingRisks: (budget.campaigns || []).filter((c) => c.utilization > 90).length,
         };
 
-        return { connected: true, alerts, summary, period: preset };
+        return { connected: true, alerts, summary, period: performance?.period || preset };
     } catch (error) {
         console.error('❌ Recommendations error:', error.message);
         return { connected: true, alerts: [], error: error.message };
@@ -1157,12 +1178,12 @@ export async function getRecommendations(userId, preset = '30d') {
 
 // ===================== AUCTION INSIGHTS (COMPETITORS) =====================
 
-export async function getAuctionInsights(userId, preset = '30d') {
+export async function getAuctionInsights(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate } = getDateRange(preset, customStartDate, customEndDate);
 
         // Using customer_auction_insight_stats for better data density and account-level overview
         const rows = await customer.query(`
@@ -1209,12 +1230,12 @@ function mapQsLabel(val) {
 
 // ===================== SEARCH TERM INSIGHTS (WASTED SPEND) =====================
 
-export async function getSearchTermInsights(userId, preset = '30d') {
+export async function getSearchTermInsights(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate } = getDateRange(preset, customStartDate, customEndDate);
 
         const rows = await customer.query(`
             SELECT
@@ -1300,12 +1321,12 @@ export async function getQualityScoreDiagnostics(userId) {
 
 // ===================== ASSET PERFORMANCE (RSA) =====================
 
-export async function getAssetPerformance(userId, preset = '30d') {
+export async function getAssetPerformance(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate, period } = getDateRange(preset, customStartDate, customEndDate);
 
         // Responsive Search Ad Asset performance
         const rows = await customer.query(`
@@ -1334,7 +1355,7 @@ export async function getAssetPerformance(userId, preset = '30d') {
             campaign: r.campaign?.name || ''
         }));
 
-        return { connected: true, assets, period: preset };
+        return { connected: true, assets, period };
     } catch (error) {
         console.error('❌ Asset performance error:', error.message);
         return { connected: true, assets: [], error: error.message };
@@ -1343,12 +1364,12 @@ export async function getAssetPerformance(userId, preset = '30d') {
 
 // ===================== BIDDING HEATMAP (DAY/HOUR) =====================
 
-export async function getBiddingInsights(userId, preset = '30d') {
+export async function getBiddingInsights(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate } = getDateRange(preset, customStartDate, customEndDate);
 
         const rows = await customer.query(`
             SELECT
@@ -1387,12 +1408,12 @@ export async function getBiddingInsights(userId, preset = '30d') {
 
 // ===================== GEO PERFORMANCE =====================
 
-export async function getGeoPerformance(userId, preset = '30d') {
+export async function getGeoPerformance(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate, period } = getDateRange(preset, customStartDate, customEndDate);
 
         let rows = [];
         let geoMode = 'state-first';
@@ -1545,22 +1566,22 @@ export async function getGeoPerformance(userId, preset = '30d') {
                 : 'Google did not return granular geo segments for this account/query, so country totals are shown instead.',
         };
 
-        return { connected: true, locations: enrichedLocations, summary, period: preset };
+        return { connected: true, locations: enrichedLocations, summary, period };
     } catch (error) {
         console.error('❌ Geo performance error:', error.message);
         return { connected: true, locations: [], error: error.message };
     }
 }
 
-export async function getLocalPresenceSignals(userId, preset = '30d') {
+export async function getLocalPresenceSignals(userId, preset = '30d', customStartDate = null, customEndDate = null) {
     try {
-        const perf = await getAdsPerformance(userId, preset);
+        const perf = await getAdsPerformance(userId, preset, customStartDate, customEndDate);
         if (!perf?.connected) return { connected: false };
 
         const creds = await getCustomerId(userId);
         if (!creds) return { connected: false };
         const { customer } = buildClient(creds.refreshToken, creds.customerId, creds.loginCustomerId);
-        const { startDate, endDate } = getDateRange(preset);
+        const { startDate, endDate, period } = getDateRange(preset, customStartDate, customEndDate);
 
         let callClicks = null;
         let callClickTypes = [];
@@ -1639,7 +1660,7 @@ export async function getLocalPresenceSignals(userId, preset = '30d') {
             callConversions,
             callConversionCategories,
             hasCallTracking,
-            period: preset,
+            period,
         };
     } catch (error) {
         console.error('❌ Local presence signals error:', error.message);
