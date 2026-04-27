@@ -1877,6 +1877,10 @@ export default function AdsPage() {
     const [campaignMinCtr, setCampaignMinCtr] = useState('');
     const [campaignMaxCpm, setCampaignMaxCpm] = useState('');
     const [campaignMinSpend, setCampaignMinSpend] = useState('');
+    const [campaignSignalFilter, setCampaignSignalFilter] = useState('all');
+    const [campaignQualityFilter, setCampaignQualityFilter] = useState('all');
+    const [campaignFunnelFilter, setCampaignFunnelFilter] = useState('all');
+    const [campaignReadinessFilter, setCampaignReadinessFilter] = useState('all');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [campaignPage, setCampaignPage] = useState(1);
     const [scaleFilters, setScaleFilters] = useState({ search: '', objective: 'all', status: 'active', sort: 'score_desc', page: 1 });
@@ -1987,7 +1991,7 @@ export default function AdsPage() {
             const res = await adsApi.getCampaignIntelligence(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
-        enabled: !!effectiveAccount && activeTab === 'intelligence'
+        enabled: !!effectiveAccount && (activeTab === 'intelligence' || (activeTab === 'campaigns' && showAdvancedFilters))
     });
 
     // Fetch advanced analytics
@@ -1998,7 +2002,7 @@ export default function AdsPage() {
             const res = await adsApi.getAdvancedAnalytics(effectiveAccount, datePreset, customStartDate, customEndDate);
             return res.data;
         },
-        enabled: !!effectiveAccount && activeTab === 'advanced'
+        enabled: !!effectiveAccount && (activeTab === 'advanced' || (activeTab === 'campaigns' && showAdvancedFilters))
     });
 
     // Fetch deep insights (Nurture Funnel, Bounce Gap, Video Hook, Placement Arbitrage)
@@ -2009,7 +2013,7 @@ export default function AdsPage() {
             const res = await adsApi.getDeepInsights(effectiveAccount, datePreset, 'funnel', customStartDate, customEndDate);
             return res.data;
         },
-        enabled: !!effectiveAccount && activeTab === 'funnel',
+        enabled: !!effectiveAccount && (activeTab === 'funnel' || (activeTab === 'campaigns' && showAdvancedFilters)),
         retry: 1
     });
     const { data: deepDiagnosticsData, isLoading: deepDiagnosticsLoading, error: deepDiagnosticsError } = useQuery({
@@ -2145,12 +2149,107 @@ export default function AdsPage() {
         });
         return ['all', ...Array.from(options)];
     }, [campaigns]);
+    const campaignDerivedById = useMemo(() => {
+        const byId = new Map<string, any>();
+        const byName = new Map<string, any>();
+        const normalizeName = (value?: string | null) => String(value || '').trim().toLowerCase();
+        const ensure = (id?: string | number | null, name?: string | null) => {
+            const key = id ? String(id) : '';
+            const nameKey = normalizeName(name);
+            const existing = (key && byId.get(key)) || (nameKey && byName.get(nameKey)) || { id: key || null, name: name || null };
+            if (key) byId.set(key, existing);
+            if (nameKey) byName.set(nameKey, existing);
+            return existing;
+        };
+
+        (intelligenceData?.data?.campaigns || []).forEach((row: any) => {
+            const item = ensure(row.id, row.name);
+            item.scale = row;
+        });
+        ((advancedData?.data?.campaignQualityIndex || advancedData?.data?.leadQualityScore)?.campaigns || []).forEach((row: any) => {
+            const item = ensure(row.id, row.name);
+            item.cqi = row;
+        });
+        (deepInsightsData?.data?.campaignFunnels || []).forEach((row: any) => {
+            const item = ensure(row.campaignId, row.campaignName);
+            item.funnel = row;
+        });
+        (advancedData?.data?.learningPhase || []).forEach((row: any) => {
+            const item = ensure(null, row.campaignName);
+            const current = item.readiness;
+            if (!current || Number(row.spend || 0) > Number(current.spend || 0)) {
+                item.readiness = row;
+            }
+        });
+
+        campaigns.forEach((campaign: any) => {
+            const item = ensure(campaign.id, campaign.name);
+            item.base = campaign;
+            if (campaign.id) byId.set(String(campaign.id), item);
+        });
+
+        return byId;
+    }, [campaigns, intelligenceData, advancedData, deepInsightsData]);
+    const getCampaignDerived = (campaign: any) => campaignDerivedById.get(String(campaign?.id || '')) || {};
+    const derivedCampaignDataLoading = showAdvancedFilters && (intelligenceLoading || advancedLoading || deepInsightsLoading);
+    const derivedCampaignDataReady = Boolean(
+        (intelligenceData?.data?.campaigns || []).length
+        || ((advancedData?.data?.campaignQualityIndex || advancedData?.data?.leadQualityScore)?.campaigns || []).length
+        || (deepInsightsData?.data?.campaignFunnels || []).length
+        || (advancedData?.data?.learningPhase || []).length
+    );
+    const getCampaignSignal = (campaign: any) => {
+        const derived = getCampaignDerived(campaign);
+        const scale = derived.scale;
+        const cqi = derived.cqi;
+        const funnel = derived.funnel;
+        const readiness = derived.readiness;
+        const score = Number(scale?.efficiencyScore || 0);
+        const cqiScore = Number(cqi?.lqs || 0);
+        const roas = Number(funnel?.conversions?.roas ?? campaign?.metrics?.purchaseRoas ?? 0);
+        const clickLoss = funnel?.dropoffs?.bounceGap;
+        const readinessStatus = String(readiness?.learningStatus?.status || '').toLowerCase();
+
+        if (readinessStatus === 'limited' || cqiScore > 0 && cqiScore < 45 || clickLoss !== null && clickLoss !== undefined && Number(clickLoss) >= 45) {
+            return { key: 'fix', label: 'Fix first', color: '#f87171', bg: 'rgba(239,68,68,0.14)', metric: cqiScore ? `CQI ${Math.round(cqiScore)}` : clickLoss !== null && clickLoss !== undefined ? `${clickLoss}% click loss` : 'Learning limited' };
+        }
+        if (score >= 70 || roas >= 2.5 && Number(campaign?.metrics?.spend || 0) > 0) {
+            return { key: 'scale', label: 'Scale candidate', color: '#34d399', bg: 'rgba(16,185,129,0.14)', metric: score ? `Score ${Math.round(score)}` : `${roas.toFixed(1)}x ROAS` };
+        }
+        if (readinessStatus === 'learning' || readinessStatus === 'delivery_learning' || Number(campaign?.metrics?.spend || 0) > 0) {
+            return { key: 'watch', label: 'Watch', color: '#fbbf24', bg: 'rgba(245,158,11,0.14)', metric: readinessStatus.includes('learning') ? 'Learning' : 'Needs proof' };
+        }
+        return { key: 'idle', label: 'No signal', color: '#cbd5e1', bg: 'rgba(148,163,184,0.14)', metric: 'Low delivery' };
+    };
     const filteredCampaigns = useMemo(() => {
         const search = campaignSearch.trim().toLowerCase();
         const filtered = campaigns.filter((campaign: any) => {
+            const derived = campaignDerivedById.get(String(campaign?.id || '')) || {};
+            const signal = getCampaignSignal(campaign);
+            const cqiScore = Number(derived.cqi?.lqs || 0);
+            const clickLoss = derived.funnel?.dropoffs?.bounceGap;
+            const atcToPurchase = Number(derived.funnel?.conversions?.atcToPurchaseRate || 0);
+            const readinessStatus = String(derived.readiness?.learningStatus?.status || '').toLowerCase();
             const matchesSearch = !search || String(campaign?.name || '').toLowerCase().includes(search);
             const matchesType = campaignTypeFilter === 'all' || campaign?.type === campaignTypeFilter;
             const matchesStatus = campaignStatusFilter === 'all' || campaign?.effectiveStatus === campaignStatusFilter;
+            const matchesSignal = campaignSignalFilter === 'all' || signal.key === campaignSignalFilter;
+            const matchesQuality = campaignQualityFilter === 'all'
+                || (campaignQualityFilter === 'strong' && cqiScore >= 70)
+                || (campaignQualityFilter === 'average' && cqiScore >= 45 && cqiScore < 70)
+                || (campaignQualityFilter === 'weak' && cqiScore > 0 && cqiScore < 45)
+                || (campaignQualityFilter === 'unknown' && cqiScore === 0);
+            const matchesFunnel = campaignFunnelFilter === 'all'
+                || (campaignFunnelFilter === 'clean_handoff' && clickLoss !== null && clickLoss !== undefined && Number(clickLoss) <= 25)
+                || (campaignFunnelFilter === 'click_loss' && clickLoss !== null && clickLoss !== undefined && Number(clickLoss) >= 40)
+                || (campaignFunnelFilter === 'cart_strength' && atcToPurchase >= 40)
+                || (campaignFunnelFilter === 'no_lpv' && derived.funnel && clickLoss === null)
+                || (campaignFunnelFilter === 'unknown' && !derived.funnel);
+            const matchesReadiness = campaignReadinessFilter === 'all'
+                || (campaignReadinessFilter === 'stable' && ['active', 'delivery_active'].includes(readinessStatus))
+                || (campaignReadinessFilter === 'learning' && ['learning', 'delivery_learning'].includes(readinessStatus))
+                || (campaignReadinessFilter === 'limited' && readinessStatus === 'limited')
+                || (campaignReadinessFilter === 'unknown' && !readinessStatus);
             const minRoasVal = parseFloat(campaignMinRoas);
             const matchesRoas = !minRoasVal || (campaign?.metrics?.purchaseRoas || 0) >= minRoasVal;
             const minCtrVal = parseFloat(campaignMinCtr);
@@ -2159,11 +2258,24 @@ export default function AdsPage() {
             const matchesCpm = !maxCpmVal || (campaign?.metrics?.cpm || 0) <= maxCpmVal || (campaign?.metrics?.cpm || 0) === 0;
             const minSpendVal = parseFloat(campaignMinSpend);
             const matchesSpend = !minSpendVal || (campaign?.metrics?.spend || 0) >= minSpendVal;
-            return matchesSearch && matchesType && matchesStatus && matchesRoas && matchesCtr && matchesCpm && matchesSpend;
+            return matchesSearch && matchesType && matchesStatus && matchesSignal && matchesQuality && matchesFunnel && matchesReadiness && matchesRoas && matchesCtr && matchesCpm && matchesSpend;
         });
 
         const sortValue = (campaign: any) => {
+            const derived = campaignDerivedById.get(String(campaign?.id || '')) || {};
             switch (campaignSort) {
+                case 'signal_desc':
+                    return { scale: 4, watch: 3, fix: 2, idle: 1 }[getCampaignSignal(campaign).key] || 0;
+                case 'score_desc':
+                    return derived.scale?.efficiencyScore || 0;
+                case 'cqi_desc':
+                    return derived.cqi?.lqs || 0;
+                case 'atc_desc':
+                    return derived.funnel?.conversions?.atcToPurchaseRate || 0;
+                case 'click_loss_asc':
+                    return derived.funnel?.dropoffs?.bounceGap ?? Number.MAX_SAFE_INTEGER;
+                case 'pace_desc':
+                    return derived.readiness?.benchmarkProgress ?? 0;
                 case 'spend_desc':
                     return campaign?.metrics?.spend || 0;
                 case 'results_desc':
@@ -2191,12 +2303,12 @@ export default function AdsPage() {
             if (campaignSort === 'name_asc') {
                 return String(sortValue(a)).localeCompare(String(sortValue(b)));
             }
-            if (campaignSort === 'cost_asc' || campaignSort === 'cpm_asc') {
+            if (campaignSort === 'cost_asc' || campaignSort === 'cpm_asc' || campaignSort === 'click_loss_asc') {
                 return Number(sortValue(a)) - Number(sortValue(b));
             }
             return Number(sortValue(b)) - Number(sortValue(a));
         });
-    }, [campaigns, campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend]);
+    }, [campaigns, campaignDerivedById, campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSignalFilter, campaignQualityFilter, campaignFunnelFilter, campaignReadinessFilter, campaignSort, campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend]);
     const campaignPageSize = 50;
     const campaignTotalPages = Math.max(1, Math.ceil(filteredCampaigns.length / campaignPageSize));
     const campaignPageStart = (campaignPage - 1) * campaignPageSize;
@@ -2376,7 +2488,7 @@ export default function AdsPage() {
     const pagedVideoRows = paginateItems(filteredVideoRows, videoFilters.page, sectionPageSize);
     useEffect(() => {
         setCampaignPage(1);
-    }, [campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend, datePreset, effectiveAccount]);
+    }, [campaignSearch, campaignTypeFilter, campaignStatusFilter, campaignSort, campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend, campaignSignalFilter, campaignQualityFilter, campaignFunnelFilter, campaignReadinessFilter, datePreset, effectiveAccount]);
 
     useEffect(() => {
         setScaleFilters((current) => ({ ...current, page: 1 }));
@@ -3072,6 +3184,12 @@ export default function AdsPage() {
                                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
                                 >
                                     <option value="spend_desc">Sort: Highest spend</option>
+                                    <option value="signal_desc">Sort: Best action signal</option>
+                                    <option value="score_desc">Sort: Optimize score</option>
+                                    <option value="cqi_desc">Sort: Health score</option>
+                                    <option value="atc_desc">Sort: Best cart-to-buy</option>
+                                    <option value="click_loss_asc">Sort: Lowest click loss</option>
+                                    <option value="pace_desc">Sort: Learning pace</option>
                                     <option value="results_desc">Sort: Most results</option>
                                     <option value="roas_desc">Sort: Highest ROAS</option>
                                     <option value="ctr_desc">Sort: Highest CTR</option>
@@ -3105,80 +3223,97 @@ export default function AdsPage() {
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
                                     {showAdvancedFilters ? 'Hide metric filters' : 'Metric filters'}
-                                    {(campaignMinRoas || campaignMinCtr || campaignMaxCpm || campaignMinSpend) && (
+                                    {(campaignMinRoas || campaignMinCtr || campaignMaxCpm || campaignMinSpend || campaignSignalFilter !== 'all' || campaignQualityFilter !== 'all' || campaignFunnelFilter !== 'all' || campaignReadinessFilter !== 'all') && (
                                         <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 800, marginLeft: 2 }}>
-                                            {[campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend].filter(Boolean).length}
+                                            {[campaignMinRoas, campaignMinCtr, campaignMaxCpm, campaignMinSpend, campaignSignalFilter !== 'all' ? campaignSignalFilter : '', campaignQualityFilter !== 'all' ? campaignQualityFilter : '', campaignFunnelFilter !== 'all' ? campaignFunnelFilter : '', campaignReadinessFilter !== 'all' ? campaignReadinessFilter : ''].filter(Boolean).length}
                                         </span>
                                     )}
                                 </button>
-                                {(campaignMinRoas || campaignMinCtr || campaignMaxCpm || campaignMinSpend) && (
+                                {(campaignMinRoas || campaignMinCtr || campaignMaxCpm || campaignMinSpend || campaignSignalFilter !== 'all' || campaignQualityFilter !== 'all' || campaignFunnelFilter !== 'all' || campaignReadinessFilter !== 'all') && (
                                     <button
                                         type="button"
-                                        onClick={() => { setCampaignMinRoas(''); setCampaignMinCtr(''); setCampaignMaxCpm(''); setCampaignMinSpend(''); }}
+                                        onClick={() => { setCampaignMinRoas(''); setCampaignMinCtr(''); setCampaignMaxCpm(''); setCampaignMinSpend(''); setCampaignSignalFilter('all'); setCampaignQualityFilter('all'); setCampaignFunnelFilter('all'); setCampaignReadinessFilter('all'); }}
                                         style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 8px' }}
                                     >
                                         Clear all filters
                                     </button>
                                 )}
+                                {derivedCampaignDataLoading && (
+                                    <span style={{ color: 'var(--muted)', fontSize: 12 }}>Loading Optimize, Health, and Funnel signals...</span>
+                                )}
                             </div>
                             {showAdvancedFilters && (
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                                    gap: 12,
-                                    padding: '16px 18px',
-                                    borderRadius: 14,
-                                    background: 'rgba(99,102,241,0.04)',
-                                    border: '1px solid rgba(99,102,241,0.1)'
-                                }}>
-                                    <label style={{ display: 'grid', gap: 5 }}>
-                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min ROAS</span>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            min="0"
-                                            value={campaignMinRoas}
-                                            onChange={(e) => setCampaignMinRoas(e.target.value)}
-                                            placeholder="e.g. 2.0"
-                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
-                                        />
-                                    </label>
-                                    <label style={{ display: 'grid', gap: 5 }}>
-                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min CTR %</span>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            min="0"
-                                            value={campaignMinCtr}
-                                            onChange={(e) => setCampaignMinCtr(e.target.value)}
-                                            placeholder="e.g. 1.5"
-                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
-                                        />
-                                    </label>
-                                    <label style={{ display: 'grid', gap: 5 }}>
-                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Max CPM</span>
-                                        <input
-                                            type="number"
-                                            step="1"
-                                            min="0"
-                                            value={campaignMaxCpm}
-                                            onChange={(e) => setCampaignMaxCpm(e.target.value)}
-                                            placeholder="e.g. 500"
-                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
-                                        />
-                                    </label>
-                                    <label style={{ display: 'grid', gap: 5 }}>
-                                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min Spend</span>
-                                        <input
-                                            type="number"
-                                            step="100"
-                                            min="0"
-                                            value={campaignMinSpend}
-                                            onChange={(e) => setCampaignMinSpend(e.target.value)}
-                                            placeholder="e.g. 1000"
-                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}
-                                        />
-                                    </label>
+                                <div style={{ display: 'grid', gap: 12 }}>
+                                    <div style={{ padding: '12px 14px', borderRadius: 12, background: derivedCampaignDataReady ? 'rgba(99,102,241,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${derivedCampaignDataReady ? 'rgba(99,102,241,0.16)' : 'rgba(245,158,11,0.18)'}`, color: 'var(--muted)', fontSize: 12 }}>
+                                        Metric filters blend raw campaign metrics with calculated signals from Conversion Funnel, Optimize, Health, and Diagnostics. Open this panel to load those richer campaign reads for the selected date range.
+                                    </div>
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                                        gap: 12,
+                                        padding: '16px 18px',
+                                        borderRadius: 14,
+                                        background: 'rgba(99,102,241,0.04)',
+                                        border: '1px solid rgba(99,102,241,0.1)'
+                                    }}>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Action signal</span>
+                                            <select value={campaignSignalFilter} onChange={(e) => setCampaignSignalFilter(e.target.value)} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}>
+                                                <option value="all">All signals</option>
+                                                <option value="scale">Scale candidates</option>
+                                                <option value="watch">Watch / needs proof</option>
+                                                <option value="fix">Fix first</option>
+                                                <option value="idle">No clear signal</option>
+                                            </select>
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Health score</span>
+                                            <select value={campaignQualityFilter} onChange={(e) => setCampaignQualityFilter(e.target.value)} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}>
+                                                <option value="all">Any CQI</option>
+                                                <option value="strong">Strong CQI</option>
+                                                <option value="average">Average CQI</option>
+                                                <option value="weak">Weak CQI</option>
+                                                <option value="unknown">No CQI yet</option>
+                                            </select>
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Funnel quality</span>
+                                            <select value={campaignFunnelFilter} onChange={(e) => setCampaignFunnelFilter(e.target.value)} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}>
+                                                <option value="all">Any funnel</option>
+                                                <option value="clean_handoff">Clean click handoff</option>
+                                                <option value="click_loss">High click loss</option>
+                                                <option value="cart_strength">Strong cart-to-buy</option>
+                                                <option value="no_lpv">No LPV signal</option>
+                                                <option value="unknown">No funnel row</option>
+                                            </select>
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Delivery readiness</span>
+                                            <select value={campaignReadinessFilter} onChange={(e) => setCampaignReadinessFilter(e.target.value)} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }}>
+                                                <option value="all">Any readiness</option>
+                                                <option value="stable">Stable</option>
+                                                <option value="learning">Learning</option>
+                                                <option value="limited">Learning limited</option>
+                                                <option value="unknown">No readiness row</option>
+                                            </select>
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min ROAS</span>
+                                            <input type="number" step="0.1" min="0" value={campaignMinRoas} onChange={(e) => setCampaignMinRoas(e.target.value)} placeholder="e.g. 2.0" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }} />
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min CTR %</span>
+                                            <input type="number" step="0.1" min="0" value={campaignMinCtr} onChange={(e) => setCampaignMinCtr(e.target.value)} placeholder="e.g. 1.5" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }} />
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Max CPM</span>
+                                            <input type="number" step="1" min="0" value={campaignMaxCpm} onChange={(e) => setCampaignMaxCpm(e.target.value)} placeholder="e.g. 500" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }} />
+                                        </label>
+                                        <label style={{ display: 'grid', gap: 5 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Min Spend</span>
+                                            <input type="number" step="100" min="0" value={campaignMinSpend} onChange={(e) => setCampaignMinSpend(e.target.value)} placeholder="e.g. 1000" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 12 }} />
+                                        </label>
+                                    </div>
                                 </div>
                             )}
 
@@ -3189,6 +3324,7 @@ export default function AdsPage() {
                                             <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Campaign <InfoTooltip text="Campaign name plus type, budget mode, days live, and raw delivery state so you can scan structure and maturity quickly." /></span></th>
                                             <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Type <InfoTooltip text="Objective family derived from the campaign objective, such as Sales, Traffic, Awareness, or Engagement." /></span></th>
                                             <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Delivery <InfoTooltip text="Effective delivery state returned by Meta. This is what Ads Manager uses to show whether a campaign is active, paused, limited, or otherwise constrained." /></span></th>
+                                            <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Signal <InfoTooltip text="A blended action label from calculated Optimize score, Campaign Health/CQI, funnel handoff, and delivery-readiness signals when those datasets are loaded." /></span></th>
                                             <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Spend <InfoTooltip text={`Spend for the selected ${toTitleCase(datePreset)} window.`} /></span></th>
                                             <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Primary Result <InfoTooltip text="The main result metric adapts to campaign type: purchases for sales, leads for lead gen, link clicks for traffic, reach for awareness, and engagements for engagement campaigns." /></span></th>
                                             <th><span style={{ display: 'inline-flex', alignItems: 'center' }}>Cost / Result <InfoTooltip text="The matching efficiency metric for the primary result. For example, cost per purchase for sales campaigns or cost per lead for lead-gen campaigns." /></span></th>
@@ -3201,6 +3337,8 @@ export default function AdsPage() {
                                     <tbody>
                                         {paginatedCampaigns.map((campaign: any) => {
                                             const daysLive = getDaysLive(campaign.start_time || campaign.created_time);
+                                            const signal = getCampaignSignal(campaign);
+                                            const derived = getCampaignDerived(campaign);
                                             const deliveryTone = campaign.effectiveStatus === 'ACTIVE'
                                                 ? { bg: 'rgba(16,185,129,0.14)', color: '#86efac', border: 'rgba(16,185,129,0.22)' }
                                                 : campaign.effectiveStatus?.includes('PAUSED')
@@ -3267,6 +3405,21 @@ export default function AdsPage() {
                                                                 Configured: {campaign.configuredStatus.replace(/_/g, ' ')}
                                                             </div>
                                                         )}
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ display: 'grid', gap: 4, minWidth: 128 }}>
+                                                            <span style={{ padding: '5px 10px', borderRadius: 999, background: signal.bg, color: signal.color, fontSize: 11, fontWeight: 800, width: 'fit-content' }}>
+                                                                {signal.label}
+                                                            </span>
+                                                            <div style={{ fontSize: 10, color: 'var(--muted)' }}>{signal.metric}</div>
+                                                            {(derived.scale || derived.cqi || derived.funnel || derived.readiness) && (
+                                                                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                                                    {derived.scale && <span style={{ fontSize: 9, color: '#a5b4fc' }}>Opt {Math.round(derived.scale.efficiencyScore || 0)}</span>}
+                                                                    {derived.cqi && <span style={{ fontSize: 9, color: '#86efac' }}>CQI {Math.round(derived.cqi.lqs || 0)}</span>}
+                                                                    {derived.funnel?.dropoffs?.bounceGap !== undefined && <span style={{ fontSize: 9, color: '#fcd34d' }}>Loss {derived.funnel.dropoffs.bounceGap ?? 'NA'}%</span>}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td>
                                                         <div style={{ fontWeight: 700 }}>{formatCurrency(campaign.metrics?.spend || 0)}</div>
