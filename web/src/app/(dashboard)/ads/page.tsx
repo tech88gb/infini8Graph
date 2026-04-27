@@ -1888,6 +1888,7 @@ export default function AdsPage() {
     const [creativeFilters, setCreativeFilters] = useState({ search: '', status: 'all', format: 'all', diagnosis: 'all', sort: 'score_desc', page: 1 });
     const [deliveryFilters, setDeliveryFilters] = useState({ search: '', objective: 'all', status: 'active', readiness: 'all', sort: 'spend_desc', page: 1 });
     const [healthViewMode, setHealthViewMode] = useState<'workflow' | 'campaign'>('workflow');
+    const [healthCampaignFilters, setHealthCampaignFilters] = useState({ search: '', evidence: 'current_delivery', issue: 'all', sort: 'priority_desc', page: 1 });
     const [funnelFilters, setFunnelFilters] = useState({ search: '', objective: 'all', status: 'active', sort: 'roas_desc', page: 1 });
     const [videoFilters, setVideoFilters] = useState({ search: '', status: 'all', confidence: 'all', diagnosis: 'all', sort: 'quality_desc', page: 1 });
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
@@ -2459,7 +2460,11 @@ export default function AdsPage() {
                     learningStatus: null,
                     learningSpend: 0,
                     learningWarnings: 0,
+                    hasDelivery: false,
+                    hasActionableSignal: false,
                     flags: [],
+                    issueKey: 'monitor',
+                    actionPriority: 1,
                     recommendedAction: 'Monitor'
                 });
             }
@@ -2468,11 +2473,14 @@ export default function AdsPage() {
 
         (cqiRows || []).forEach((campaign: any) => {
             const row = ensureRow(campaign.name, campaign.id);
+            const campaignSpend = Number(campaign.spend || 0);
+            const campaignConversions = Number(campaign.conversions || 0);
             row.cqi = Number(campaign.lqs || 0);
             row.cqiGrade = campaign.grade || null;
             row.cqiColor = campaign.gradeColor || row.cqiColor;
-            row.spend = Math.max(row.spend || 0, Number(campaign.spend || 0));
-            row.conversions = Math.max(row.conversions || 0, Number(campaign.conversions || 0));
+            row.spend = Math.max(row.spend || 0, campaignSpend);
+            row.conversions = Math.max(row.conversions || 0, campaignConversions);
+            row.hasDelivery = row.hasDelivery || campaignSpend > 0 || Number(campaign.clicks || 0) > 0 || campaignConversions > 0;
         });
 
         (advancedData.data.creativeSaturation?.campaigns || []).forEach((campaign: any) => {
@@ -2481,6 +2489,7 @@ export default function AdsPage() {
             row.saturationStatus = campaign.statusKey || null;
             row.saturationScore = Number(campaign.saturationScore || 0);
             row.spend = Math.max(row.spend || 0, Number(campaign.totalCreativeSpend || 0));
+            row.hasDelivery = row.hasDelivery || Number(campaign.totalCreativeSpend || 0) > 0;
             if (campaign.statusKey && campaign.statusKey !== 'healthy') row.flags.push(campaign.status);
         });
 
@@ -2501,59 +2510,102 @@ export default function AdsPage() {
             }
             row.learningSpend += Number(adset.spend || 0);
             row.learningWarnings += (adset.warnings || []).length;
+            row.hasDelivery = row.hasDelivery || Number(adset.spend || 0) > 0 || Number(adset.goalEvents || 0) > 0 || Number(adset.conversions || 0) > 0;
         });
 
         const retargeting = advancedData.data.retargetingLift;
-        const placementRows = advancedData.data.placementIntent || [];
-        const expensivePlacement = [...placementRows]
-            .filter((placement: any) => Number(placement.spend || 0) > 0 && placement.effectiveCPA)
-            .sort((a: any, b: any) => Number(b.effectiveCPA || 0) - Number(a.effectiveCPA || 0))[0];
-        const bestPlacement = placementRows[0];
         const retargetKeywords = ['retarget', 'remarket', 'warm', 'website visitor', 'engaged', 'cart', 'abandon'];
 
         rows.forEach((row) => {
             const isRetargeting = retargetKeywords.some((keyword) => row.name.toLowerCase().includes(keyword));
-            if (retargeting && isRetargeting) {
+            const learningIssue = row.learningStatus?.status === 'limited' || row.learningStatus?.status === 'learning';
+            const creativeIssue = row.saturationStatus === 'one_creative' || row.saturationStatus === 'creative_fatigue';
+            const fatigueIssue = row.fatigueStatus === 'critical' && row.saturationStatus && row.saturationStatus !== 'healthy';
+            const qualityIssue = row.hasDelivery && row.cqi !== null && row.cqi < 40;
+            const retargetingIssue = row.hasDelivery && retargeting && isRetargeting && ['critical', 'warning'].includes(retargeting.status);
+
+            if (row.hasDelivery && retargeting && isRetargeting) {
                 row.flags.push(`Retargeting ${retargeting.status || 'read'}`);
-            } else if (retargeting && ['critical', 'warning'].includes(retargeting.status)) {
+            } else if (row.hasDelivery && retargeting && ['critical', 'warning'].includes(retargeting.status)) {
                 row.flags.push('Account retargeting weak');
             }
-            if (expensivePlacement && Number(expensivePlacement.effectiveCPA || 0) > 0) {
-                row.flags.push(`Watch ${expensivePlacement.displayName}`);
-            } else if (bestPlacement?.displayName) {
-                row.flags.push(`Best placement: ${bestPlacement.displayName}`);
-            }
 
-            if (row.learningStatus?.status === 'limited' || row.learningStatus?.status === 'learning') {
+            if (!row.hasDelivery) {
+                row.recommendedAction = 'No current action: no spend in range';
+                row.issueKey = 'no_data';
+                row.actionPriority = 0;
+            } else if (learningIssue) {
                 row.recommendedAction = 'Consolidate or improve event pace';
-            } else if (row.saturationStatus === 'one_creative' || row.saturationStatus === 'creative_fatigue') {
+                row.issueKey = 'learning';
+                row.actionPriority = 5;
+                row.hasActionableSignal = true;
+            } else if (creativeIssue) {
                 row.recommendedAction = 'Refresh or rotate creatives';
-            } else if (row.fatigueStatus === 'critical' && row.saturationStatus && row.saturationStatus !== 'healthy') {
+                row.issueKey = 'creative';
+                row.actionPriority = 4;
+                row.hasActionableSignal = true;
+            } else if (fatigueIssue) {
                 row.recommendedAction = 'Refresh creative before scaling';
-            } else if (row.cqi !== null && row.cqi < 40) {
+                row.issueKey = 'fatigue';
+                row.actionPriority = 4;
+                row.hasActionableSignal = true;
+            } else if (qualityIssue) {
                 row.recommendedAction = 'Fix traffic quality or funnel handoff';
-            } else if (retargeting && isRetargeting && ['critical', 'warning'].includes(retargeting.status)) {
+                row.issueKey = 'quality';
+                row.actionPriority = 3;
+                row.hasActionableSignal = true;
+            } else if (retargetingIssue) {
                 row.recommendedAction = 'Audit retargeting audience and offer';
+                row.issueKey = 'retargeting';
+                row.actionPriority = 2;
+                row.hasActionableSignal = true;
             } else if (row.cqi !== null && row.cqi >= 60 && (!row.saturationStatus || row.saturationStatus === 'healthy') && (!row.learningStatus || ['active', 'delivery_active'].includes(row.learningStatus.status))) {
                 row.recommendedAction = 'Healthy candidate to protect';
+                row.issueKey = 'healthy';
+                row.actionPriority = 1;
+            } else {
+                row.recommendedAction = 'Monitor: no urgent issue';
+                row.issueKey = 'monitor';
+                row.actionPriority = 1;
             }
 
             row.flags = Array.from(new Set(row.flags)).slice(0, 3);
         });
 
         return Array.from(rows.values()).sort((a, b) => {
-            const actionPriority = (row: any) => {
-                if (String(row.recommendedAction || '').includes('Consolidate')) return 5;
-                if (String(row.recommendedAction || '').includes('Refresh')) return 4;
-                if (String(row.recommendedAction || '').includes('Fix')) return 3;
-                if (String(row.recommendedAction || '').includes('Audit')) return 2;
-                return 1;
-            };
-            const priorityDiff = actionPriority(b) - actionPriority(a);
+            const priorityDiff = Number(b.actionPriority || 0) - Number(a.actionPriority || 0);
             if (priorityDiff !== 0) return priorityDiff;
             return Number(b.spend || b.learningSpend || 0) - Number(a.spend || a.learningSpend || 0);
-        }).slice(0, 50);
+        });
     }, [advancedData, cqiRows, deliveryRows]);
+    const filteredCampaignHealthRows = useMemo(() => {
+        const search = healthCampaignFilters.search.trim().toLowerCase();
+        const rows = campaignHealthRows.filter((row: any) => {
+            const matchesSearch = !search || String(row.name || '').toLowerCase().includes(search);
+            const matchesEvidence = healthCampaignFilters.evidence === 'all'
+                || (healthCampaignFilters.evidence === 'current_delivery' && row.hasDelivery)
+                || (healthCampaignFilters.evidence === 'actionable' && row.hasActionableSignal)
+                || (healthCampaignFilters.evidence === 'no_data' && !row.hasDelivery);
+            const matchesIssue = healthCampaignFilters.issue === 'all' || row.issueKey === healthCampaignFilters.issue;
+            return matchesSearch && matchesEvidence && matchesIssue;
+        });
+
+        return [...rows].sort((a: any, b: any) => {
+            switch (healthCampaignFilters.sort) {
+                case 'spend_desc':
+                    return Number(b.spend || b.learningSpend || 0) - Number(a.spend || a.learningSpend || 0);
+                case 'cqi_asc':
+                    return Number(a.cqi ?? Number.MAX_SAFE_INTEGER) - Number(b.cqi ?? Number.MAX_SAFE_INTEGER);
+                case 'saturation_desc':
+                    return Number(b.saturationScore || 0) - Number(a.saturationScore || 0);
+                default:
+                    return Number(b.actionPriority || 0) - Number(a.actionPriority || 0)
+                        || Number(b.spend || b.learningSpend || 0) - Number(a.spend || a.learningSpend || 0);
+            }
+        });
+    }, [campaignHealthRows, healthCampaignFilters]);
+    const campaignHealthPageSize = 30;
+    const pagedCampaignHealthRows = paginateItems(filteredCampaignHealthRows, healthCampaignFilters.page, campaignHealthPageSize);
 
     const funnelRows = useMemo(() => deepInsightsData?.data?.campaignFunnels || [], [deepInsightsData]);
     const funnelObjectiveOptions = useMemo(() => {
@@ -2629,6 +2681,10 @@ export default function AdsPage() {
     }, [deliveryFilters.search, deliveryFilters.objective, deliveryFilters.status, deliveryFilters.readiness, deliveryFilters.sort, datePreset, effectiveAccount]);
 
     useEffect(() => {
+        setHealthCampaignFilters((current) => ({ ...current, page: 1 }));
+    }, [healthCampaignFilters.search, healthCampaignFilters.evidence, healthCampaignFilters.issue, healthCampaignFilters.sort, datePreset, effectiveAccount]);
+
+    useEffect(() => {
         setFunnelFilters((current) => ({ ...current, page: 1 }));
     }, [funnelFilters.search, funnelFilters.objective, funnelFilters.status, funnelFilters.sort, datePreset, effectiveAccount]);
 
@@ -2665,6 +2721,12 @@ export default function AdsPage() {
             setDeliveryFilters((current) => ({ ...current, page: pagedDeliveryRows.totalPages }));
         }
     }, [deliveryFilters.page, pagedDeliveryRows.totalPages]);
+
+    useEffect(() => {
+        if (healthCampaignFilters.page > pagedCampaignHealthRows.totalPages) {
+            setHealthCampaignFilters((current) => ({ ...current, page: pagedCampaignHealthRows.totalPages }));
+        }
+    }, [healthCampaignFilters.page, pagedCampaignHealthRows.totalPages]);
 
     useEffect(() => {
         if (funnelFilters.page > pagedFunnelRows.totalPages) {
@@ -4886,22 +4948,87 @@ export default function AdsPage() {
                                     title={<span style={{ display: 'flex', alignItems: 'center' }}>Campaign Health Matrix <InfoTooltip text="A campaign-first view that combines Health-tab signals already loaded on this page: account fatigue, campaign quality, creative saturation, delivery readiness, retargeting, and placement reads." /></span>}
                                     subtitle="One row per campaign, sorted by the most actionable issue first"
                                 >
-                                    {campaignHealthRows.length > 0 ? (
-                                        <div style={{ overflowX: 'auto' }}>
-                                            <table className="table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Campaign</th>
-                                                        <th>Fatigue</th>
-                                                        <th>CQI</th>
-                                                        <th>Creative saturation</th>
-                                                        <th>Learning readiness</th>
-                                                        <th>Retargeting / placement flags</th>
-                                                        <th>Recommended action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {campaignHealthRows.map((row: any) => {
+                                    <div style={{ display: 'grid', gap: 14 }}>
+                                        {(() => {
+                                            const placementRows = advancedData.data.placementIntent || [];
+                                            const watchPlacement = [...placementRows]
+                                                .filter((placement: any) => Number(placement.spend || 0) > 0 && placement.effectiveCPA)
+                                                .sort((a: any, b: any) => Number(b.effectiveCPA || 0) - Number(a.effectiveCPA || 0))[0];
+                                            return watchPlacement ? (
+                                                <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(96, 165, 250, 0.08)', border: '1px solid rgba(96, 165, 250, 0.18)', color: 'var(--muted)', fontSize: 12 }}>
+                                                    Account placement watchout: <strong style={{ color: '#bfdbfe' }}>{watchPlacement.displayName}</strong> has the highest visible placement CPA in this date range. It is shown here once because placement data is not campaign-specific in this matrix.
+                                                </div>
+                                            ) : null;
+                                        })()}
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                                            <FilterInput
+                                                label="Find campaign"
+                                                value={healthCampaignFilters.search}
+                                                onChange={(value) => setHealthCampaignFilters((current) => ({ ...current, search: value, page: 1 }))}
+                                                placeholder="Search campaign"
+                                                tooltip="Search the campaign health matrix by campaign name."
+                                            />
+                                            <FilterSelect
+                                                label="Evidence"
+                                                value={healthCampaignFilters.evidence}
+                                                onChange={(value) => setHealthCampaignFilters((current) => ({ ...current, evidence: value, page: 1 }))}
+                                                options={[
+                                                    { value: 'current_delivery', label: 'Current delivery only' },
+                                                    { value: 'actionable', label: 'Actionable issues' },
+                                                    { value: 'all', label: 'All campaigns' },
+                                                    { value: 'no_data', label: 'No current data' }
+                                                ]}
+                                                tooltip="Default hides zero-spend campaigns so the matrix stays focused on rows with current evidence."
+                                            />
+                                            <FilterSelect
+                                                label="Issue"
+                                                value={healthCampaignFilters.issue}
+                                                onChange={(value) => setHealthCampaignFilters((current) => ({ ...current, issue: value, page: 1 }))}
+                                                options={[
+                                                    { value: 'all', label: 'All issues' },
+                                                    { value: 'learning', label: 'Learning / pace' },
+                                                    { value: 'creative', label: 'Creative saturation' },
+                                                    { value: 'fatigue', label: 'Fatigue' },
+                                                    { value: 'quality', label: 'Quality / funnel' },
+                                                    { value: 'retargeting', label: 'Retargeting' },
+                                                    { value: 'healthy', label: 'Healthy' },
+                                                    { value: 'no_data', label: 'No current data' }
+                                                ]}
+                                                tooltip="Narrow the matrix to the type of action you want to inspect."
+                                            />
+                                            <FilterSelect
+                                                label="Sort"
+                                                value={healthCampaignFilters.sort}
+                                                onChange={(value) => setHealthCampaignFilters((current) => ({ ...current, sort: value, page: 1 }))}
+                                                options={[
+                                                    { value: 'priority_desc', label: 'Action priority' },
+                                                    { value: 'spend_desc', label: 'Spend' },
+                                                    { value: 'cqi_asc', label: 'Lowest CQI' },
+                                                    { value: 'saturation_desc', label: 'Saturation risk' }
+                                                ]}
+                                                tooltip="Only 30 rows render at once; use sort and filters to move through the matrix deliberately."
+                                            />
+                                        </div>
+                                        <div className="text-muted" style={{ fontSize: 12 }}>
+                                            Showing {pagedCampaignHealthRows.items.length ? `${pagedCampaignHealthRows.start + 1}-${pagedCampaignHealthRows.start + pagedCampaignHealthRows.items.length}` : '0'} of {filteredCampaignHealthRows.length} matching campaigns. {campaignHealthRows.length - filteredCampaignHealthRows.length > 0 ? `${campaignHealthRows.length - filteredCampaignHealthRows.length} hidden by filters.` : ''}
+                                        </div>
+                                        {filteredCampaignHealthRows.length > 0 ? (
+                                            <>
+                                                <div style={{ overflowX: 'auto' }}>
+                                                    <table className="table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Campaign</th>
+                                                                <th>Fatigue</th>
+                                                                <th>CQI</th>
+                                                                <th>Creative saturation</th>
+                                                                <th>Learning readiness</th>
+                                                                <th>Retargeting flags</th>
+                                                                <th>Recommended action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {pagedCampaignHealthRows.items.map((row: any) => {
                                                         const fatigueTone = row.fatigueStatus === 'critical'
                                                             ? { bg: 'rgba(239, 68, 68, 0.14)', color: '#fca5a5' }
                                                             : row.fatigueStatus === 'warning'
@@ -4969,14 +5096,23 @@ export default function AdsPage() {
                                                             </tr>
                                                         );
                                                     })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    ) : (
-                                        <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
-                                            No campaign-level Health signals are available for this selected date range yet.
-                                        </div>
-                                    )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <SectionPager
+                                                    page={pagedCampaignHealthRows.page}
+                                                    totalPages={pagedCampaignHealthRows.totalPages}
+                                                    count={filteredCampaignHealthRows.length}
+                                                    pageSize={campaignHealthPageSize}
+                                                    onPageChange={(page) => setHealthCampaignFilters((current) => ({ ...current, page }))}
+                                                />
+                                            </>
+                                        ) : (
+                                            <div style={{ padding: '18px 16px', borderRadius: 12, background: 'rgba(148, 163, 184, 0.12)', color: 'var(--muted)', fontSize: 13 }}>
+                                                No campaigns match the current Health matrix filters for this date range.
+                                            </div>
+                                        )}
+                                    </div>
                                 </SectionCard>
                             ) : (
                                 <>
