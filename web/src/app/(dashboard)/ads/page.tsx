@@ -66,84 +66,138 @@ function formatMultiplier(value: number) {
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#0ea5e9', '#8b5cf6'];
 
 function MetaAdsLoadingScreen({ message = 'Making your Meta Ads data ready' }: { message?: string }) {
+    const metricSkeletons = ['Spend', 'Reach', 'CTR', 'Conversions', 'CPM', 'ROAS'];
+
     return (
         <div style={{
-            minHeight: '62vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24
+            maxWidth: 1200,
+            margin: '0 auto',
+            position: 'relative',
+            minHeight: '70vh'
         }}>
             <div style={{
-                width: 'min(460px, 100%)',
-                textAlign: 'center',
-                padding: '34px 28px',
-                borderRadius: 18,
-                border: '1px solid rgba(99,102,241,0.22)',
-                background: 'linear-gradient(180deg, rgba(15,23,42,0.88), rgba(11,13,20,0.96))',
-                boxShadow: '0 24px 70px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.06)',
-                position: 'relative',
-                overflow: 'hidden'
+                filter: 'blur(8px)',
+                opacity: 0.42,
+                pointerEvents: 'none',
+                userSelect: 'none'
+            }}>
+                <div className="page-header" style={{ marginBottom: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                        <div>
+                            <div style={{ width: 190, height: 28, borderRadius: 7 }} className="skeleton" />
+                            <div style={{ width: 260, height: 13, borderRadius: 6, marginTop: 10 }} className="skeleton" />
+                        </div>
+                        <div style={{ width: 220, height: 40, borderRadius: 10 }} className="skeleton" />
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+                    {[0, 1, 2].map((i) => (
+                        <div key={i} style={{ width: i === 0 ? 142 : 116, height: 34, borderRadius: 999 }} className="skeleton" />
+                    ))}
+                </div>
+
+                <div className="grid-metrics" style={{ marginBottom: 24, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+                    {metricSkeletons.map((label) => (
+                        <div key={label} className="metric-card" style={{ padding: 16 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 10, marginBottom: 14 }} className="skeleton" />
+                            <div style={{ width: '68%', height: 24, borderRadius: 7, marginBottom: 10 }} className="skeleton" />
+                            <div style={{ width: '48%', height: 12, borderRadius: 6 }} className="skeleton" />
+                        </div>
+                    ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+                    {['Overview', 'Funnel', 'Campaigns', 'Audience'].map((label) => (
+                        <div key={label} style={{ width: 110, height: 36, borderRadius: 999 }} className="skeleton" />
+                    ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div className="card" style={{ height: 240 }}>
+                        <div style={{ width: 180, height: 18, borderRadius: 7, marginBottom: 18 }} className="skeleton" />
+                        <div style={{ height: 170, borderRadius: 10 }} className="skeleton" />
+                    </div>
+                    <div className="card" style={{ height: 240 }}>
+                        <div style={{ width: 155, height: 18, borderRadius: 7, marginBottom: 18 }} className="skeleton" />
+                        <div style={{ display: 'grid', gap: 12 }}>
+                            {[0, 1, 2, 3].map((i) => (
+                                <div key={i} style={{ height: 28, borderRadius: 8 }} className="skeleton" />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(2, 6, 23, 0.18)',
+                backdropFilter: 'blur(2px)'
             }}>
                 <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'radial-gradient(circle at 50% 0%, rgba(99,102,241,0.26), transparent 44%)',
-                    pointerEvents: 'none'
-                }} />
-                <div style={{ position: 'relative' }}>
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '12px 16px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(15, 23, 42, 0.62)',
+                    boxShadow: '0 18px 48px rgba(0,0,0,0.22)'
+                }}>
                     <div style={{
-                        width: 74,
-                        height: 74,
-                        margin: '0 auto 18px',
-                        borderRadius: 22,
-                        background: 'linear-gradient(180deg, #f8fafc, #cbd5e1)',
+                        width: 30,
+                        height: 30,
+                        borderRadius: 10,
+                        background: 'rgba(255,255,255,0.92)',
                         color: '#020617',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 42,
-                        fontWeight: 900,
-                        boxShadow: '0 16px 42px rgba(99,102,241,0.32)',
-                        animation: 'metaAdsLogoFloat 1.8s ease-in-out infinite'
+                        fontSize: 19,
+                        fontWeight: 900
                     }}>
                         ∞
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#a5b4fc', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-                        infini8Graph
+                    <div style={{ textAlign: 'left' }}>
+                        <div style={{ color: '#f8fafc', fontSize: 13, fontWeight: 700, lineHeight: 1.2 }}>
+                            {message}
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>
+                            Syncing live Meta signals
+                        </div>
                     </div>
-                    <h2 style={{ margin: 0, color: '#f8fafc', fontSize: 24, fontWeight: 800 }}>
-                        {message}
-                    </h2>
-                    <p style={{ margin: '10px auto 0', color: '#94a3b8', fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>
-                        Pulling spend, reach, campaign health, and conversion signals from Meta.
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: 7, marginTop: 22 }}>
+                    <div style={{ display: 'flex', gap: 4, paddingLeft: 2 }}>
                         {[0, 1, 2].map((i) => (
                             <span
                                 key={i}
                                 style={{
-                                    width: 8,
-                                    height: 8,
+                                    width: 5,
+                                    height: 5,
                                     borderRadius: 999,
-                                    background: i === 1 ? '#10b981' : '#6366f1',
+                                    background: '#a5b4fc',
                                     animation: `metaAdsDotPulse 1.1s ease-in-out ${i * 0.16}s infinite`
                                 }}
                             />
                         ))}
                     </div>
                 </div>
-                <style>{`
-                    @keyframes metaAdsLogoFloat {
-                        0%, 100% { transform: translateY(0) scale(1); }
-                        50% { transform: translateY(-5px) scale(1.02); }
-                    }
-                    @keyframes metaAdsDotPulse {
-                        0%, 100% { opacity: 0.35; transform: translateY(0); }
-                        50% { opacity: 1; transform: translateY(-4px); }
-                    }
-                `}</style>
             </div>
+
+            <style>{`
+                @keyframes metaAdsDotPulse {
+                    0%, 100% { opacity: 0.35; transform: translateY(0); }
+                    50% { opacity: 1; transform: translateY(-3px); }
+                }
+                @media (max-width: 760px) {
+                    .meta-ads-loading-grid {
+                        grid-template-columns: 1fr !important;
+                    }
+                }
+            `}</style>
         </div>
     );
 }
