@@ -150,7 +150,7 @@ export async function callback(req, res) {
         console.log(`✅ Meta authorized ${authorizedAccounts.length} Instagram account(s) (short-lived scope)`);
 
         // Store accounts with the long-lived token for future API calls
-        await authService.setupMetaAccounts(
+        const setupResult = await authService.setupMetaAccounts(
             userId,
             authorizedAccounts,
             tokenData.accessToken,
@@ -158,6 +158,13 @@ export async function callback(req, res) {
         );
 
         const session = await authService.buildUserSession(userId);
+        session.payload.metaSetup = {
+            completed: true,
+            returnedAccountIds: setupResult.returnedAccountIds || [],
+            returnedCount: setupResult.returnedCount || 0,
+            accessReduced: setupResult.accessReduced === true,
+            missingPreviouslyEnabledCount: setupResult.missingPreviouslyEnabledCount || 0,
+        };
         const activeAccount = session.account || authorizedAccounts[0] || null;
         const jwtToken = session.jwt;
 
@@ -190,7 +197,7 @@ export async function exchangeCode(req, res) {
 
         const token = generateToken(payload);
         setAuthCookie(res, token);
-        return res.json({ success: true, token });
+        return res.json({ success: true, token, payload });
     } catch (error) {
         return res.status(500).json({ success: false, error: 'Failed to exchange login code' });
     }
