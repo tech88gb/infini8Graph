@@ -184,7 +184,7 @@ class AutoReplyService {
 
             const { data: tokenData, error: tokenError } = await supabase
                 .from('auth_tokens')
-                .select('access_token, expires_at, user_id, is_active, is_enabled, updated_at')
+                .select('access_token, expires_at, user_id, is_active, is_enabled, updated_at, page_access_token, facebook_page_id')
                 .eq('instagram_account_id', account.id)
                 .eq('is_enabled', true)
                 .gt('expires_at', new Date().toISOString())
@@ -202,16 +202,21 @@ class AutoReplyService {
 
             return {
                 account,
-                contexts: tokenData.map((tokenRow) => ({
-                    accessToken: decrypt(tokenRow.access_token),
-                    pageToken: decryptedPageToken,
-                    instagramAccountId: account.id,
-                    userId: tokenRow.user_id,
-                    isActive: tokenRow.is_active === true,
-                    facebookPageId: account.facebook_page_id,
-                    username: account.username,
-                    updatedAt: tokenRow.updated_at || null,
-                })),
+                contexts: tokenData.map((tokenRow) => {
+                    const hasConnectionPageToken = !!tokenRow.page_access_token;
+
+                    return {
+                        accessToken: decrypt(tokenRow.access_token),
+                        pageToken: hasConnectionPageToken ? decrypt(tokenRow.page_access_token) : decryptedPageToken,
+                        pageTokenSource: hasConnectionPageToken ? 'auth_tokens' : 'instagram_accounts',
+                        instagramAccountId: account.id,
+                        userId: tokenRow.user_id,
+                        isActive: tokenRow.is_active === true,
+                        facebookPageId: tokenRow.facebook_page_id || account.facebook_page_id,
+                        username: account.username,
+                        updatedAt: tokenRow.updated_at || null,
+                    };
+                }),
             };
         } catch (error) {
             console.error(`   │  ❌ Token lookup error: ${error.message}`);
@@ -293,10 +298,17 @@ class AutoReplyService {
                 return null;
             }
 
+            const ownerContext = applicableRules
+                .map((rule) => rule.userId)
+                .filter(Boolean)
+                .map((ruleUserId) => contexts.find((context) => context.userId === ruleUserId))
+                .find(Boolean);
+            const tokenData = ownerContext || contexts[0];
+
             return {
-                tokenData: contexts[0],
+                tokenData,
                 rules: applicableRules,
-                sortKey: applicableRules[0]?.updatedAt || contexts[0]?.updatedAt || '',
+                sortKey: applicableRules[0]?.updatedAt || tokenData?.updatedAt || '',
             };
 
         } catch (error) {

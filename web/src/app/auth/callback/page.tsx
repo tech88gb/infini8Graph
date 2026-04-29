@@ -33,6 +33,8 @@ function AuthCallbackContent() {
             return;
         }
 
+        let metaSetup: any = null;
+
         authApi.exchangeCode(code)
             .then((exchangeResponse) => {
                 if (!isMounted) return null;
@@ -40,6 +42,10 @@ function AuthCallbackContent() {
                 const token = exchangeResponse.data?.token;
                 if (token) {
                     localStorage.setItem('auth_token', token);
+                }
+                metaSetup = exchangeResponse.data?.payload?.metaSetup || null;
+                if (metaSetup && typeof window !== 'undefined') {
+                    sessionStorage.setItem('meta_setup_result', JSON.stringify(metaSetup));
                 }
                 return authApi.getMe();
             })
@@ -56,6 +62,11 @@ function AuthCallbackContent() {
                 if (!metaConnected) {
                     setMessage('Identity verified. Preparing your workspace.');
                     setTimeout(() => window.location.assign('/connect-meta'), 1500);
+                } else if (metaSetup?.completed) {
+                    setMessage('Meta access connected. Choose the accounts for this Google login.');
+                    const params = new URLSearchParams();
+                    if (metaSetup.accessReduced) params.set('accessReduced', 'true');
+                    setTimeout(() => window.location.assign(`/connect-meta/accounts${params.toString() ? `?${params.toString()}` : ''}`), 1200);
                 } else {
                     setMessage('Session restored. Taking you to your dashboard.');
                     setTimeout(() => window.location.assign('/dashboard'), 1200);

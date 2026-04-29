@@ -327,6 +327,13 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
         let primaryAccountData = accountsData[0];
         // Track which account IDs we process so we can disable stale rows afterwards
         const processedAccountIds = [];
+        const { data: previousTokenRows } = await supabase
+            .from('auth_tokens')
+            .select('instagram_account_id, is_enabled')
+            .eq('user_id', userId);
+        const previouslyEnabledAccountIds = (previousTokenRows || [])
+            .filter((row) => row.is_enabled !== false)
+            .map((row) => row.instagram_account_id);
 
         for (const account of accountsData) {
             const isFirst = account === accountsData[0];
@@ -351,10 +358,14 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
                 media_count: account.mediaCount,
                 biography: account.biography,
                 website: account.website,
-                facebook_page_id: account.pageId,
-                page_access_token: encryptedPageToken,
                 updated_at: new Date().toISOString(),
             };
+            if (account.pageId) {
+                metadataPayload.facebook_page_id = account.pageId;
+            }
+            if (encryptedPageToken) {
+                metadataPayload.page_access_token = encryptedPageToken;
+            }
 
             if (existingAccount) {
                 instagramAccountId = existingAccount.id;
@@ -403,45 +414,43 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
                 .eq('instagram_account_id', instagramAccountId)
                 .maybeSingle();
 
-            // Determine is_enabled using ownership-aware 3-state logic:
+            // Determine is_enabled using OAuth-session-aware logic:
             //
             // State 3 — Reconnect: this user already has a token row for this account.
             //   Always preserve whatever they previously set. Never override.
             //
-            // State 2 — Truly Inherited: account exists AND was registered by a DIFFERENT
-            //   user. Meta returned it because the shared Facebook identity has page access,
-            //   not because this user deliberately selected it. Disable it so it stays
-            //   hidden in their dashboard (visible in Settings to enable manually).
-            //
-            // State 1 — Own account: either brand new to the system (this user is first
-            //   to register it) OR the account already exists and this user IS the original
-            //   owner (user_id matches). Enable all of them freely.
+            // New token rows — Meta returned this account in the current OAuth session.
+            // Treat that as consent for this Google login and enable it, regardless of who
+            // first registered the shared instagram_accounts row.
             let isEnabled;
             if (existingUserToken !== null && existingUserToken !== undefined) {
                 // State 3: Reconnect — honour the user's saved preference
                 isEnabled = existingUserToken.is_enabled;
                 console.log(`🔄 [setup] @${account.username} → reconnect, preserving is_enabled=${isEnabled}`);
-            } else if (existingAccount !== null && existingAccount.user_id !== userId) {
-                // State 2: Truly inherited — registered by a different user, disable
-                isEnabled = false;
-                console.log(`🔗 [setup] @${account.username} → inherited (owner=${existingAccount.user_id}), is_enabled=false`);
             } else {
-                // State 1: Brand new OR this user is the original owner — enable
                 isEnabled = true;
-                console.log(`✨ [setup] @${account.username} → own account, is_enabled=true`);
+                console.log(`✨ [setup] @${account.username} → returned by Meta OAuth, is_enabled=true`);
+            }
+
+            const tokenPayload = {
+                user_id: userId,
+                instagram_account_id: instagramAccountId,
+                access_token: encryptedToken,
+                expires_at: expiresAt.toISOString(),
+                is_active: isFirst && isEnabled,
+                is_enabled: isEnabled,
+                updated_at: new Date().toISOString(),
+            };
+            if (encryptedPageToken) {
+                tokenPayload.page_access_token = encryptedPageToken;
+            }
+            if (account.pageId) {
+                tokenPayload.facebook_page_id = account.pageId;
             }
 
             await supabase
                 .from('auth_tokens')
-                .upsert({
-                    user_id: userId,
-                    instagram_account_id: instagramAccountId,
-                    access_token: encryptedToken,
-                    expires_at: expiresAt.toISOString(),
-                    is_active: isFirst && isEnabled,
-                    is_enabled: isEnabled,
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'user_id,instagram_account_id' }); // COMPOSITE KEY
+                .upsert(tokenPayload, { onConflict: 'user_id,instagram_account_id' }); // COMPOSITE KEY
             processedAccountIds.push(instagramAccountId);
         }
 
@@ -464,6 +473,10 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
             }
         }
 
+        const missingPreviouslyEnabledAccountIds = previouslyEnabledAccountIds.filter(
+            (accountId) => !processedAccountIds.includes(accountId)
+        );
+
         // Ensure exactly one account is active among the enabled ones
         await ensureActiveEnabledAccount(userId);
 
@@ -475,7 +488,15 @@ export async function setupMetaAccounts(userId, accountsData, accessToken, expir
 
         console.log(`✅ Meta setup complete for user ${userId}: ${accountsData.length} account(s)`);
 
-        return { primaryAccountId, primaryAccountData };
+        return {
+            primaryAccountId,
+            primaryAccountData,
+            returnedAccountIds: processedAccountIds,
+            returnedCount: processedAccountIds.length,
+            accessReduced: missingPreviouslyEnabledAccountIds.length > 0,
+            missingPreviouslyEnabledAccountIds,
+            missingPreviouslyEnabledCount: missingPreviouslyEnabledAccountIds.length,
+        };
     } catch (error) {
         console.error('Meta setup error:', error.response?.data || error.message);
         throw new Error('Failed to set up Meta accounts: ' + error.message);

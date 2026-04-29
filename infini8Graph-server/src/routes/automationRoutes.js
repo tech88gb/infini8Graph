@@ -109,7 +109,7 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.userId;
         const ruleId = req.params.id;
-        const updates = req.body;
+        const updates = req.body || {};
 
         // FIX: Use auth_tokens to resolve accounts this user can access
         const accountIds = await getAccountIdsForUser(userId);
@@ -124,9 +124,24 @@ router.patch('/rules/:id', authenticate, async (req, res) => {
             return res.status(404).json({ success: false, error: 'Rule not found' });
         }
 
+        const safeUpdates = { ...updates };
+        delete safeUpdates.id;
+        delete safeUpdates.user_id;
+        delete safeUpdates.instagram_account_id;
+        delete safeUpdates.created_at;
+        delete safeUpdates.updated_at;
+        const updatePayload = {
+            ...safeUpdates,
+            updated_at: new Date().toISOString(),
+        };
+
+        if (updates.is_active === true) {
+            updatePayload.user_id = userId;
+        }
+
         const { data: rule, error: updateError } = await supabase
             .from('automation_rules')
-            .update({ ...updates, updated_at: new Date().toISOString() })
+            .update(updatePayload)
             .eq('id', ruleId)
             .select()
             .single();
