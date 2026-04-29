@@ -2057,7 +2057,7 @@ export default function AdsPage() {
         refetchOnWindowFocus: false
     });
 
-    const { data: demographicsData, isLoading: demographicsLoading } = useQuery({
+    const { data: demographicsData, isLoading: demographicsLoading, error: demographicsError } = useQuery({
         queryKey: ['ad-demographics', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
@@ -2068,7 +2068,7 @@ export default function AdsPage() {
         refetchOnWindowFocus: false
     });
 
-    const { data: geographyData, isLoading: geographyLoading } = useQuery({
+    const { data: geographyData, isLoading: geographyLoading, error: geographyError } = useQuery({
         queryKey: ['ad-geography', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
@@ -2080,7 +2080,7 @@ export default function AdsPage() {
     });
 
     // Fetch campaigns
-    const { data: campaignsData } = useQuery({
+    const { data: campaignsData, isLoading: campaignsLoading, error: campaignsError } = useQuery({
         queryKey: ['campaigns', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
@@ -2112,7 +2112,7 @@ export default function AdsPage() {
     });
 
     // Fetch conversion funnel
-    const { data: funnelData, isLoading: funnelLoading } = useQuery({
+    const { data: funnelData, isLoading: funnelLoading, error: funnelError } = useQuery({
         queryKey: ['funnel', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
@@ -2123,7 +2123,7 @@ export default function AdsPage() {
     });
 
     // Fetch campaign intelligence
-    const { data: intelligenceData, isLoading: intelligenceLoading } = useQuery({
+    const { data: intelligenceData, isLoading: intelligenceLoading, error: intelligenceError } = useQuery({
         queryKey: ['intelligence', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
@@ -2134,7 +2134,7 @@ export default function AdsPage() {
     });
 
     // Fetch advanced analytics
-    const { data: advancedData, isLoading: advancedLoading } = useQuery({
+    const { data: advancedData, isLoading: advancedLoading, error: advancedError } = useQuery({
         queryKey: ['advanced', effectiveAccount, datePreset, dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!effectiveAccount) return null;
@@ -2165,6 +2165,16 @@ export default function AdsPage() {
         enabled: !!effectiveAccount && activeTab === 'deep',
         retry: 1
     });
+
+    const activeTabLoading = Boolean(effectiveAccount) && (
+        (activeTab === 'campaigns' && (campaignsLoading || (!campaignsData && !campaignsError)))
+        || (activeTab === 'demographics' && (demographicsLoading || (!demographicsData && !demographicsError)))
+        || (activeTab === 'geo' && (geographyLoading || (!geographyData && !geographyError)))
+        || (activeTab === 'funnel' && (funnelLoading || (!funnelData && !funnelError)))
+        || (activeTab === 'intelligence' && (intelligenceLoading || (!intelligenceData && !intelligenceError)))
+        || (activeTab === 'advanced' && (advancedLoading || (!advancedData && !advancedError)))
+        || (activeTab === 'deep' && (deepDiagnosticsLoading || (!deepDiagnosticsData && !deepDiagnosticsError)))
+    );
 
     // Extract data from insights
     const summary = insightsData?.data?.summary || {};
@@ -2908,6 +2918,10 @@ export default function AdsPage() {
 
     if (effectiveAccount && !insightsError && (insightsLoading || !insightsData)) {
         return <MetaAdsLoadingScreen />;
+    }
+
+    if (activeTabLoading) {
+        return <MetaAdsLoadingScreen message={`Loading ${TAB_META[activeTab].label} data`} />;
     }
 
     const videoRetentionCards = [

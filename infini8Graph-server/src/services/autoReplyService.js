@@ -16,6 +16,8 @@ const REPLY_COOLDOWN_SECONDS = 30;
 // 24-hour messaging window (in milliseconds)
 const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1000;
 const COOLDOWN_CACHE_PREFIX = 'autoreply:cooldown:';
+const MESSAGE_MID_CACHE_PREFIX = 'autoreply:message_mid:';
+const PROCESSED_MESSAGE_TTL_SECONDS = 10 * 60;
 
 /**
  * Auto-Reply Service
@@ -233,6 +235,25 @@ class AutoReplyService {
         return contexts[0] || null;
     }
 
+    async getManagedAccountByInstagramUserId(instagramUserId) {
+        if (!instagramUserId) {
+            return null;
+        }
+
+        const { data, error } = await supabase
+            .from('instagram_accounts')
+            .select('id, username')
+            .eq('instagram_user_id', instagramUserId)
+            .maybeSingle();
+
+        if (error) {
+            console.error(`   │  ❌ Managed account lookup error: ${error.message}`);
+            return null;
+        }
+
+        return data || null;
+    }
+
     mapAutomationRules(rules, priority) {
         return rules.map((rule) => ({
             keywords: rule.keywords,
@@ -392,17 +413,44 @@ class AutoReplyService {
             const senderId = sender?.id;
             const recipientId = recipient?.id;
 
+            if (message.is_echo === true) {
+                console.log(`   │  ↩️ Skipping echo DM ${message.mid || ''}`);
+                return;
+            }
+
+            if (!senderId || !recipientId) {
+                return;
+            }
+
+            if (message.mid) {
+                const messageCacheKey = `${MESSAGE_MID_CACHE_PREFIX}${message.mid}`;
+                const alreadyProcessed = await getRuntimeCache(messageCacheKey);
+                if (alreadyProcessed) {
+                    console.log(`   │  Skipping duplicate DM ${message.mid}`);
+                    return;
+                }
+                await setRuntimeCache(messageCacheKey, { processedAt: new Date().toISOString() }, PROCESSED_MESSAGE_TTL_SECONDS);
+            }
+
+            const managedSender = await this.getManagedAccountByInstagramUserId(senderId);
+            if (managedSender) {
+                console.warn(`   │  🛑 Skipping DM from managed account @${managedSender.username || senderId} to prevent automation loops.`);
+                return;
+            }
+
             // Resolve full context: DB automation rules + token for this IG account.
             const resolvedContext = await this.resolveAutomationContext(recipientId);
             const tokenData = resolvedContext?.tokenData || await this.getAccessTokenByInstagramId(recipientId);
-            const activeId = tokenData ? tokenData.instagramAccountId : recipientId;
+            const activeId = tokenData ? tokenData.instagramAccountId : null;
 
-            await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
-                senderId, recipientId, text: message.text
-            });
+            if (activeId) {
+                await this.addActivityLog(activeId, 'WEBHOOK RECEIVED', 'Received direct message', {
+                    senderId, recipientId, text: message.text
+                });
+            }
 
             if (!tokenData) {
-                await this.addActivityLog(activeId, 'API ERROR', 'No valid token found for account', { step: 'AUTHENTICATION' });
+                console.warn(`   │  ⚠️ No valid token found for recipient ${recipientId}`);
                 return;
             }
 
@@ -414,9 +462,18 @@ class AutoReplyService {
                 return;
             }
 
-            const messageTime = timestamp ? new Date(timestamp * 1000) : new Date();
+            const timestampValue = Number(timestamp);
+            const messageTime = Number.isFinite(timestampValue)
+                ? new Date(timestampValue > 100000000000 ? timestampValue : timestampValue * 1000)
+                : new Date();
             const windowEnd = new Date(messageTime.getTime() + MESSAGING_WINDOW_MS);
             if (new Date() > windowEnd) {
+                return;
+            }
+
+            const canReply = await this.shouldReply(senderId, 'message');
+            if (!canReply) {
+                await this.addActivityLog(activeId, 'SKIPPED', 'DM auto-reply cooldown active', { senderId });
                 return;
             }
 
