@@ -60,17 +60,27 @@ function MetricCard({ label, value, icon: Icon, color, tooltip }: {
     tooltip?: string;
 }) {
     return (
-        <div className="metric-card" style={{ padding: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div className="metric-icon" style={{ background: `${color}15`, color, width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card" style={{ padding: '24px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ 
+                    background: `${color}15`, 
+                    color, 
+                    width: 44, 
+                    height: 44, 
+                    borderRadius: 12, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    border: `1px solid ${color}20`
+                }}>
                     <Icon size={20} />
                 </div>
                 {tooltip && <InfoTooltip text={tooltip} />}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--foreground)', marginBottom: 4 }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--foreground)', marginBottom: 6, letterSpacing: '-0.02em' }}>
                 {typeof value === 'number' ? value.toLocaleString() : value}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{label}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.01em' }}>{label}</div>
         </div>
     );
 }
@@ -81,11 +91,11 @@ function SectionCard({ title, subtitle, children }: {
     title: string; subtitle?: string; children: React.ReactNode
 }) {
     return (
-        <div className="card" style={{ marginBottom: 20, padding: 24, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
-            <div className="card-header" style={{ marginBottom: 20, borderBottom: 'none', padding: 0 }}>
+        <div className="card" style={{ marginBottom: 24, padding: 28 }}>
+            <div className="card-header" style={{ marginBottom: 24, borderBottom: 'none', padding: 0 }}>
                 <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 600 }}>{title}</h3>
-                    {subtitle && <p className="text-muted" style={{ fontSize: 13, marginTop: 4 }}>{subtitle}</p>}
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>{title}</h3>
+                    {subtitle && <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4, fontWeight: 500 }}>{subtitle}</p>}
                 </div>
             </div>
             {children}
@@ -98,39 +108,40 @@ function SectionCard({ title, subtitle, children }: {
 function PostRow({ post }: { post: any }) {
     return (
         <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            <td style={{ padding: '16px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <td style={{ padding: '20px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 8,
+                        width: 48,
+                        height: 48,
+                        borderRadius: 10,
                         background: 'var(--background-alt)',
                         overflow: 'hidden',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        border: '1px solid var(--border)'
+                        border: '1px solid var(--border)',
+                        flexShrink: 0
                     }}>
                         {post.thumbnailUrl ? (
                             <img src={post.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
-                            <Image size={18} style={{ color: 'var(--muted)' }} />
+                            <Image size={18} style={{ color: 'var(--muted)', opacity: 0.5 }} />
                         )}
                     </div>
                     <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{post.type}</div>
-                        <div style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 500 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)', textTransform: 'uppercase' }}>{post.type}</div>
+                        <div style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, marginTop: 2 }}>
                             @{post.accountUsername}
                         </div>
                     </div>
                 </div>
             </td>
-            <td style={{ padding: '16px 0', fontSize: 13, color: 'var(--muted)' }}>
+            <td style={{ padding: '20px 0', fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>
                 {new Date(post.timestamp).toLocaleDateString()}
             </td>
-            <td style={{ padding: '16px 0', fontWeight: 600, fontSize: 14 }}>{post.likes?.toLocaleString() || 0}</td>
-            <td style={{ padding: '16px 0', fontWeight: 600, fontSize: 14 }}>{post.comments?.toLocaleString() || 0}</td>
-            <td style={{ padding: '16px 0', fontWeight: 600, fontSize: 14, color: 'var(--primary)' }}>
+            <td style={{ padding: '20px 0', fontWeight: 700, fontSize: 14, color: 'var(--foreground)' }}>{post.likes?.toLocaleString() || 0}</td>
+            <td style={{ padding: '20px 0', fontWeight: 700, fontSize: 14, color: 'var(--foreground)' }}>{post.comments?.toLocaleString() || 0}</td>
+            <td style={{ padding: '20px 0', fontWeight: 800, fontSize: 14, color: 'var(--primary)', textAlign: 'right' }}>
                 {post.engagement?.toLocaleString() || 0}
             </td>
         </tr>
@@ -203,25 +214,25 @@ export default function UnifiedDashboardPage() {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, marginTop: 10 }}>
                 <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-                        <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>Unified Dashboard</h1>
-                        <span className="badge badge-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', fontSize: 12, fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+                        <h1 style={{ fontSize: 32, fontWeight: 800, color: 'var(--foreground)', letterSpacing: '-0.04em' }}>Unified Dashboard</h1>
+                        <span className="badge badge-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', fontSize: 12, fontWeight: 700, borderRadius: 20 }}>
                             <Globe size={14} />
-                            {accounts.length} Accounts
+                            {accounts.length} Accounts Linked
                         </span>
                     </div>
-                    <p className="text-muted" style={{ fontSize: 15 }}>Aggregated performance across all linked Instagram profiles</p>
+                    <p style={{ fontSize: 16, color: 'var(--muted)', fontWeight: 500 }}>Aggregated performance across all linked Instagram profiles</p>
                 </div>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                     <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
                     <button
                         onClick={() => refetch()}
                         disabled={isFetching}
                         className="btn btn-secondary"
-                        style={{ background: 'var(--card-raised)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}
+                        style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, fontSize: 13, boxShadow: 'var(--shadow-sm)' }}
                     >
-                        <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
-                        Refresh All
+                        <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} style={{ color: 'var(--primary)' }} />
+                        Refresh Data
                     </button>
                 </div>
             </div>
@@ -312,16 +323,17 @@ export default function UnifiedDashboardPage() {
                                 <YAxis stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} width={40} />
                                 <Tooltip
                                     contentStyle={{
-                                        background: 'var(--card-raised)',
+                                        background: 'rgba(255,255,255,0.9)',
+                                        backdropFilter: 'blur(10px)',
                                         border: '1px solid var(--border)',
                                         borderRadius: 12,
-                                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                                        boxShadow: 'var(--shadow-lg)',
                                         fontSize: 13,
                                         padding: '12px'
                                     }}
-                                    cursor={{ stroke: '#6366f1', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                    cursor={{ stroke: '#6366f1', strokeWidth: 2, strokeDasharray: '4 4' }}
                                 />
-                                <Area type="monotone" dataKey="engagement" stroke="#6366f1" strokeWidth={3} fill="url(#engGrad)" animationDuration={1500} />
+                                <Area type="monotone" dataKey="engagement" stroke="#6366f1" strokeWidth={4} fill="url(#engGrad)" animationDuration={1500} />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -353,40 +365,36 @@ export default function UnifiedDashboardPage() {
                                     style={{
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: 6,
+                                        gap: 10,
                                         cursor: isCurrent ? 'default' : 'pointer',
-                                        padding: '10px',
-                                        borderRadius: '12px',
-                                        transition: 'background 0.2s',
-                                        background: isCurrent ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-                                        border: isCurrent ? '1px solid rgba(99, 102, 241, 0.1)' : '1px solid transparent',
-                                        opacity: switchingId === account.id ? 0.6 : 1
-                                    }}
-                                    onMouseOver={(e) => {
-                                        if (!isCurrent) e.currentTarget.style.background = 'var(--background-alt)';
-                                    }}
-                                    onMouseOut={(e) => {
-                                        if (!isCurrent) e.currentTarget.style.background = 'transparent';
+                                        padding: '16px',
+                                        borderRadius: '16px',
+                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        background: isCurrent ? 'var(--primary-light)' : 'var(--background-alt)',
+                                        border: isCurrent ? '1px solid var(--primary-border)' : '1px solid var(--border)',
+                                        opacity: switchingId === account.id ? 0.6 : 1,
+                                        boxShadow: isCurrent ? '0 4px 12px rgba(99, 102, 241, 0.08)' : 'none'
                                     }}
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span style={{ fontSize: 13, fontWeight: 600 }}>@{account.username}</span>
-                                            {isCurrent && <span style={{ fontSize: 10, background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: 4 }}>Active</span>}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isCurrent ? 'var(--primary)' : 'var(--muted)', opacity: 0.5 }}></div>
+                                            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--foreground)' }}>@{account.username}</span>
                                         </div>
-                                        <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{account.metrics.followers.toLocaleString()}</span>
+                                        <span style={{ fontSize: 14, color: 'var(--foreground)', fontWeight: 800 }}>{account.metrics.followers.toLocaleString()}</span>
                                     </div>
-                                    <div style={{ height: 8, background: 'var(--background-alt)', borderRadius: 4, overflow: 'hidden' }}>
+                                    <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
                                         <div style={{
                                             height: '100%',
                                             width: `${percentage}%`,
                                         background: i === 0 ? 'var(--primary)' : 'rgba(129, 140, 248, 0.75)',
-                                        borderRadius: 4
+                                        borderRadius: 3
                                     }} />
                                     </div>
                                     {!isCurrent && (
-                                        <div style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, marginTop: 4, textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                                            {switchingId === account.id ? 'Switching...' : 'Switch to Account →'}
+                                        <div style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700, marginTop: 4, textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                                            {switchingId === account.id ? 'Switching...' : 'Switch to Account'}
+                                            <TrendingUp size={12} />
                                         </div>
                                     )}
                                 </div>
@@ -403,11 +411,11 @@ export default function UnifiedDashboardPage() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                                    <th style={{ padding: '0 0 12px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Post Details</th>
-                                    <th style={{ padding: '0 0 12px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</th>
-                                    <th style={{ padding: '0 0 12px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Likes</th>
-                                    <th style={{ padding: '0 0 12px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
-                                    <th style={{ padding: '0 0 12px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Engagement</th>
+                                    <th style={{ padding: '0 0 16px 0', fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Post Details</th>
+                                    <th style={{ padding: '0 0 16px 0', fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</th>
+                                    <th style={{ padding: '0 0 16px 0', fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Likes</th>
+                                    <th style={{ padding: '0 0 16px 0', fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
+                                    <th style={{ padding: '0 0 16px 0', fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Engagement</th>
                                 </tr>
                             </thead>
                             <tbody>

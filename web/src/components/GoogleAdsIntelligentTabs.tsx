@@ -55,16 +55,17 @@ function InfoTooltip({ text }: { text: string }) {
                     top: rect.top + window.scrollY - 8,
                     left: rect.left + rect.width / 2 + window.scrollX,
                     transform: 'translate(-50%, -100%)',
-                    background: '#1e293b',
-                    color: 'white',
-                    padding: '8px 12px',
-                    borderRadius: 6,
+                    background: 'white',
+                    color: 'var(--foreground)',
+                    padding: '10px 14px',
+                    borderRadius: 10,
                     fontSize: 12,
                     width: Math.min(260, window.innerWidth - 32),
                     zIndex: 999999,
                     pointerEvents: 'none',
                     lineHeight: 1.5,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'var(--shadow-lg)',
                     textAlign: 'center'
                 }}>
                     {text}
@@ -75,7 +76,18 @@ function InfoTooltip({ text }: { text: string }) {
                         transform: 'translateX(-50%)',
                         borderWidth: 6,
                         borderStyle: 'solid',
-                        borderColor: '#1e293b transparent transparent transparent'
+                        borderColor: 'white transparent transparent transparent'
+                    }} />
+                    <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        borderWidth: 7,
+                        borderStyle: 'solid',
+                        borderColor: 'var(--border) transparent transparent transparent',
+                        zIndex: -1,
+                        marginTop: 1
                     }} />
                 </div>,
                 document.body
@@ -85,21 +97,32 @@ function InfoTooltip({ text }: { text: string }) {
 }
 
 function CompactMetric({ label, value, tone = 'default', tooltip }: { label: string; value: string; tone?: 'default' | 'success' | 'warning' | 'danger' | 'info'; tooltip?: string }) {
-    const colors = {
-        default: '#e5e7eb',
-        success: '#34d399',
-        warning: '#fbbf24',
-        danger: '#f87171',
-        info: '#93c5fd'
+    const toneStyles = {
+        default: { color: 'var(--primary)', bg: 'transparent' },
+        success: { color: 'var(--success-dark)', bg: 'var(--success-light)' },
+        warning: { color: 'var(--warning-dark)', bg: 'var(--warning-light)' },
+        danger: { color: 'var(--danger)', bg: 'var(--danger-light)' },
+        info: { color: 'var(--info)', bg: 'var(--info-light)' }
     };
 
     return (
-        <div className="card" style={{ padding: '14px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
+        <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 500, color: 'var(--muted)' }}>
                 {label}
                 {tooltip && <InfoTooltip text={tooltip} />}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: colors[tone], lineHeight: 1.1 }}>{value}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: toneStyles[tone].color, letterSpacing: '-0.02em' }}>{value}</div>
+            {tone !== 'default' && (
+                <div style={{ 
+                    marginTop: 4,
+                    display: 'inline-block',
+                    width: 'fit-content',
+                    height: 4,
+                    borderRadius: 2,
+                    background: toneStyles[tone].bg,
+                    minWidth: 40
+                }} />
+            )}
         </div>
     );
 }

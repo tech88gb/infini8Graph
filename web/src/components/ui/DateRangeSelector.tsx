@@ -151,78 +151,63 @@ export function DateRangeSelector({ dateRange, setDateRange }: DateRangeSelector
             {/* Trigger button */}
             <button
                 onClick={() => setOpen(o => !o)}
+                className="btn btn-secondary"
                 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 16px',
-                    background: open
-                        ? 'rgba(99,102,241,0.15)'
-                        : 'rgba(255,255,255,0.05)',
-                    border: `1px solid ${open ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.12)'}`,
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    color: 'var(--foreground)',
+                    gap: 12,
+                    padding: '8px 20px',
+                    borderRadius: 'var(--radius-full)',
                     fontSize: 13,
-                    fontWeight: 500,
-                    transition: 'all 0.2s',
-                    whiteSpace: 'nowrap',
-                    backdropFilter: 'blur(8px)',
+                    fontWeight: 700,
+                    background: 'white',
+                    boxShadow: 'var(--shadow-sm)',
                 }}
             >
-                <Calendar size={15} style={{ color: 'rgba(99,102,241,0.9)', flexShrink: 0 }} />
-                <span style={{ color: 'rgba(255,255,255,0.9)' }}>{formatDisplay(dateRange.startDate)}</span>
-                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>→</span>
-                <span style={{ color: 'rgba(255,255,255,0.9)' }}>{formatDisplay(dateRange.endDate)}</span>
+                <Calendar size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <span style={{ color: 'var(--foreground)' }}>{formatDisplay(dateRange.startDate)}</span>
+                <span style={{ color: 'var(--muted)', opacity: 0.5 }}>→</span>
+                <span style={{ color: 'var(--foreground)' }}>{formatDisplay(dateRange.endDate)}</span>
             </button>
 
             {/* Dropdown panel */}
             {open && (
                 <div style={{
                     position: 'absolute',
-                    top: 'calc(100% + 8px)',
+                    top: 'calc(100% + 12px)',
                     right: 0,
                     zIndex: 1000,
-                    background: '#13141f',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 16,
-                    boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-xl)',
+                    boxShadow: 'var(--shadow-xl)',
                     width: 320,
                     overflow: 'hidden',
-                    animation: 'fadeInDown 0.15s ease',
+                    animation: 'fadeInDown 0.2s ease',
                 }}>
                     {/* Preset chips */}
                     <div style={{
                         display: 'flex',
                         flexWrap: 'wrap',
-                        gap: 6,
-                        padding: '14px 16px 10px',
-                        borderBottom: '1px solid rgba(255,255,255,0.07)',
+                        gap: 8,
+                        padding: '16px',
+                        background: 'var(--background-alt)',
+                        borderBottom: '1px solid var(--border)',
                     }}>
                         {PRESETS.map(p => (
                             <button
                                 key={p.label}
                                 onClick={() => applyPreset(p.days)}
+                                className="btn btn-sm"
                                 style={{
-                                    padding: '5px 11px',
+                                    padding: '4px 12px',
                                     borderRadius: 20,
-                                    border: '1px solid rgba(255,255,255,0.12)',
-                                    background: 'rgba(255,255,255,0.04)',
-                                    color: 'rgba(255,255,255,0.8)',
+                                    border: '1px solid var(--border)',
+                                    background: 'white',
+                                    color: 'var(--muted)',
                                     fontSize: 11,
-                                    fontWeight: 500,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s',
-                                }}
-                                onMouseEnter={e => {
-                                    (e.target as HTMLElement).style.background = 'rgba(99,102,241,0.25)';
-                                    (e.target as HTMLElement).style.borderColor = 'rgba(99,102,241,0.5)';
-                                    (e.target as HTMLElement).style.color = 'white';
-                                }}
-                                onMouseLeave={e => {
-                                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
-                                    (e.target as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)';
-                                    (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.8)';
+                                    fontWeight: 600,
+                                    boxShadow: 'var(--shadow-xs)'
                                 }}
                             >
                                 {p.label}
@@ -235,32 +220,32 @@ export function DateRangeSelector({ dateRange, setDateRange }: DateRangeSelector
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '14px 16px 0',
+                        padding: '16px 16px 8px',
                     }}>
-                        <button onClick={prevMonth} style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.6)', padding:4, borderRadius:6, display:'flex', alignItems:'center' }}>
+                        <button onClick={prevMonth} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--muted)', padding:6, borderRadius:8 }}>
                             <ChevronLeft size={16} />
                         </button>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--foreground)' }}>
                             {MONTHS[viewMonth]} {viewYear}
                         </span>
                         <button
                             onClick={nextMonth}
                             disabled={!canGoNext}
-                            style={{ background:'none', border:'none', cursor: canGoNext ? 'pointer' : 'default', color: canGoNext ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.15)', padding:4, borderRadius:6, display:'flex', alignItems:'center' }}
+                            style={{ background:'none', border:'none', cursor: canGoNext ? 'pointer' : 'default', color: canGoNext ? 'var(--muted)' : 'var(--border)', padding:6, borderRadius:8 }}
                         >
                             <ChevronRight size={16} />
                         </button>
                     </div>
 
                     {/* Day labels */}
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, padding:'10px 16px 4px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, padding:'0 16px' }}>
                         {DAYS.map(d => (
-                            <div key={d} style={{ textAlign:'center', fontSize:10, fontWeight:600, color:'rgba(255,255,255,0.3)', padding:'4px 0' }}>{d}</div>
+                            <div key={d} style={{ textAlign:'center', fontSize:11, fontWeight:700, color:'var(--muted)', opacity: 0.4, padding:'8px 0' }}>{d}</div>
                         ))}
                     </div>
 
                     {/* Calendar grid */}
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, padding:'0 16px 16px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4, padding:'0 16px 16px' }}>
                         {cells.map((iso, i) => {
                             if (!iso) return <div key={`empty-${i}`} />;
                             const isFuture = iso > isoToday;
@@ -271,10 +256,10 @@ export function DateRangeSelector({ dateRange, setDateRange }: DateRangeSelector
                             const isToday = iso === isoToday;
 
                             let bg = 'transparent';
-                            let color = isFuture ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.75)';
+                            let color = isFuture ? 'var(--border)' : 'var(--foreground)';
 
-                            if (!isFuture && isInRange) bg = 'rgba(99,102,241,0.15)';
-                            if (!isFuture && isEdge) { bg = '#6366f1'; color = 'white'; }
+                            if (!isFuture && isInRange) bg = 'var(--primary-light)';
+                            if (!isFuture && isEdge) { bg = 'var(--primary)'; color = 'white'; }
 
                             return (
                                 <div
@@ -284,16 +269,16 @@ export function DateRangeSelector({ dateRange, setDateRange }: DateRangeSelector
                                     onMouseLeave={() => setHoveredDate(null)}
                                     style={{
                                         textAlign: 'center',
-                                        padding: '6px 0',
+                                        padding: '8px 0',
                                         borderRadius: 8,
                                         fontSize: 12,
-                                        fontWeight: isEdge ? 700 : isToday ? 600 : 400,
+                                        fontWeight: isEdge ? 800 : isToday ? 800 : 500,
                                         background: bg,
                                         color,
                                         cursor: isFuture ? 'not-allowed' : 'pointer',
                                         transition: 'all 0.1s',
                                         userSelect: 'none',
-                                        outline: isToday && !isEdge ? '1px solid rgba(99,102,241,0.4)' : 'none',
+                                        border: isToday && !isEdge ? '1px solid var(--primary-200)' : 'none',
                                     }}
                                 >
                                     {parseInt(iso.split('-')[2])}
@@ -304,22 +289,24 @@ export function DateRangeSelector({ dateRange, setDateRange }: DateRangeSelector
 
                     {/* Footer instruction */}
                     <div style={{
-                        padding: '10px 16px 14px',
-                        borderTop: '1px solid rgba(255,255,255,0.07)',
+                        padding: '12px 16px',
+                        background: 'var(--background-alt)',
+                        borderTop: '1px solid var(--border)',
                         textAlign: 'center',
                         fontSize: 11,
-                        color: 'rgba(255,255,255,0.35)',
+                        fontWeight: 600,
+                        color: 'var(--muted)',
                     }}>
                         {selecting === 'start'
-                            ? '📅 Click to set start date'
-                            : '📅 Click to set end date — or pick a preset above'}
+                            ? '📅 Set start date'
+                            : '📅 Set end date'}
                     </div>
                 </div>
             )}
 
             <style>{`
                 @keyframes fadeInDown {
-                    from { opacity: 0; transform: translateY(-6px); }
+                    from { opacity: 0; transform: translateY(-8px); }
                     to   { opacity: 1; transform: translateY(0); }
                 }
             `}</style>

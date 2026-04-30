@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +9,7 @@ import Link from 'next/link';
 import {
     Users, Heart, Eye, Bookmark, TrendingUp, TrendingDown, Image, RefreshCw, Instagram,
     Globe, MapPin, HelpCircle, Clock, Zap, MousePointer, DollarSign, BarChart2, ExternalLink,
-    Download, ChevronDown, FileSpreadsheet, FileText
+    Download, ChevronDown, FileSpreadsheet, FileText, Plus
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -697,46 +697,31 @@ function GoogleAdsWidget() {
     // ---- Not Connected State ----
     if (!isConnected) {
         return (
-            <div style={{
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(236,72,153,0.06))',
-                border: '1px solid rgba(99,102,241,0.2)',
-                borderRadius: 12,
-                padding: '24px 28px',
-                marginBottom: 24,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 20,
-                flexWrap: 'wrap' as const,
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{
-                        width: 48, height: 48, borderRadius: 12,
-                        background: 'linear-gradient(135deg, #4285F4, #34A853)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-                    }}>{'\uD83D\uDCCA'}</div>
-                    <div>
-                        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Connect Google Ads</h3>
-                        <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 420 }}>
-                            {`See campaign performance, keyword scores, ROAS & cross-platform spend \u2014 all in one place.`}
-                        </p>
+            <div className="card" style={{ padding: '32px', marginBottom: 32, background: 'var(--primary-light)', border: '1px solid var(--primary-200)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                        <div style={{
+                            width: 60, height: 60, borderRadius: 14,
+                            background: 'white',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+                            boxShadow: 'var(--shadow-sm)'
+                        }}>📊</div>
+                        <div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Connect Google Ads</h3>
+                            <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 500 }}>
+                                See campaign performance, keyword scores, ROAS & cross-platform spend — all in one place.
+                            </p>
+                        </div>
                     </div>
+                    <Link
+                        href="/google-ads"
+                        className="btn btn-primary btn-lg"
+                        style={{ padding: '12px 32px' }}
+                    >
+                        <BarChart2 size={18} />
+                        Connect Google Ads
+                    </Link>
                 </div>
-                <Link
-                    href="/google-ads"
-                    style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '10px 20px',
-                        background: 'linear-gradient(135deg, #4285F4, #34A853)',
-                        border: 'none', borderRadius: 8, color: '#fff',
-                        fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                        whiteSpace: 'nowrap' as const, textDecoration: 'none',
-                        boxShadow: '0 4px 12px rgba(66,133,244,0.3)',
-                    }}
-                >
-                    <BarChart2 size={14} />
-                    Connect Google Ads
-                </Link>
             </div>
         );
     }
@@ -745,39 +730,27 @@ function GoogleAdsWidget() {
     const adsAccount = statusData?.account;
 
     return (
-        <div
-            style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 12, padding: '20px 24px', marginBottom: 24,
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="card" style={{ padding: '24px', marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{
-                        width: 32, height: 32, borderRadius: 8,
+                        width: 40, height: 40, borderRadius: 10,
                         background: 'linear-gradient(135deg, #4285F4, #34A853)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                    }}>{'\uD83D\uDCCA'}</div>
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+                    }}>📊</div>
                     <div>
-                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>{`Google Ads \u2014 Last 30 days`}</h3>
-                        {adsAccount && <p className="text-muted" style={{ fontSize: 11 }}>{adsAccount.email}</p>}
+                        <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Google Ads Overview</h3>
+                        {adsAccount && <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>{adsAccount.email}</p>}
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <span style={{
-                        padding: '4px 10px',
-                        background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
-                        borderRadius: 20, color: '#10b981', fontSize: 11, fontWeight: 500,
-                    }}>{`\u25CF Connected`}</span>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <span className="badge badge-success">● Connected</span>
                     <Link
                         href="/google-ads"
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            fontSize: 12, color: 'var(--primary)', textDecoration: 'none',
-                            fontWeight: 600,
-                        }}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
                     >
-                        View Full Report <ExternalLink size={11} />
+                        Full Report <ExternalLink size={14} />
                     </Link>
                 </div>
             </div>
@@ -798,26 +771,13 @@ function GoogleAdsWidget() {
             )}
 
             {!adsLoading && adsMetrics && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
-                    {[
-                        { label: 'Impressions', value: (adsMetrics.impressions || 0).toLocaleString(), icon: Eye, color: '#6366f1' },
-                        { label: 'Clicks', value: (adsMetrics.clicks || 0).toLocaleString(), icon: MousePointer, color: '#0ea5e9' },
-                        { label: 'Spend', value: `\u20B9${(adsMetrics.spend || 0).toFixed(0)}`, icon: DollarSign, color: '#10b981' },
-                        { label: 'CTR', value: `${adsMetrics.ctr || 0}%`, icon: Zap, color: '#ec4899' },
-                        { label: 'Conversions', value: (adsMetrics.conversions || 0).toLocaleString(), icon: BarChart2, color: '#f59e0b' },
-                        { label: 'ROAS', value: adsMetrics.roas ? `${adsMetrics.roas.toFixed(2)}x` : '\u2014', icon: TrendingUp, color: adsMetrics.roas >= 4 ? '#10b981' : adsMetrics.roas >= 2 ? '#f59e0b' : '#ef4444' },
-                    ].map((m) => (
-                        <div key={m.label} style={{
-                            padding: '12px 14px', background: 'var(--background)',
-                            borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                                <m.icon size={12} style={{ color: m.color }} />
-                                <span className="text-muted" style={{ fontSize: 10 }}>{m.label}</span>
-                            </div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: m.color }}>{m.value}</div>
-                        </div>
-                    ))}
+                <div className="grid-metrics" style={{ gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
+                    <MetricCard label="Impressions" value={adsMetrics.impressions || 0} icon={Eye} color="#4285F4" />
+                    <MetricCard label="Clicks" value={adsMetrics.clicks || 0} icon={MousePointer} color="#34A853" />
+                    <MetricCard label="Spend" value={adsMetrics.spend || 0} prefix="₹" icon={DollarSign} color="#FBBC05" />
+                    <MetricCard label="CTR" value={adsMetrics.ctr || 0} suffix="%" icon={Zap} color="#EA4335" />
+                    <MetricCard label="Conversions" value={adsMetrics.conversions || 0} icon={BarChart2} color="#4285F4" />
+                    <MetricCard label="ROAS" value={adsMetrics.roas ? `${adsMetrics.roas.toFixed(2)}x` : '—'} icon={TrendingUp} color="#34A853" />
                 </div>
             )}
         </div>
@@ -826,35 +786,78 @@ function GoogleAdsWidget() {
 
 // ==================== METRIC CARD ====================
 
-function MetricCard({ label, value, icon: Icon, trend, trendLabel, color, tooltip }: {
+function MetricCard({ 
+    label, 
+    value, 
+    icon: Icon, 
+    trend, 
+    trendLabel, 
+    color, 
+    tooltip,
+    chartData = [],
+    dataKey = 'value',
+    prefix,
+    suffix
+}: {
     label: string;
     value: string | number;
     icon: React.ElementType;
     trend?: number;
-    trendLabel?: string; // e.g., "vs last week", "vs last month"
+    trendLabel?: string;
     color: string;
     tooltip?: string;
+    chartData?: any[];
+    dataKey?: string;
+    prefix?: string;
+    suffix?: string;
 }) {
+    const isPositive = trend !== undefined && trend >= 0;
     return (
-        <div className="metric-card" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div className="metric-icon" style={{ background: `${color}15`, color }}>
-                    <Icon size={20} />
-                </div>
+        <div className="metric-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div className="metric-label">{label}</div>
                 {tooltip && <InfoTooltip text={tooltip} />}
             </div>
-            <div className="metric-value">{typeof value === 'number' ? value.toLocaleString() : value}</div>
-            <div className="metric-label">{label}</div>
+            
+            <div className="metric-value" style={{ fontSize: 24, marginBottom: 8 }}>
+                {prefix && <span style={{ fontSize: '0.7em', opacity: 0.6, marginRight: 2 }}>{prefix}</span>}
+                {typeof value === 'number' ? value.toLocaleString() : value}
+                {suffix && <span style={{ fontSize: '0.7em', opacity: 0.6, marginLeft: 2 }}>{suffix}</span>}
+            </div>
+
             {trend !== undefined && (
-                <div className="stat-row" style={{ marginTop: 8 }}>
-                    {trend >= 0 ? (
-                        <TrendingUp size={14} className="stat-up" />
-                    ) : (
-                        <TrendingDown size={14} className="stat-down" />
-                    )}
-                    <span className={trend >= 0 ? 'stat-up' : 'stat-down'} style={{ fontSize: 12, fontWeight: 500 }}>
-                        {trend >= 0 ? '+' : ''}{trend}% {trendLabel && <span style={{ fontWeight: 400, opacity: 0.8 }}>{trendLabel}</span>}
-                    </span>
+                <div style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '2px 8px', 
+                    borderRadius: 6, 
+                    fontSize: 12, 
+                    fontWeight: 700,
+                    background: isPositive ? 'var(--success-light)' : 'var(--danger-light)',
+                    color: isPositive ? 'var(--success-dark)' : 'var(--danger)',
+                    marginBottom: 16
+                }}>
+                    {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {isPositive ? '+' : ''}{trend}%
+                </div>
+            )}
+            
+            {chartData.length > 0 && (
+                <div style={{ height: 50, width: '100%', marginTop: 'auto' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                            <Area 
+                                type="monotone" 
+                                dataKey={dataKey} 
+                                stroke={color} 
+                                strokeWidth={2}
+                                fillOpacity={0.1} 
+                                fill={color}
+                                isAnimationActive={false}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
                 </div>
             )}
         </div>
@@ -867,22 +870,24 @@ function SectionCard({ title, subtitle, timePeriod, children }: {
     title: string; subtitle?: string; timePeriod?: string; children: React.ReactNode
 }) {
     return (
-        <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(16,17,26,0.94)' }}>
-            <div className="card-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="card" style={{ marginBottom: 24, padding: '24px' }}>
+            <div className="card-header" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 600 }}>{title}</h3>
-                    {subtitle && <p className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>{subtitle}</p>}
+                    <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>{title}</h3>
+                    {subtitle && <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4, fontWeight: 500 }}>{subtitle}</p>}
                 </div>
                 {timePeriod && (
                     <span style={{
-                        padding: '4px 10px',
-                        background: 'var(--background)',
-                        borderRadius: 6,
+                        padding: '6px 12px',
+                        background: 'var(--background-alt)',
+                        borderRadius: 'var(--radius-full)',
                         fontSize: 11,
+                        fontWeight: 700,
                         color: 'var(--muted)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 4
+                        gap: 6,
+                        border: '1px solid var(--border)'
                     }}>
                         <Clock size={12} />
                         {timePeriod}
@@ -899,35 +904,39 @@ function SectionCard({ title, subtitle, timePeriod, children }: {
 function PostRow({ post }: { post: any }) {
     return (
         <tr>
-            <td>
+            <td style={{ paddingLeft: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{
                         width: 40,
                         height: 40,
-                        borderRadius: 6,
-                        background: 'var(--card-hover)',
+                        borderRadius: 8,
+                        background: 'var(--background-alt)',
                         overflow: 'hidden',
+                        border: '1px solid var(--border)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        flexShrink: 0
                     }}>
                         {post.thumbnailUrl ? (
                             <img src={post.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
-                            <Image size={16} style={{ color: '#9ca3af' }} />
+                            <Image size={16} style={{ color: 'var(--muted)', opacity: 0.5 }} />
                         )}
                     </div>
                     <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{post.type}</div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)', textTransform: 'uppercase' }}>{post.type || 'POST'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontWeight: 500 }}>
                             {new Date(post.timestamp).toLocaleDateString()}
                         </div>
                     </div>
                 </div>
             </td>
-            <td style={{ fontWeight: 500 }}>{post.likes?.toLocaleString() || 0}</td>
-            <td style={{ fontWeight: 500 }}>{post.comments?.toLocaleString() || 0}</td>
-            <td style={{ fontWeight: 500 }}>{post.engagement?.toLocaleString() || 0}</td>
+            <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)' }}>{post.likes?.toLocaleString() || 0}</td>
+            <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)' }}>{post.comments?.toLocaleString() || 0}</td>
+            <td style={{ textAlign: 'right', paddingRight: 0, fontSize: 13, fontWeight: 800, color: 'var(--primary)' }}>
+                {post.engagement?.toLocaleString() || 0}
+            </td>
         </tr>
     );
 }
@@ -941,47 +950,67 @@ function OnlineFollowersHeatmap({ data }: { data: any[] }) {
 
     return (
         <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Clock size={16} style={{ color: 'var(--muted)' }} />
-                <span style={{ fontSize: 13 }}>When your followers are most active</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                <div style={{ background: 'var(--primary-light)', padding: 6, borderRadius: 8 }}>
+                    <Clock size={14} style={{ color: 'var(--primary)' }} />
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--foreground)' }}>When your followers are most active</span>
                 <InfoTooltip text="Based on the last 30 days of follower activity. Darker colors indicate more active times." />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 6 }}>
                 {hours.slice(0, 12).map(hour => (
                     <div key={hour} style={{ textAlign: 'center' }}>
-                        <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>
+                        <div style={{ fontSize: 10, marginBottom: 6, color: 'var(--muted)', fontWeight: 700 }}>
                             {hour === 0 ? '12AM' : hour < 12 ? `${hour}AM` : hour === 12 ? '12PM' : `${hour - 12}PM`}
                         </div>
                         <div style={{
-                            height: 28,
-                            borderRadius: 4,
-                            background: `rgba(99, 102, 241, ${0.2 + (Math.random() * 0.6)})`,
+                            height: 32,
+                            borderRadius: 6,
+                            background: 'var(--primary)',
+                            opacity: 0.1 + (Math.random() * 0.8),
+                            border: '1px solid rgba(99,102,241,0.1)',
+                            transition: 'all 0.2s'
                         }} />
                     </div>
                 ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4, marginTop: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 6, marginTop: 12 }}>
                 {hours.slice(12, 24).map(hour => (
                     <div key={hour} style={{ textAlign: 'center' }}>
-                        <div className="text-muted" style={{ fontSize: 10, marginBottom: 4 }}>
+                        <div style={{ fontSize: 10, marginBottom: 6, color: 'var(--muted)', fontWeight: 700 }}>
                             {`${hour - 12 === 0 ? 12 : hour - 12}PM`}
                         </div>
                         <div style={{
-                            height: 28,
-                            borderRadius: 4,
-                            background: `rgba(99, 102, 241, ${0.2 + (Math.random() * 0.6)})`,
+                            height: 32,
+                            borderRadius: 6,
+                            background: 'var(--primary)',
+                            opacity: 0.1 + (Math.random() * 0.8),
+                            border: '1px solid rgba(99,102,241,0.1)',
+                            transition: 'all 0.2s'
                         }} />
                     </div>
                 ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, justifyContent: 'center' }}>
-                <span className="text-muted" style={{ fontSize: 11 }}>Less active</span>
-                <div style={{ display: 'flex', gap: 2 }}>
-                    {[0.2, 0.4, 0.6, 0.8, 1].map((opacity, i) => (
-                        <div key={i} style={{ width: 16, height: 12, background: `rgba(99, 102, 241, ${opacity})`, borderRadius: 2 }} />
+            
+            <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12, 
+                marginTop: 24, 
+                justifyContent: 'center',
+                padding: '12px',
+                background: 'var(--background-alt)',
+                borderRadius: 12,
+                border: '1px solid var(--border)'
+            }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>Less active</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                    {[0.1, 0.3, 0.5, 0.7, 0.9].map((opacity, i) => (
+                        <div key={i} style={{ width: 24, height: 8, background: 'var(--primary)', opacity, borderRadius: 2 }} />
                     ))}
                 </div>
-                <span className="text-muted" style={{ fontSize: 11 }}>More active</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>More active</span>
             </div>
         </div>
     );
@@ -1017,35 +1046,41 @@ function MetaAdsWidget() {
 
     if (!effectiveAccount || adAccounts.length === 0) {
         return (
-            <div style={{
-                background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.06))',
-                border: '1px solid rgba(59,130,246,0.2)',
-                borderRadius: 12, padding: '24px 28px', marginBottom: 24,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap'
+            <div className="card" style={{
+                background: 'var(--background-alt)',
+                border: '1px solid var(--border)',
+                padding: '32px', marginBottom: 24,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap'
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                     <div style={{
-                        width: 48, height: 48, borderRadius: 12,
+                        width: 56, height: 56, borderRadius: 16,
                         background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+                        boxShadow: 'var(--shadow-lg)'
                     }}>{'\uD83D\uDCC8'}</div>
                     <div>
-                        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Connect Meta Ads</h3>
-                        <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 420 }}>
-                            See Facebook and Instagram campaign performance, ROAS & metrics.
+                        <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>Connect Meta Ads</h3>
+                        <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 460, fontWeight: 500, lineHeight: 1.6 }}>
+                            Sync your Facebook and Instagram campaign performance. Visualize ROAS, CTR, and conversion metrics in one dashboard.
                         </p>
                     </div>
                 </div>
                 <Link
                     href="/settings"
+                    className="btn btn-primary"
                     style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
-                        background: 'linear-gradient(135deg, #1877F2, #0A55BE)',
-                        border: 'none', borderRadius: 8, color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                        whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 4px 12px rgba(24,119,242,0.3)',
+                        padding: '12px 24px',
+                        borderRadius: 'var(--radius-full)',
+                        fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                        whiteSpace: 'nowrap', textDecoration: 'none',
+                        background: '#1877F2',
+                        border: 'none',
+                        color: 'white',
+                        boxShadow: '0 4px 12px rgba(24,119,242,0.3)'
                     }}
                 >
-                    <BarChart2 size={14} /> Connect Meta Ads
+                    <BarChart2 size={16} style={{ marginRight: 8 }} /> Connect Meta Ads
                 </Link>
             </div>
         );
@@ -1112,13 +1147,11 @@ function MetaAdsWidget() {
     const objectiveMixLabel = accountProfile?.objectiveMix?.slice?.(0, 2)?.map((entry: any) => `${entry.label} ${entry.share}%`)?.join(' • ');
 
     return (
-        <div
+        <div className="card"
             style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 12, padding: '20px 24px', marginBottom: 24,
+            padding: '24px', marginBottom: 24,
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{
                         width: 32, height: 32, borderRadius: 8,
@@ -1126,32 +1159,31 @@ function MetaAdsWidget() {
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
                     }}>{'\uD83D\uDCC8'}</div>
                     <div>
-                        <h3 style={{ fontSize: 14, fontWeight: 600 }}>{`Meta Ads \u2014 Last 30 days`}</h3>
-                        <p className="text-muted" style={{ fontSize: 11 }}>
-                            {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
-                        </p>
-                        {accountProfile?.label && (
-                            <p className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                {accountProfile.label}{objectiveMixLabel ? ` • ${objectiveMixLabel}` : ''}
+                        <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>{`Meta Ads Performance`}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <p style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
+                                {adAccounts.find((a: any) => a.account_id === effectiveAccount)?.name || effectiveAccount}
                             </p>
-                        )}
+                            {accountProfile?.label && (
+                                <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.6, fontWeight: 500 }}>
+                                    • {accountProfile.label}{objectiveMixLabel ? ` • ${objectiveMixLabel}` : ''}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <span style={{
-                        padding: '4px 10px',
-                        background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
-                        borderRadius: 20, color: '#10b981', fontSize: 11, fontWeight: 500,
-                    }}>{`\u25CF Connected`}</span>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <span className="badge badge-success" style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>Connected</span>
                     <Link
                         href="/ads"
+                        className="btn btn-secondary btn-sm"
                         style={{
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            fontSize: 12, color: 'var(--primary)', textDecoration: 'none',
-                            fontWeight: 600,
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                            padding: '6px 14px'
                         }}
                     >
-                        View Full Report <ExternalLink size={11} />
+                        View Full Report <ExternalLink size={14} />
                     </Link>
                 </div>
             </div>
@@ -1178,18 +1210,15 @@ function MetaAdsWidget() {
                             {accountProfile.description}
                         </p>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                    <div className="grid-metrics" style={{ gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
                     {visibleMetrics.map((m: any) => (
-                        <div key={m.label} style={{
-                            padding: '12px 14px', background: 'var(--background)',
-                            borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                                <m.icon size={12} style={{ color: m.color }} />
-                                <span className="text-muted" style={{ fontSize: 10 }}>{m.label}</span>
-                            </div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: m.color }}>{m.value}</div>
-                        </div>
+                        <MetricCard 
+                            key={m.label}
+                            label={m.label}
+                            value={m.value}
+                            icon={m.icon}
+                            color={m.color}
+                        />
                     ))}
                     </div>
                 </>
@@ -1354,53 +1383,62 @@ export default function DashboardPage() {
     return (
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* Header */}
-            <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                        <h1 className="page-title">@{profile.username}</h1>
-                        <span className="badge badge-info" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Instagram size={12} />
-                            Instagram
-                        </span>
+            <header className="page-header" style={{ marginBottom: 40 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h1 className="page-title" style={{ fontSize: 32, fontWeight: 800 }}>Dashboard Overview</h1>
                     </div>
-                    <p className="page-subtitle">Account performance overview</p>
+                    <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
+                        <PageExportMenu onExport={handlePageExport} />
+                        <button
+                            onClick={() => refetch()}
+                            disabled={isFetching}
+                            className="btn btn-secondary btn-sm"
+                            style={{ height: 38, borderRadius: 10 }}
+                        >
+                            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+                            Refresh
+                        </button>
+                    </div>
                 </div>
-                <div data-export-ignore="true" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <DateRangeSelector dateRange={dateRange} setDateRange={setDateRange} />
-                    <PageExportMenu onExport={handlePageExport} />
-                    <button
-                        onClick={() => refetch()}
-                        disabled={isFetching}
-                        className="btn btn-secondary btn-sm"
-                        style={{ height: 38, borderRadius: 10 }}
-                    >
-                        <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-                        Refresh
-                    </button>
+
+                <div style={{ 
+                    display: 'flex', 
+                    gap: 8, 
+                    marginTop: 24, 
+                    padding: '8px 0',
+                    borderBottom: '1px solid var(--border)',
+                    overflowX: 'auto'
+                }}>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}><RefreshCw size={14} /> Performance</button>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}><Instagram size={14} /> Instagram</button>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}><BarChart2 size={14} /> Google Ads</button>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}>Creative Format</button>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}>Objective</button>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}>Platform</button>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '6px 16px' }}>Status</button>
+                    <button className="btn btn-primary btn-sm" style={{ padding: '6px 16px', background: 'white', color: 'var(--primary)', border: '1px solid var(--border)' }}><Plus size={14} /> Add Filter</button>
                 </div>
-            </div>
+            </header>
 
             {/* SOCIAL MEDIA WIDGET (Instagram) */}
-            <div
-                style={{
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 12, padding: '20px 24px', marginBottom: 24,
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="card" style={{ padding: '24px', marginBottom: 32 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{
-                            width: 32, height: 32, borderRadius: 8,
+                            width: 40, height: 40, borderRadius: 10,
                             background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white'
-                        }}><Instagram size={18} /></div>
+                        }}><Instagram size={20} /></div>
                         <div>
-                            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Social Media Overview</h3>
-                            <p className="text-muted" style={{ fontSize: 11 }}>@{profile.username}</p>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Social Media Overview</h3>
+                            <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>@{profile.username}</p>
                         </div>
                     </div>
                 </div>
 
+                {/* Core Metrics */}
                 {/* Core Metrics */}
                 <div className="grid-metrics" style={{ marginBottom: 24 }}>
                     <MetricCard
@@ -1408,6 +1446,8 @@ export default function DashboardPage() {
                         value={metrics.followers || 0}
                         icon={Users}
                         color="#6366f1"
+                        chartData={dailyChartData}
+                        dataKey="followers"
                         tooltip="Overall number of accounts following you"
                     />
                     <MetricCard
@@ -1415,6 +1455,8 @@ export default function DashboardPage() {
                         value={`${metrics.engagementRate || 0}%`}
                         icon={Heart}
                         color="#ec4899"
+                        chartData={dailyChartData}
+                        dataKey="reach"
                         tooltip="Average engagement (likes + comments) divided by followers"
                     />
                     <MetricCard
@@ -1422,6 +1464,8 @@ export default function DashboardPage() {
                         value={metrics.totalProfileViews || 0}
                         icon={ExternalLink}
                         color="#ef4444"
+                        chartData={dailyChartData}
+                        dataKey="reach"
                         tooltip="Account-level profile views returned by Meta for the selected date range"
                     />
                     <MetricCard
@@ -1429,6 +1473,8 @@ export default function DashboardPage() {
                         value={metrics.totalReach || 0}
                         icon={Eye}
                         color="#0ea5e9"
+                        chartData={dailyChartData}
+                        dataKey="reach"
                         tooltip="Total unique accounts that saw your content"
                     />
                     <MetricCard
@@ -1436,6 +1482,8 @@ export default function DashboardPage() {
                         value={metrics.totalSaved || 0}
                         icon={Bookmark}
                         color="#10b981"
+                        chartData={dailyChartData}
+                        dataKey="reach"
                         tooltip="Number of times your content was saved - a high-intent engagement signal"
                     />
                     <MetricCard
@@ -1443,6 +1491,8 @@ export default function DashboardPage() {
                         value={metrics.totalShares || 0}
                         icon={TrendingUp}
                         color="#f59e0b"
+                        chartData={dailyChartData}
+                        dataKey="reach"
                         tooltip="Shares returned from supported media insights, primarily video/reel content"
                     />
                     <MetricCard
@@ -1450,6 +1500,8 @@ export default function DashboardPage() {
                         value={`${metrics.followerDelta >= 0 ? '+' : ''}${metrics.followerDelta || 0}`}
                         icon={metrics.followerDelta >= 0 ? TrendingUp : TrendingDown}
                         color={metrics.followerDelta >= 0 ? '#10b981' : '#ef4444'}
+                        chartData={dailyChartData}
+                        dataKey="followers"
                         tooltip="Net follower movement across the selected daily insight window"
                     />
                 </div>
@@ -1636,19 +1688,21 @@ export default function DashboardPage() {
                 {/* Audience Demographics */}
                 {(countryData.length > 0 || cityData.length > 0 || genderAgeData.length > 0) && (
                     <SectionCard title="Audience Demographics" subtitle="Where your followers are located and who they are">
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
                             {/* Top Countries */}
                             {countryData.length > 0 && (
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                                        <Globe size={16} style={{ color: 'var(--muted)' }} />
-                                        <span style={{ fontSize: 13, fontWeight: 500 }}>Top Countries</span>
+                                <div style={{ background: 'var(--background-alt)', padding: '20px', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                                        <div style={{ background: 'var(--primary-light)', padding: 6, borderRadius: 8 }}>
+                                            <Globe size={14} style={{ color: 'var(--primary)' }} />
+                                        </div>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>Top Countries</span>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                         {countryData.map((country: any, i: number) => (
-                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span style={{ fontSize: 13 }}>{country.name}</span>
-                                                <span style={{ fontWeight: 600, fontSize: 13 }}>{country.value.toLocaleString()}</span>
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                                                <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{country.name}</span>
+                                                <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--foreground)' }}>{country.value.toLocaleString()}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1657,16 +1711,18 @@ export default function DashboardPage() {
 
                             {/* Top Cities */}
                             {cityData.length > 0 && (
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                                        <MapPin size={16} style={{ color: 'var(--muted)' }} />
-                                        <span style={{ fontSize: 13, fontWeight: 500 }}>Top Cities</span>
+                                <div style={{ background: 'var(--background-alt)', padding: '20px', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                                        <div style={{ background: 'var(--info-light)', padding: 6, borderRadius: 8 }}>
+                                            <MapPin size={14} style={{ color: 'var(--info)' }} />
+                                        </div>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>Top Cities</span>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                         {cityData.map((city: any, i: number) => (
-                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span style={{ fontSize: 13 }}>{city.name}</span>
-                                                <span style={{ fontWeight: 600, fontSize: 13 }}>{city.value.toLocaleString()}</span>
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                                                <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{city.name}</span>
+                                                <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--foreground)' }}>{city.value.toLocaleString()}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1675,22 +1731,24 @@ export default function DashboardPage() {
 
                             {/* Gender & Age */}
                             {genderAgeData.length > 0 && (
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                                        <Users size={16} style={{ color: 'var(--muted)' }} />
-                                        <span style={{ fontSize: 13, fontWeight: 500 }}>Gender & Age</span>
+                                <div style={{ background: 'var(--background-alt)', padding: '20px', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                                        <div style={{ background: 'var(--success-light)', padding: 6, borderRadius: 8 }}>
+                                            <Users size={14} style={{ color: 'var(--success-dark)' }} />
+                                        </div>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>Gender & Age</span>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                         {genderAgeData.map((item: any, i: number) => {
                                             const maxValue = Math.max(...genderAgeData.map((g: any) => g.value));
                                             const percentage = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
                                             return (
                                                 <div key={i}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                        <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{item.shortName}</span>
-                                                        <span style={{ fontSize: 12, fontWeight: 600 }}>{item.value.toLocaleString()}</span>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                                        <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{item.shortName}</span>
+                                                        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--foreground)' }}>{item.value.toLocaleString()}</span>
                                                     </div>
-                                                    <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                                    <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
                                                         <div style={{
                                                             height: '100%',
                                                             width: `${percentage}%`,
@@ -1717,19 +1775,19 @@ export default function DashboardPage() {
                 )}
 
                 {/* Recent Posts Table */}
-                <div className="card">
-                    <div className="card-header">
-                        <h3 className="card-title">Recent Posts</h3>
-                        <span className="badge badge-info">{recentPosts.length} posts</span>
+                <div className="card" style={{ padding: '24px' }}>
+                    <div className="card-header" style={{ marginBottom: 20 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>Recent Posts</h3>
+                        <span className="badge badge-info" style={{ marginLeft: 12, padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{recentPosts.length} posts</span>
                     </div>
                     {recentPosts.length > 0 ? (
                         <table className="table">
                             <thead>
                                 <tr>
-                                    <th>Post</th>
+                                    <th style={{ paddingLeft: 0 }}>Post</th>
                                     <th>Likes</th>
                                     <th>Comments</th>
-                                    <th>Engagement</th>
+                                    <th style={{ textAlign: 'right', paddingRight: 0 }}>Engagement</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1739,8 +1797,8 @@ export default function DashboardPage() {
                             </tbody>
                         </table>
                     ) : (
-                        <div className="empty-state">
-                            <p>No posts found</p>
+                        <div className="empty-state" style={{ padding: '40px 0', textAlign: 'center' }}>
+                            <p style={{ color: 'var(--muted)', fontSize: 14, fontWeight: 500 }}>No posts found</p>
                         </div>
                     )}
                 </div>

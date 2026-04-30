@@ -141,13 +141,14 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                         flexDirection: isCollapsed ? 'column' : 'row',
                         gap: isCollapsed ? 16 : 0,
                         justifyContent: isCollapsed ? 'center' : 'space-between',
-                        padding: isCollapsed ? '20px 0' : 'var(--space-4)'
+                        padding: isCollapsed ? '24px 0' : '24px 16px',
+                        borderBottom: '1px solid var(--sidebar-border)'
                     }}
                 >
                     <Link href="/dashboard" style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
-                        gap: 10, 
+                        gap: 12, 
                         textDecoration: 'none', 
                         color: 'inherit',
                         justifyContent: 'center'
@@ -156,46 +157,48 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                             width: 32,
                             height: 32,
                             borderRadius: 8,
-                            background: 'linear-gradient(135deg, #5b5ce2 0%, #7c5cff 100%)',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             color: '#ffffff',
-                            fontWeight: 700,
-                            fontSize: 16,
-                            boxShadow: '0 10px 24px rgba(96,91,255,0.22)'
+                            fontWeight: 800,
+                            fontSize: 18,
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)'
                         }}>
                             ∞
                         </div>
                         {!isCollapsed && (
-                            <span style={{ fontWeight: 600, fontSize: 16 }}>infini8Graph</span>
+                            <span style={{ fontWeight: 800, fontSize: 18, letterSpacing: '-0.04em', color: 'var(--foreground)' }}>infini8Graph</span>
                         )}
                     </Link>
 
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggle();
-                        }}
-                        style={{
-                            padding: 6,
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--sidebar-muted)',
-                            cursor: 'pointer',
-                            borderRadius: 4,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}
-                    >
-                        {isCollapsed ? <Menu size={18} /> : <ChevronLeft size={18} />}
-                    </button>
+                    {!isCollapsed && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggle();
+                            }}
+                            style={{
+                                padding: 6,
+                                background: 'white',
+                                border: '1px solid var(--border)',
+                                color: 'var(--muted)',
+                                cursor: 'pointer',
+                                borderRadius: 6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}
+                        >
+                            <ChevronLeft size={14} />
+                        </button>
+                    )}
                 </div>
 
-                {/* Account Switcher */}
                 {!isCollapsed && (
-                    <div style={{ padding: '12px 12px 0', position: 'relative' }}>
+                    <div style={{ padding: '20px 16px 12px', position: 'relative' }}>
                         <button
                             onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
                             className="account-card"
@@ -203,37 +206,51 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                 width: '100%',
                                 cursor: 'pointer',
                                 textAlign: 'left',
-                                transition: 'background 0.15s ease',
-                                borderRadius: 16,
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))'
+                                transition: 'all 0.2s ease',
+                                borderRadius: 14,
+                                border: '1px solid var(--border)',
+                                background: 'var(--background-alt)',
+                                padding: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 12
                             }}
-                            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.07)'}
-                            onMouseOut={(e) => e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))'}
                         >
-                            <div className="account-avatar">
+                            <div style={{ 
+                                width: 36, 
+                                height: 36, 
+                                borderRadius: 10,
+                                background: 'white', 
+                                border: '1px solid var(--border)',
+                                color: 'var(--primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                overflow: 'hidden'
+                            }}>
                                 {activeAccount?.profile_picture_url ? (
                                     <img
                                         src={activeAccount.profile_picture_url}
                                         alt=""
-                                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                     />
                                 ) : (
                                     <Instagram size={16} />
                                 )}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 500, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
                                     @{activeAccount?.username || user?.username || 'User'}
                                 </div>
-                                <div style={{ fontSize: 10, color: 'var(--sidebar-active)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 1 }}>
-                                    {accounts.length > 1 ? 'Click to Switch • Active' : 'Instagram Business'}
+                                <div style={{ fontSize: 10, color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }}></div>
+                                    Active
                                 </div>
                             </div>
                             <ChevronDown
-                                size={16}
+                                size={14}
                                 style={{
-                                    color: 'var(--sidebar-muted)',
+                                    color: 'var(--muted)',
                                     transform: accountDropdownOpen ? 'rotate(180deg)' : 'none',
                                     transition: 'transform 0.2s'
                                 }}
@@ -249,13 +266,12 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                     left: 12,
                                     right: 12,
                                     marginTop: 4,
-                                    background: 'rgba(11,16,32,0.98)',
-                                    border: '1px solid var(--sidebar-border)',
-                                    borderRadius: 'var(--radius-lg)',
-                                    padding: 'var(--space-2)',
+                                    background: 'white',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: '16px',
+                                    padding: '8px',
                                     zIndex: 100,
-                                    boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
-                                    backdropFilter: 'blur(18px)',
+                                    boxShadow: 'var(--shadow-xl)',
                                     maxHeight: '350px',
                                     display: 'flex',
                                     flexDirection: 'column'
@@ -343,19 +359,18 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{
-                                                fontSize: 13,
-                                                fontWeight: 500,
-                                                color: 'white',
+                                                fontWeight: 700,
+                                                color: 'var(--foreground)',
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
                                                 whiteSpace: 'nowrap'
                                             }}>
                                                 @{account.username}
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--sidebar-muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                            <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontWeight: 500 }}>
                                                 <span>{account.followers_count ? `${account.followers_count.toLocaleString()} followers` : 'Instagram'}</span>
-                                                {account.id === activeAccountId && <span style={{ color: '#818cf8', fontWeight: 700 }}>Active</span>}
-                                                {account.is_enabled === false && <span style={{ color: '#f59e0b', fontWeight: 700 }}>Hidden</span>}
+                                                {account.id === activeAccountId && <span style={{ color: 'var(--primary)', fontWeight: 700 }}>Active</span>}
+                                                {account.is_enabled === false && <span style={{ color: 'var(--warning)', fontWeight: 700 }}>Hidden</span>}
                                             </div>
                                         </div>
                                         {account.id === activeAccountId && (
@@ -380,7 +395,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                         cursor: 'pointer',
                                         textAlign: 'left',
                                         marginTop: 4,
-                                        borderTop: '1px solid var(--sidebar-border)',
+                                        borderTop: '1px solid var(--border)',
                                         paddingTop: 14
                                     }}
                                     onMouseOver={(e) => e.currentTarget.style.background = 'var(--sidebar-hover)'}
